@@ -2,11 +2,11 @@
 Introduction
 ============
 
-ProxySQL is a high performance Proxy, currently for MySQL only.
-Future versions of ProxySQL will support a variety databases backends.
+ProxySQL is a high performance proxy, currently for MySQL and MariaDB only.
+Percona is a work in progress and future versions of ProxySQL will support a variety database backends.
 
-Its development is driven by the lack of open source proxies that provde high performance.
-Benchmark can be found at proxysql.com
+Its development is driven by the lack of open source proxies that provide high performance.
+Benchmarks can be found at proxysql.com
 
 Installation
 ============
@@ -14,7 +14,8 @@ Installation
 
 Dependencies
 ~~~~~~~~~~~~
-Other than standard libraries, required liberaries and header files are:
+Other than standard libraries, required libraries and header files are:
+
 * libglib2 and libglib2-dev
 * libmysqlclient and libmysqlclient-dev
 * libpcre3 and libpcre3-dev
@@ -27,13 +28,13 @@ Once download::
   cd src
   make
 
-Notes that no configure is available yet. You must check for missing dependencies
+Note that no configure is available yet. You must check for missing dependencies.
 
 
 Install
 ~~~~~~~
 
-**make install** is not avaiable yet .
+**make install** is not available yet.
 
 
 
@@ -58,7 +59,7 @@ Usage is the follow::
 
 proxysql listens on 2 different ports:
 
-* **--mysql-port** specifies the port that mysql clients should connect to, and forwarded to MySQL backend
+* **--mysql-port** specifies the port that mysql clients should connect to
 * **--admin-port** specifies the administration port : administration module is yet not implemented
 
 Other options:
@@ -92,17 +93,19 @@ Currently 5 groups are available, but only 4 parsed:
 
   Specify the stack size used by every thread created in proxysql , in bytes . Default is 262144 ( 256KB ) , minimum is 65536 ( 64KB ) , and no maximum is defined.
 
+  The default stack_size in Linux is 8MB. Starting hundreds of connections/threads will quickly eat all memory so we need to lower this down to be more memory efficient.
+
 * net_buffer_size
 
-  Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each oth these buffers . Each connection from proxysql to a mysql server needs a MySQL data stream . Each client connection can have a different number of MySQL data stream associated to it :
+  Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each of these buffers. Each connection from proxysql to a mysql server needs a MySQL data stream. Each client connection can have a different number of MySQL data stream associated to it:
 
-  - 1 : the client connects to proxysql and this one is able to server each request from its own cache. No connections are established to mysql server
+  - 1 : The client connects to proxysql and this one is able to serve each request from its own cache. No connections are established to mysql server.
 
-  - 2 : the client connects to proxysql and this one needs to connect to a mysql server to serve requests from client
+  - 2 : The client connects to proxysql and this one needs to connect to a mysql server to serve requests from client.
 
-  - 3 : the client connects to proxysql and this one needs to connect to two mysql servers, a master and a slave
+  - 3 : The client connects to proxysql and this one needs to connect to two mysql servers, a master and a slave.
 
-  That means that each client connection needs 1, 2 or 3 MySQL data streams, for a total of 2, 4 or 6 network buffers. Increasing this variables boost performance in case of large dataset, at the cost of additional memory usage. Default is 8192 ( 8KB ) , minimum is 1024 ( 1 KB ) , and no maximum is defined.
+  That means that each client connection needs 1, 2 or 3 MySQL data streams, for a total of 2, 4 or 6 network buffers. Increasing this variables boost performance in case of large dataset, at the cost of additional memory usage. Default is 8192 (8KB), minimum is 1024 (1KB), and no maximum is defined.
 
 * proxy_admin_port
 
@@ -110,7 +113,7 @@ Currently 5 groups are available, but only 4 parsed:
 
 * backlog
 
-  Defines the backlog argument of the listen() call. Default is 2000, minimum is 50
+  Defines the backlog argument of the listen() call. Default is 1000, minimum is 50
 
 * verbose
 
@@ -122,11 +125,11 @@ Currently 5 groups are available, but only 4 parsed:
 
 * print_statistics_interval
 
-  If enable_timers is enabled and verbose >= 10 , a backgroud thread will dump timers information on stderr every *print_statistics_interval* seconds. Default is 10 .
+  If enable_timers is enabled and verbose >= 10 , a background thread will dump timers information on stderr every *print_statistics_interval* seconds. Default is 60.
 
 * core_dump_file_size
 
-  defines the maximum size of a core dump file , to be used to debug crashes. Default is 0 ( no core dump ).
+  Defines the maximum size of a core dump file, to be used to debug crashes. Default is 0 (no core dump).
 
  
 [mysql] configuration
@@ -134,19 +137,21 @@ Currently 5 groups are available, but only 4 parsed:
 
 * mysql_default_schema
 
-  Each connection *requires* a default schema. If a client connects without specifying a schema, mysql_default_schema is applied. It defaults to *information_schema* .
+  Each connection *requires* a default schema (database). If a client connects without specifying a schema, mysql_default_schema is applied. It defaults to *information_schema*.
+
+  If you're using mostly one database, specifying a default schema (database) *could* save a request for each new connection.
 
 * **proxy_mysql_port**
 
-  specifies the port that mysql clients should connect to . It defaults to 6033 
+  Specifies the port that mysql clients should connect to. It defaults to 6033.
 
 * **mysql_poll_timeout**
 
-  Each connection to proxysql is handled by a thread that call poll() on all the file descriptor opened . poll() is called with a timeout of *mysql_poll_timeout* milliseconds. Default is 10000 ( 10 seconds ) and the minimum is 100 ( 0.1 seconds ).
+  Each connection to proxysql is handled by a thread that call poll() on all the file descriptors opened. poll() is called with a timeout of *mysql_poll_timeout* milliseconds. Default is 10000 (10 seconds) and the minimum is 100 (0.1 seconds).
 
 * **mysql_auto_reconnect_enabled**
 
-  In a connection to mysql server is dropped because killed or timed out, it automatically reconnect . This feature is not completed and should not be enabled . Default is 0 (disabled).
+  If a connection to mysql server is dropped because killed or timed out, it automatically reconnects. This feature is not completed and should not be enabled. Default is 0 (disabled).
 
 * **mysql_query_cache_enabled**
 
@@ -162,7 +167,7 @@ Currently 5 groups are available, but only 4 parsed:
 
 * **mysql_max_resultset_size**
 
-  When the server sends a resultset to proxysql, the resultset is stored internally before being forwarded to the client. mysql_max_resultset_size defines the maximum sie of a resultset for being buffered: once a resultset passes this threshold it stops the buffering and triggers a fast forward algorithm . Indirectly defines also the maximum size of a cachable resultset. In future a separate option will be introduced. Default is 1048576 (1MB) .
+  When the server sends a resultset to proxysql, the resultset is stored internally before being forwarded to the client. mysql_max_resultset_size defines the maximum size of a resultset for being buffered: once a resultset passes this threshold it stops the buffering and triggers a fast forward algorithm. Indirectly defines also the maximum size of a cachable resultset. In future a separate option will be introduced. Default is 1048576 (1MB).
 
 * **mysql_query_cache_default_timeout**
 
