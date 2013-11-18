@@ -1,6 +1,6 @@
 [global]
 # thread stack size
-stack_size=65536
+stack_size=262144
 
 # Each connection uses 4 buffers, 2 for the client (recv/send) and 2 for the server (recv/send)
 net_buffer_size=8192
@@ -15,18 +15,19 @@ proxy_admin_port=6032
 verbose=10
 #verbose=1
 
-
 # backlog used by listen
-backlog=1000
+backlog=2000
 
 # how often statistics are printed ( if verbose >= 10 )
-print_statistics_interval=60
+print_statistics_interval=10
 
 # enable of disable timers
 #enable_timers=0
 
 # core dump file size
 core_dump_file_size=268435456
+
+
 
 [mysql]
 # default schema if not specified in the command line
@@ -48,34 +49,28 @@ mysql_auto_reconnect_enabled=0
 mysql_query_cache_enabled=1
 
 # number of partitions within the query cache
-mysql_query_cache_partitions=32
+mysql_query_cache_partitions=16
 
 # if a resultset if bigger then mysql_max_resultset_size , the resultset is not stored internally but sent to the client ASAP
 mysql_max_resultset_size=1048576
-#mysql_max_resultset_size=512
 
 # queries longer than mysql_max_query_size bytes are not processed, but only forwarded
 # maximum value is 16MB, hardcoded
-mysql_max_query_size=524288
-#mysql_max_query_size=5
-
+mysql_max_query_size=1048576
 
 # default timeout of entries in query cache
 mysql_query_cache_default_timeout=30
-
 
 # MySQL version as reported by proxysql
 mysql_server_version=5.5.32-log
 
 # this user is used to verify that the server is alive, and if read_only or not
-mysql_usage_user=testuser
-mysql_usage_password=testpassword
-
+mysql_usage_user=proxy
+mysql_usage_password=proxy
 
 #list of mysql servers
 # note: currently this is parsed but ignored. It always connect to 127.0.0.1:3306
 mysql_servers=127.0.0.1:3306;127.0.0.1:3307;127.0.0.1:3308;127.0.0.2:3306;127.0.0.3:3306
-
 
 # masters are used for both writes and reads by default
 # if mysql_use_masters_for_reads=0 , SELECTs are sent only to slaves
@@ -85,7 +80,8 @@ mysql_use_masters_for_reads=1
 mysql_connection_pool_enabled=1
 
 #idle connections not used for longer than mysql_wait_timeout seconds are deallocated
-mysql_wait_timeout=1200
+mysql_wait_timeout=28800
+
 
 
 [fundadb]
@@ -98,12 +94,17 @@ fundadb_hash_purge_time=10000
 # default is 100
 fundadb_hash_purge_loop=1000
 
+
+
 [debug]
 ## TO DO
 ## list all the debug info that needs to be enabled
 
 ## list of mysql users
 # a user with no password should be defined as " user= "
+
+
+
 [mysql users]
 vegaicm=password
 root=
