@@ -5,7 +5,7 @@ Introduction
 ProxySQL is a high performance Proxy, currently for MySQL only.
 Future versions of ProxySQL will support a variety databases backends.
 
-Its development is driven by the lack of open source proxies that provde high performance.
+Its development is driven by the lack of open source proxies that provide high performance.
 Benchmark can be found at proxysql.com
 
 Installation
@@ -27,13 +27,13 @@ Once download::
   cd src
   make
 
-Notes that no configure is available yet. You must check for missing dependencies
+Note that configure file isn't available yet. Please check for missing dependencies.
 
 
 Install
 ~~~~~~~
 
-**make install** is not avaiable yet .
+**make install** is not avaiable yet.
 
 
 
