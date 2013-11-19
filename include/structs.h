@@ -12,6 +12,7 @@ typedef struct __fdb_hash_t {
 typedef struct __fdb_hashes_group_t {
 	fdb_hash_t **fdb_hashes;
 	int size;
+	time_t now;
     unsigned int hash_expire_default;
     unsigned long long cntDel;
     unsigned long long cntGet;

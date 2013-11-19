@@ -256,6 +256,8 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 */
 			int tcp_keepalive_time=600;
 			setsockopt(mysql_con->net.fd, SOL_TCP,  TCP_KEEPIDLE, (char *)&tcp_keepalive_time, sizeof(tcp_keepalive_time));
+			int arg_on=1;
+			ioctl(mysql_con->net.fd, FIONBIO, (char *)&arg_on);
 //			pthread_mutex_lock(&cp->mutex);	// acquire the lock only to add the new created connection
 //			mcp=mysql_cp_entry_tpool_find(cp, hostname, username, password, db, port);
 //			g_ptr_array_add(mcp->used_conns,mycpe);

@@ -96,7 +96,7 @@ void * connection_handler_mysql(void *arg) {
 	
 		// this needs to be changed depending if we are talking to a master or a slave
 		if (sess->server_myds) {
-			ioctl(sess->server_fd, FIONBIO, (char *)&arg_on);
+			//ioctl(sess->server_fd, FIONBIO, (char *)&arg_on);
 			sess->fds[1].fd=sess->server_myds->fd;
 			sess->last_server_poll_fd=sess->server_myds->fd;	
 			sess->nfds=2;

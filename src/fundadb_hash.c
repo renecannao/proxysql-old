@@ -14,7 +14,7 @@ pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
 	pthread_rwlock_rdlock(&hg->fdb_hashes[i]->lock);
 	fdb_hash_entry *entry=g_hash_table_lookup(hg->fdb_hashes[i]->hash, kp);
     if (entry!=NULL) {
-		time_t t=time(NULL);
+		time_t t=hg->now;
 		if (entry->expire > t) {
 #ifdef PKTALLOC
 #ifdef DEBUG_pktalloc
@@ -57,9 +57,9 @@ gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, un
 		if (expire > fdb_system_var.hash_expire_max) {
 			entry->expire=expire; // expire is a unix timestamp
 		} else {
-			entry->expire=time(NULL)+expire; // expire is seconds
+			entry->expire=hg->now+expire; // expire is seconds
 		}
-	} else entry->expire=time(NULL)+hg->hash_expire_default; // set default expire
+	} else entry->expire=hg->now+hg->hash_expire_default; // set default expire
 
 	unsigned char i;
 	i=*((unsigned char *)kp);
@@ -106,6 +106,7 @@ inline void hash_value_destroy_func(void * hash_entry) {
 
 void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expire_default) {
     unsigned int i;
+	hg->now=time(NULL);
 	hg->size=size;
 	hg->hash_expire_default=hash_expire_default;
 	hg->fdb_hashes=g_slice_alloc(sizeof(fdb_hash_t)*hg->size);
@@ -129,6 +130,7 @@ void *purgeHash_thread(void *arg) {
 	fdb_hashes_group_t *hg=arg;
 	while(1) {
 		usleep(fdb_system_var.hash_purge_loop);
+		hg->now=time(NULL);
 		unsigned char i;
 		for (i=0; i<hg->size; i++) {
 			pthread_rwlock_wrlock(&hg->fdb_hashes[i]->lock);
@@ -138,7 +140,7 @@ void *purgeHash_thread(void *arg) {
 					hg->fdb_hashes[i]->purgeChunkSize=hg->fdb_hashes[i]->ptrArray->len*fdb_system_var.hash_purge_loop/fdb_system_var.hash_purge_time;
 				}
 			}
-			time_t t=time(NULL);
+			time_t t=hg->now;
 			min_idx=( hg->fdb_hashes[i]->purgeIdx > hg->fdb_hashes[i]->purgeChunkSize ? hg->fdb_hashes[i]->purgeIdx - hg->fdb_hashes[i]->purgeChunkSize : 0 ) ;
 			if (min_idx < hg->fdb_hashes[i]->purgeChunkSize )  min_idx=0;
 			if (hg->fdb_hashes[i]->purgeIdx) while( --hg->fdb_hashes[i]->purgeIdx > min_idx) {
