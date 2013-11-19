@@ -2,11 +2,12 @@
 Introduction
 ============
 
-ProxySQL is a high performance proxy, currently for MySQL and MariaDB only.
-Percona is a work in progress and future versions of ProxySQL will support a variety database backends.
+ProxySQL is a high performance proxy, currently for MySQL and forks (like Percona Server and MariaDB) only.
+Future versions of ProxySQL will support a variety database backends.
 
 Its development is driven by the lack of open source proxies that provide high performance.
-Benchmarks can be found at proxysql.com
+Benchmarks can be found at http://www.proxysql.com
+
 
 Installation
 ============
@@ -64,8 +65,8 @@ proxysql listens on 2 different ports:
 
 Other options:
 
-**--verbose** specifies the verbosity level : feature not completely implemented
-**--config** specifies the configuration file
+* **--verbose** specifies the verbosity level : feature not completely implemented
+* **--config** specifies the configuration file
 
 The configuration file is mandatory. It defaults to *proxysql.cnf* in the current directory, and if present there is no need to specify it on the command line.
 Currently there is no strong input validation of the configuration file, and wrong parsing of it can cause proxysql to crash at startup.
@@ -89,13 +90,13 @@ Currently 5 groups are available, but only 4 parsed:
 [global] configuration
 ~~~~~~~~~~~~~~~~~~~~~~
 
-* stack_size
+* **stack_size**
 
   Specify the stack size used by every thread created in proxysql , in bytes . Default is 262144 ( 256KB ) , minimum is 65536 ( 64KB ) , and no maximum is defined.
 
   The default stack_size in Linux is 8MB. Starting hundreds of connections/threads will quickly eat all memory so we need to lower this down to be more memory efficient.
 
-* net_buffer_size
+* **net_buffer_size**
 
   Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each of these buffers. Each connection from proxysql to a mysql server needs a MySQL data stream. Each client connection can have a different number of MySQL data stream associated to it:
 
@@ -107,27 +108,27 @@ Currently 5 groups are available, but only 4 parsed:
 
   That means that each client connection needs 1, 2 or 3 MySQL data streams, for a total of 2, 4 or 6 network buffers. Increasing this variables boost performance in case of large dataset, at the cost of additional memory usage. Default is 8192 (8KB), minimum is 1024 (1KB), and no maximum is defined.
 
-* proxy_admin_port
+* **proxy_admin_port**
 
   **Unused**. It will define the administrative port.
 
-* backlog
+* **backlog**
 
-  Defines the backlog argument of the listen() call. Default is 1000, minimum is 50
+  Defines the backlog argument of the listen() call. Default is 2000, minimum is 50
 
-* verbose
+* **verbose**
 
   Defines the verbosity level. Default is 0
 
-* enable_timers
+* **enable_timers**
 
   When enabled, some functions trigger an internal timer. To use only for debugging performance. Boolean parameter (0/1) , where 0 is the default (disabled).
 
-* print_statistics_interval
+* **print_statistics_interval**
 
   If enable_timers is enabled and verbose >= 10 , a background thread will dump timers information on stderr every *print_statistics_interval* seconds. Default is 60.
 
-* core_dump_file_size
+* **core_dump_file_size**
 
   Defines the maximum size of a core dump file, to be used to debug crashes. Default is 0 (no core dump).
 
@@ -135,7 +136,7 @@ Currently 5 groups are available, but only 4 parsed:
 [mysql] configuration
 ~~~~~~~~~~~~~~~~~~~~~~
 
-* mysql_default_schema
+* **mysql_default_schema**
 
   Each connection *requires* a default schema (database). If a client connects without specifying a schema, mysql_default_schema is applied. It defaults to *information_schema*.
 
@@ -210,3 +211,5 @@ This section includes a list of users and relative password in the form **user=p
 
 Quick start
 ===========
+
+TODO
