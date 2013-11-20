@@ -405,8 +405,10 @@ int init_global_variables(GKeyFile *gkf) {
 #ifdef DEBUG_mysql_conn
 			debug_print("Adding slave %s:%d , %s\n", ms->address, ms->port , (ms->alive ? "ACTIVE" : "DEAD"));
 #endif
-			g_ptr_array_add(glomysrvs.servers_slaves, (gpointer) ms);
-			glomysrvs.count_slaves++;
+			if ((ro==1) && glomysrvs.mysql_use_masters_for_reads==1) {
+				g_ptr_array_add(glomysrvs.servers_slaves, (gpointer) ms);
+				glomysrvs.count_slaves++;
+			}
 			if (ro==0) {
 				g_ptr_array_add(glomysrvs.servers_masters, (gpointer) ms);
 				glomysrvs.count_masters++;
