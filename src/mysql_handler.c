@@ -135,6 +135,20 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		// reset conn->mysql_schema_new	
 		free(sess->mysql_schema_new);
 		sess->mysql_schema_new=NULL;
+	} else {
+		// disconnect the slave
+		if (sess->slave_myds) {
+			if (sess->slave_mycpe) {
+				if (sess->slave_mycpe->conn) {
+					mysql_connpool_detach_connection(gloconnpool, sess->slave_mycpe);
+				}
+			}
+			mysql_data_stream_close(sess->slave_myds);
+			sess->slave_fd=0;
+			sess->slave_ptr=NULL;
+			sess->slave_myds=NULL;
+			sess->slave_mycpe=NULL;
+		}
 	}
 }
 
@@ -199,10 +213,14 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 					sess->slave_ptr=new_server_slave();
 					if (sess->slave_ptr==NULL) {
 						// handle error!!
+						sess->healthy=0;
+						return ;
 					}
 					sess->slave_mycpe=mysql_connpool_get_connection(gloconnpool, sess->slave_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->slave_ptr->port);
 					if (sess->slave_mycpe==NULL) {
 						// handle error!!
+						sess->healthy=0;
+						return ;
 					}
 					sess->slave_fd=sess->slave_mycpe->conn->net.fd;
 					sess->slave_myds=mysql_data_stream_init(sess->slave_fd , sess);
@@ -499,6 +517,10 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 		}
 		// if the command will be sent to the server and there is no data queued for it
 		// if ( (sess->mysql_query_cache_hit==FALSE) && (queue_data(&sess->server_myds->output.queue)==0) ) { // wrong logic , it breaks if the connection is killed via KILL while idle
+		if (sess->healthy==0) {
+			authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+			return -1;
+		}
 		if(sess->mysql_query_cache_hit==FALSE) {
 			if (
 				(sess->send_to_slave==FALSE) && 
@@ -511,10 +533,14 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 					sess->master_ptr=new_server_master();
 					if (sess->master_ptr==NULL) {
 						// handle error!!
+						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+						return -1;
 					}
 					sess->master_mycpe=mysql_connpool_get_connection(gloconnpool, sess->master_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->master_ptr->port);
 					if (sess->master_mycpe==NULL) {
 						// handle error!!
+						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+						return -1;
 					}
 					sess->master_fd=sess->master_mycpe->conn->net.fd;
 					sess->master_myds=mysql_data_stream_init(sess->master_fd, sess);
