@@ -405,7 +405,7 @@ int init_global_variables(GKeyFile *gkf) {
 #ifdef DEBUG_mysql_conn
 			debug_print("Adding slave %s:%d , %s\n", ms->address, ms->port , (ms->alive ? "ACTIVE" : "DEAD"));
 #endif
-			if ((ro==1) && glomysrvs.mysql_use_masters_for_reads==1) {
+			if ((ro==1) || (glomysrvs.mysql_use_masters_for_reads==1)) {
 				g_ptr_array_add(glomysrvs.servers_slaves, (gpointer) ms);
 				glomysrvs.count_slaves++;
 			}
@@ -479,6 +479,18 @@ mysql_server * new_server_master() {
 	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_masters,i);
 #ifdef DEBUG_mysql_server
 	debug_print("using master %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_masters);
+#endif
+	pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return ms;
+}
+
+mysql_server * new_server_slave() {
+	pthread_rwlock_wrlock(&glomysrvs.rwlock);
+	if ( glomysrvs.count_slaves==0 ) return NULL;
+	int i=rand()%glomysrvs.count_slaves;
+	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_slaves,i);
+#ifdef DEBUG_mysql_server
+	debug_print("using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
 #endif
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;

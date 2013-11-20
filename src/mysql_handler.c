@@ -196,7 +196,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 				sess->send_to_slave=TRUE;
 				if (sess->slave_ptr==NULL) {
 					// no slave assigned yet, find one!
-					sess->slave_ptr=new_server_master(); // fixed that , should be server_slave
+					sess->slave_ptr=new_server_slave();
 					if (sess->slave_ptr==NULL) {
 						// handle error!!
 					}

@@ -24,4 +24,5 @@ EXTERN shared_trash_stack_t myds_pool;
 
 int init_global_variables(GKeyFile *);
 mysql_server * new_server_master();
+mysql_server * new_server_slave();
 void main_opts(const GOptionEntry *, gint *, gchar ***, gchar *);
