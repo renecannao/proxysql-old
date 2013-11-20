@@ -209,7 +209,331 @@ This section includes a list of users and relative password in the form **user=p
   test=password
 
 
-Quick start
-===========
+Quick start Tutorial
+====================
 
-TODO
+Download and compile
+~~~~~~~~~~~~~~~~~~~~
+
+These are the simple steps to download and compile ProxySQL::
+ 
+  rene@voyager:~$ mkdir proxysql
+  rene@voyager:~$ cd proxysql
+  rene@voyager:~/proxysql$ wget -q https://github.com/renecannao/proxysql/archive/master.zip -O proxysql.zip
+  rene@voyager:~/proxysql$ unzip -q proxysql.zip 
+  rene@voyager:~/proxysql$ cd proxysql-master/src/
+  rene@voyager:~/proxysql/proxysql-master/src$ mkdir obj
+  rene@voyager:~/proxysql/proxysql-master/src$ make
+  gcc -c -o obj/main.o main.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/free_pkts.o free_pkts.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/mem.o mem.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/debug.o debug.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/fundadb_hash.o fundadb_hash.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/global_variables.o global_variables.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/mysql_connpool.o mysql_connpool.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/mysql_protocol.o mysql_protocol.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/mysql_handler.o mysql_handler.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/network.o network.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/queue.o queue.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -c -o obj/threads.o threads.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
+  gcc -o proxysql obj/main.o obj/free_pkts.o obj/mem.o obj/debug.o obj/fundadb_hash.o obj/global_variables.o obj/mysql_connpool.o obj/mysql_protocol.o obj/mysql_handler.o obj/network.o obj/queue.o obj/threads.o -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2 -lm
+
+Congratulations! You have just compiled proxysql!
+
+Create a small replication environment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To try proxysql we can use a standalone mysqld instance, or a small replication cluster for better testing. To quickly create a small replication environment you can use MySQL Sandbox::
+  
+  rene@voyager:~$ make_replication_sandbox mysql_binaries/mysql-5.5.34-linux2.6-i686.tar.gz 
+  installing and starting master
+  installing slave 1
+  installing slave 2
+  starting slave 1
+  .... sandbox server started
+  starting slave 2
+  .... sandbox server started
+  initializing slave 1
+  initializing slave 2
+  replication directory installed in $HOME/sandboxes/rsandbox_mysql-5_5_34
+
+
+Now that the cluster is installed, verify on which ports are listening the various mysqld processes::
+  
+  rene@voyager:~$ cd sandboxes/rsandbox_mysql-5_5_34
+  rene@voyager:~/sandboxes/rsandbox_mysql-5_5_34$ cat default_connection.json 
+  {
+  "master":  
+      {
+          "host":     "127.0.0.1",
+          "port":     "23389",
+          "socket":   "/tmp/mysql_sandbox23389.sock",
+          "username": "msandbox@127.%",
+          "password": "msandbox"
+      }
+  ,
+  "node1":  
+      {
+          "host":     "127.0.0.1",
+          "port":     "23390",
+          "socket":   "/tmp/mysql_sandbox23390.sock",
+          "username": "msandbox@127.%",
+          "password": "msandbox"
+      }
+  ,
+  "node2":  
+      {
+          "host":     "127.0.0.1",
+          "port":     "23391",
+          "socket":   "/tmp/mysql_sandbox23391.sock",
+          "username": "msandbox@127.%",
+          "password": "msandbox"
+      }
+  }
+
+The mysqld processes are listening on port 23389 (master) and 23390 and 23391 (slaves).
+
+Configure ProxySQL
+~~~~~~~~~~~~~~~~~~
+
+ProxySQL come with an example configuration file, that may not work for your setup. Remove it and create a new one::
+  
+  vegaicm@voyager:~/proxysql/proxysql-master/src$ rm proxysql.cnf 
+  vegaicm@voyager:~/proxysql/proxysql-master/src$ cat > proxysql.cnf << EOF
+  > [global]
+  > [mysql]
+  > mysql_usage_user=proxy
+  > mysql_usage_password=proxy
+  > mysql_servers=127.0.0.1:23389;127.0.0.1:23390;127.0.0.1:23391
+  > mysql_default_schema=information_schema
+  > mysql_connection_pool_enabled=1
+  > mysql_max_resultset_size=1048576
+  > mysql_max_query_size=1048576
+  > mysql_query_cache_enabled=1
+  > mysql_query_cache_partitions=16
+  > mysql_query_cache_default_timeout=30
+  > [mysql users]
+  > msandbox=msandbox
+  > test=password
+  > EOF
+
+Note the *[global]* section: it is mandatory even if unused.
+
+Create users on MySQL
+~~~~~~~~~~~~~~~~~~~~~
+
+We configured ProxySQL to use 3 users:
+
+* proxy : this user needs only USAGE privileges, and it is used to verify that the server is alive and the value of read_only
+* msandbox and test : these are two normal users that application can use to connect to mysqld through the proxy
+
+User msandbox is already there, so only users proxy and test needs to be created. For example::
+
+  rene@voyager:~$ mysql -h 127.0.0.1 -u root -pmsandbox -P23389 -e "GRANT USAGE ON *.* TO 'proxy'@'127.0.0.1' IDENTIFIED BY 'proxy'";
+  rene@voyager:~$ mysql -h 127.0.0.1 -u root -pmsandbox -P23389 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'127.0.0.1' IDENTIFIED BY 'password'";
+
+Configure the slaves with read_only=0
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ProxySQL distinguish masters from slaves only checking the global variables read_only. This means that you *must* configure the slaves with read_only=ON or ProxySQL will send DML to them as well. Note that this make ProxySQL suitable for multi-master environments using clustering solution like NDB and Galera.
+
+Verify the status of read_only on all servers::
+  
+  rene@voyager:~$ for p in 23389 23390 23391 ; do mysql -h 127.0.0.1 -u root -pmsandbox -P$p -B -N -e "SHOW VARIABLES LIKE 'read_only'" ; done
+  read_only	OFF
+  read_only	OFF
+  read_only	OFF
+
+Change read_only on slaves::
+  
+  rene@voyager:~$ for p in 23390 23391 ; do mysql -h 127.0.0.1 -u root -pmsandbox -P$p -B -N -e "SET GLOBAL read_only=ON" ; done
+
+
+Verify again the status of read_only on all servers::
+  
+  rene@voyager:~$ for p in 23389 23390 23391 ; do mysql -h 127.0.0.1 -u root -pmsandbox -P$p -B -N -e "SHOW VARIABLES LIKE 'read_only'" ; done
+  read_only	OFF
+  read_only	ON
+  read_only	ON
+
+Start ProxySQL
+~~~~~~~~~~~~~~
+
+ProxySQL is now ready to be executed. Please note that currently it run only on foreground and it does not daemonize::
+  
+  rene@voyager:~/proxysql/proxysql-master/src$ ./proxysql 
+  Server 127.0.0.1 port 23389
+  server 127.0.0.1 read_only OFF
+  Server 127.0.0.1 port 23390
+  server 127.0.0.1 read_only ON
+  Server 127.0.0.1 port 23391
+  server 127.0.0.1 read_only ON
+
+
+Connect to ProxySQL
+~~~~~~~~~~~~~~~~~~~
+
+You can now connect to ProxySQL running any mysql client. For example::
+  
+  rene@voyager:~$ mysql -u msandbox -pmsandbox -h 127.0.0.1 -P6033
+  Welcome to the MySQL monitor.  Commands end with ; or \g.
+  Your MySQL connection id is 3060194112
+  Server version: 5.1.30 MySQL Community Server (GPL)
+  
+  Copyright (c) 2000, 2013, Oracle and/or its affiliates. All rights reserved.
+  
+  Oracle is a registered trademark of Oracle Corporation and/or its
+  affiliates. Other names may be trademarks of their respective
+  owners.
+  
+  Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+  
+  mysql> 
+
+An acute observer can immediately understand that we aren't connected directly to MySQL, but to ProxySQL . A less acute observer can probably understand it from the next output::
+  
+  mysql> \s
+  --------------
+  mysql  Ver 14.14 Distrib 5.5.34, for debian-linux-gnu (i686) using readline 6.2
+  
+  Connection id:		3060194112
+  Current database:	information_schema
+  Current user:		msandbox@localhost
+  SSL:			Not in use
+  Current pager:		stdout
+  Using outfile:		''
+  Using delimiter:	;
+  Server version:		5.1.30 MySQL Community Server (GPL)
+  Protocol version:	10
+  Connection:		127.0.0.1 via TCP/IP
+  Server characterset:	latin1
+  Db     characterset:	utf8
+  Client characterset:	latin1
+  Conn.  characterset:	latin1
+  TCP port:		6033
+  Uptime:			51 min 56 sec
+  
+  Threads: 4  Questions: 342  Slow queries: 0  Opens: 70  Flush tables: 1  Open tables: 63  Queries per second avg: 0.109
+  --------------
+  
+  mysql>
+
+Did you notice it now? If not, note that line::
+  
+  Server version:       5.1.30 MySQL Community Server (GPL)
+
+We installed MySQL 5.5.34 , but the client says 5.1.30 . This because during the authentication phase ProxySQL introduces itself as MySQL version 5.1.30 . This is configurable via parameter *mysql_server_version* . Note: ProxySQL doesn't use the real version of the backends because it is possible to run backends with different versions.
+
+Additionally, mysql says that the current database is *information_schema* while we didn't specify any during the connection.
+
+On which server are we connected now? Because of read/write split, it is not always possible to answer this question.
+What we know is that:
+
+* SELECT statements without FOR UPDATE are sent to the slaves ( and also to the master if *mysql_use_masters_for_reads=1* , by default ) ;
+* SELECT statements with FOR UPDATE are sent to a master ;
+* any other statement is sent to the master only ;
+* SELECT statements without FOR UPDATE are cached .
+
+Let try to understand to which server are we connected running the follow::
+  
+  mysql> SELECT @@port;
+  +--------+
+  | @@port |
+  +--------+
+  |  23391 |
+  +--------+
+  1 row in set (0.00 sec)
+
+We are connected on server using port 23391 . This information is true only the *first* time we run it. In fact, if we run the same query from another connection we will get the same result because this query is cached.
+Also, if we disconnect the client and reconnect again, the above query will return the same result also after the cache is invalidated. Why? ProxySQL implement connection pooling, and a if a client connection to the proxy is close the backend connection will be reused by the next client connection.
+
+To verify the effect of the cache, it is enough to run the follow commands::
+  
+  mysql> SELECT NOW();
+  +---------------------+
+  | NOW()               |
+  +---------------------+
+  | 2013-11-20 17:55:25 |
+  +---------------------+
+  1 row in set (0.00 sec)
+  
+  mysql> SELECT @@port;
+  +--------+
+  | @@port |
+  +--------+
+  |  23391 |
+  +--------+
+  1 row in set (0.00 sec)
+  
+  mysql> SELECT NOW();
+  +---------------------+
+  | NOW()               |
+  +---------------------+
+  | 2013-11-20 17:55:25 |
+  +---------------------+
+  1 row in set (0.00 sec)
+
+The resultset of "SELECT NOW()" doesn't change with time. Probably this is not what you want.
+
+Testing R/W split
+~~~~~~~~~~~~~~~~~
+
+The follow is an example of how to test R/W split .
+
+Write on master::
+  
+  mysql> show databases;
+  +--------------------+
+  | Database           |
+  +--------------------+
+  | information_schema |
+  | mysql              |
+  | performance_schema |
+  | test               |
+  +--------------------+
+  4 rows in set (0.02 sec)
+  
+  mysql> use test
+  Database changed
+  mysql> CREATE table tbl1 (id int);
+  Query OK, 0 rows affected (0.25 sec)
+  
+  mysql> insert into tbl1 values (1);
+  Query OK, 1 row affected (0.03 sec)
+
+Read from a slave::
+ 
+  mysql> SELECT * FROM tbl1;
+  ERROR 1109 (42S02): Unknown table 'tbl1' in information_schema
+
+It didn't work! The reason why it didn't work is that there is a bug (to be fixed *asap*) in ProxySQL: connections to slaves don't change schema once connected. Thus, we need to specify the schema::
+
+  mysql> SELECT * FROM test.tbl1;
+  +------+
+  | id   |
+  +------+
+  |    1 |
+  +------+
+  1 row in set (0.00 sec)
+
+The follow query retrieves also @@port, so we can verify it is executed on a slave::
+
+  mysql> SELECT @@port, t.* FROM test.tbl1 t;
+  +--------+------+
+  | @@port | id   |
+  +--------+------+
+  |  23390 |    1 |
+  +--------+------+
+  1 row in set (0.00 sec)
+
+To force a read from master, we must specify FOR UPDATE::
+
+  mysql> SELECT @@port, t.* FROM test.tbl1 t FOR UPDATE;
+  +--------+------+
+  | @@port | id   |
+  +--------+------+
+  |  23389 |    1 |
+  +--------+------+
+  1 row in set (0.01 sec)
+
+
