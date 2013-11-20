@@ -504,11 +504,6 @@ Write on master::
 Read from a slave::
  
   mysql> SELECT * FROM tbl1;
-  ERROR 1109 (42S02): Unknown table 'tbl1' in information_schema
-
-It didn't work! The reason why it didn't work is that there is a bug (to be fixed *asap*) in ProxySQL: connections to slaves don't change schema once connected. Thus, we need to specify the schema::
-
-  mysql> SELECT * FROM test.tbl1;
   +------+
   | id   |
   +------+
@@ -518,17 +513,17 @@ It didn't work! The reason why it didn't work is that there is a bug (to be fixe
 
 The follow query retrieves also @@port, so we can verify it is executed on a slave::
 
-  mysql> SELECT @@port, t.* FROM test.tbl1 t;
+  mysql> SELECT @@port, t.* FROM tbl1 t;
   +--------+------+
   | @@port | id   |
   +--------+------+
-  |  23390 |    1 |
+  |  23391 |    1 |
   +--------+------+
   1 row in set (0.00 sec)
 
 To force a read from master, we must specify FOR UPDATE::
 
-  mysql> SELECT @@port, t.* FROM test.tbl1 t FOR UPDATE;
+  mysql> SELECT @@port, t.* FROM tbl1 t FOR UPDATE;
   +--------+------+
   | @@port | id   |
   +--------+------+
