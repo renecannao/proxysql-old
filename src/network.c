@@ -286,6 +286,9 @@ int conn_poll(mysql_session_t *sess) {
 			if (sess->server_myds->fd > 0 && ( queue_data(&sess->server_myds->output.queue) || sess->server_myds->output.partial || sess->server_myds->output.pkts->len ) ) fds[1].events|=POLLOUT;
 		}
 	}
+#ifdef DEBUG_poll
+        debug_print("calling poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
+#endif
 	r=poll(fds,sess->nfds,glovars.mysql_poll_timeout);
 	stop_timer(sess->timers,TIMER_poll);
 	return r;

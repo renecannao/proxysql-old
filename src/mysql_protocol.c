@@ -3,8 +3,8 @@
 
 
 mysql_data_stream_t * mysql_data_stream_init(int fd, mysql_session_t *sess) {
-//	mysql_data_stream_t *my=g_slice_new(mysql_data_stream_t);
-	mysql_data_stream_t *my=stack_alloc(&myds_pool);
+	mysql_data_stream_t *my=g_slice_new(mysql_data_stream_t);
+//	mysql_data_stream_t *my=stack_alloc(&myds_pool);
 	my->bytes_info.bytes_recv=0;
 	my->bytes_info.bytes_sent=0;
 	my->pkts_recv=0;
@@ -77,8 +77,8 @@ void mysql_data_stream_close(mysql_data_stream_t *my) {
 
 	g_ptr_array_free(my->input.pkts,TRUE);
 	g_ptr_array_free(my->output.pkts,TRUE);
-//	g_slice_free1(sizeof(mysql_data_stream_t),my);
-	stack_free(my,&myds_pool);
+	g_slice_free1(sizeof(mysql_data_stream_t),my);
+	//stack_free(my,&myds_pool);
 }
 
 
@@ -151,7 +151,8 @@ gboolean query_is_cachable(mysql_session_t *sess, const char *query, int length)
 	if (ret==FALSE) { return ret; }
 
 	// we need a NULL terminated query, thus we copy it
-	if ((query_copy=malloc(length+1))==NULL) { exit(EXIT_FAILURE); }
+	query_copy=malloc(length+1);
+	if (query_copy==NULL) { exit(EXIT_FAILURE); }
 	query_copy[length]='\0';
 	memcpy(query_copy,query,length);
 

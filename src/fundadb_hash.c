@@ -116,6 +116,7 @@ void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expir
         hg->fdb_hashes[i]->purgeIdx = 0;
         pthread_rwlock_init(&(hg->fdb_hashes[i]->lock), NULL);
 		hg->fdb_hashes[i]->ptrArray=g_ptr_array_new();
+		hg->fdb_hashes[i]->purgeChunkSize=0; // unnecessary. Here to avoid errors in valgrind 
     }
 	hg->cntDel = 0;
 	hg->cntGet = 0;

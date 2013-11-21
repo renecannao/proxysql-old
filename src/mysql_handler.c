@@ -38,7 +38,7 @@ void mysql_session_init(mysql_session_t *sess) {
 
 void mysql_session_close(mysql_session_t *sess) {
 #ifdef DEBUG_mysql_conn
-        debug_print("Closing connection on client fd %d\n", sess->client_fd);
+        debug_print("Closing connection on client fd %d (myds %d , sess %p)\n", sess->client_fd, sess->client_myds->fd, sess);
 #endif
 	mysql_data_stream_close(sess->client_myds);
 	if (sess->client_myds->fd) { mysql_data_stream_shut_hard(sess->client_myds); }

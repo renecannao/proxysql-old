@@ -24,5 +24,5 @@ pkt *mypkt_alloc(mysql_session_t *sess) {
 
 void mypkt_free(pkt *p, mysql_session_t *sess) {
 	debug_print("%p\n", p);
-	g_trash_stack_push,(&sess->free_pkts.stack,p);
+	g_trash_stack_push(&sess->free_pkts.stack,p);
 }
