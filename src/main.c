@@ -183,6 +183,7 @@ void * connection_handler_mysql(void *arg) {
 
 int main(int argc, char **argv) {
 
+	g_thread_init(NULL);
 	conn_queue=g_async_queue_new();
 	// parse all the arguments and the config file
 	main_opts(entries, &argc, &argv, config_file);
