@@ -177,7 +177,10 @@ gboolean query_is_cachable(mysql_session_t *sess, const char *query, int length)
 int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	// WARNING : for now it only checks the password
 	int ret=-1;
-	int cur=sizeof(mysql_hdr)+32;
+	uint32_t capabilities;
+	int cur=sizeof(mysql_hdr);
+	memcpy(&capabilities,mypkt->data+cur,sizeof(uint32_t));
+	cur+=32;
 	unsigned char *username=mypkt->data+cur;
 	sess->mysql_username=strdup(username);
 	unsigned char *scramble_reply=NULL;
@@ -221,11 +224,15 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 		}
 	}
 	if (!ret) {
-		sess->mysql_schema_cur=strdup(mypkt->data+cur);
-		cur+=strlen(sess->mysql_schema_cur);
-		if ((cur==(mypkt->length-1)) || (strlen(sess->mysql_schema_cur)==0) ) {
-			free(sess->mysql_schema_cur);
-			sess->mysql_schema_cur=NULL;
+		if(cur!=mypkt->length) { // we aren't at the end of the packet
+			if (( capabilities & CLIENT_CONNECT_WITH_DB ) == CLIENT_CONNECT_WITH_DB) {
+				sess->mysql_schema_cur=strdup(mypkt->data+cur);
+				cur+=strlen(sess->mysql_schema_cur);
+			}
+//			if ((cur==(mypkt->length-1)) || (strlen(sess->mysql_schema_cur)==0) ) {
+//				free(sess->mysql_schema_cur);
+//				sess->mysql_schema_cur=NULL;
+//			}
 		}
 #ifdef DEBUG_auth
 		debug_print("Username = %s, schema = %s pkt_length = %d\n" , username, sess->mysql_schema_cur, mypkt->length);
