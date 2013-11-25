@@ -88,13 +88,13 @@ void mysql_session_close(mysql_session_t *sess) {
 		free(p);
 	}
 	g_ptr_array_free(sess->free_pkts.blocks,TRUE);
-
-	free(sess);
+	sess->healthy=0;
+	//free(sess);
 	//mysql_con->net.fd=mysql_fd;
 	//if (mysql_con) { mysql_close(mysql_con); }
 //  mysql_close(mysql_con); <== don't call mysql_close, as the connection is already closed by the connector logic
 	// this needs to be fixed. Connectors shouldn't close a server connection . Shutdown should be moved here
-	mysql_thread_end();
+//	mysql_thread_end();
 
 	// unregister the connection
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);

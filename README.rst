@@ -198,6 +198,14 @@ Currently 5 groups are available, but only 4 parsed:
 
   If connection pool is enabled ( *mysql_connection_pool_enabled=1* ) , unused connection (not assigned to any client) are automatically dropped after *mysql_wait_timeout* seconds. Default is 8 hours , minimum is 1 second .
 
+* **mysql_socket**
+
+  ProxySQL can accept connection also through the Unix Domain socket specified in *mysql_socket* . This socket is usable only if the client and ProxySQL are running on the same server. Benchmark shows that with workload where all the queries are served from the internal query cache, Unix Domain socket provides 50% more throughput than TCP socket. Default is */tmp/proxysql.sock*
+
+* **mysql_threads**
+
+  Early versions of ProxySQL used 1 thread per connection, while recent versions use a pool of threads that handle all the connections. Performance improved by 20% for certain workload and an optimized number of threads. Further optimizations are expected. Default is *number-of-CPU-cores X 2* , minimum is 2 and maximum is 128 .
+
 [mysql users] configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

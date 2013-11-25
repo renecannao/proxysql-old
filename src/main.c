@@ -22,96 +22,155 @@ static GOptionEntry entries[] =
 pthread_mutex_t conn_mutex;
 int conn_cnt=0;
 
-GAsyncQueue *conn_queue;
 
-mysql_session_t *ses=NULL;
 
-// thread that handles connection
-void * connection_handler_mysql(void *arg) {
+int listen_tcp_fd;
+int listen_unix_fd;
 
-	// the pointer to the new session is coming from the argument passed to the thread
-	//mysql_session_t *sess=arg;
-	mysql_session_t *sess=g_async_queue_pop(conn_queue);
 
-	if (sess->client_fd == 0) {
-		fprintf(stderr,"error\n");
-	}
-//	pthread_mutex_unlock(&conn_mutex);
+void send_auth_pkt(mysql_session_t *sess) {
+	pkt *hs;
+#ifdef PKTALLOC
+#ifdef DEBUG_pktalloc
+	debug_print("%s\n", "mypkt_alloc");
+#endif
+	hs=mypkt_alloc(sess);
+#else
+	hs=g_slice_alloc(sizeof(pkt));
+#endif
+	create_handshake_packet(hs,sess->scramble_buf);
+	g_ptr_array_add(sess->client_myds->output.pkts, hs);
+}
 
-	mysql_thread_init();
-	mysql_session_init(sess);
-
+void mysql_session_init2(mysql_session_t *sess) {
 	sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
-
-	while(1) if(__sync_val_compare_and_swap(&conn_cnt,1,2)==1) break;
-
+	sess->client_myds->fd=sess->client_fd;
+	sess->fds[0].fd=sess->client_myds->fd;
+	sess->fds[0].events=POLLIN|POLLOUT;
+	sess->nfds=1;
 	sess->query_to_cache=FALSE;
 	sess->client_command=COM_END;	// always reset this
 	sess->send_to_slave=FALSE;
+}
 
-	int arg_on=1, arg_off=0;
-	ioctl(sess->client_fd, FIONBIO, (char *)&arg_on);
-	sess->client_myds->fd=sess->client_fd;
-	sess->fds[0].fd=sess->client_myds->fd;
-#ifdef DEBUG_mysql_conn
-		debug_print("Starting connection on client fd %d (myds %d , sess %p)\n", sess->client_fd, sess->client_myds->fd, sess);
-#endif
 
-	
-	sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
-	while (sess->healthy) {
-	
-		// this needs to be changed depending if we are talking to a master or a slave
-		if (sess->server_myds) {
-			//ioctl(sess->server_fd, FIONBIO, (char *)&arg_on);
-			sess->fds[1].fd=sess->server_myds->fd;
-			sess->last_server_poll_fd=sess->server_myds->fd;	
-			sess->nfds=2;
-		} else {
-			sess->nfds=1;
+void *mysql_thread(void *arg) {
+	mysql_thread_init();
+
+	int thread_id=*(int *)arg;
+	fprintf(stderr, "thread_id = %d\n", thread_id);
+	GPtrArray *sessions=g_ptr_array_new();
+	int i, nfds, r;
+	mysql_session_t *sess=NULL;
+	struct pollfd fds[1000];
+	fds[0].fd=listen_tcp_fd;
+	fds[1].fd=listen_unix_fd;
+	while(glovars.shutdown==0) {
+		nfds=2;
+		fds[0].events=POLLIN;
+		fds[1].events=POLLIN;
+		fds[0].revents=0;
+		fds[1].revents=0;
+		for (i=0; i < sessions->len; i++) {
+			sess=g_ptr_array_index(sessions, i);
+			if (sess->healthy==1) {	
+				if (sess->server_myds) {
+				//ioctl(sess->server_fd, FIONBIO, (char *)&arg_on);
+					sess->fds[1].fd=sess->server_myds->fd;
+					sess->last_server_poll_fd=sess->server_myds->fd;	
+					sess->nfds=2;
+				} else {
+					sess->nfds=1;
+				}
+			
+				sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
+				conn_poll(sess);
+				int j;
+				for (j=0; j<sess->nfds; j++) {
+					if (sess->fds[j].events) {
+						sess->fds[j].revents=0;
+						memcpy(&fds[nfds],&sess->fds[j],sizeof(struct pollfd));
+						nfds++;
+					}
+				}
+			}
 		}
-		if (sess->client_myds->pkts_sent==0) {
-			// send auth pkt to client
-			pkt *hs;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-			debug_print("%s\n", "mypkt_alloc");
-#endif
-			hs=mypkt_alloc(sess);
-#else
-			hs=g_slice_alloc(sizeof(pkt));
-#endif
-			create_handshake_packet(hs,sess->scramble_buf);
-			g_ptr_array_add(sess->client_myds->output.pkts, hs);
-
-		}
-
-
-
-
-		sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
-		//r=conn_poll(sess->fds,sess);
-		sess->ret=conn_poll(sess);
-#ifdef DEBUG_poll
-		debug_print("poll: fd %d events %d revents %d , fd %d events %d revents %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[0].revents , sess->fds[1].fd , sess->fds[1].events, sess->fds[1].revents);
-#endif
-		if (sess->ret == -1 && errno == EINTR)
+		r=poll(fds,nfds,glovars.mysql_poll_timeout);
+		if (r == -1 && errno == EINTR)
 	        continue;
 		
-	    if (sess->ret == -1) {
+	    if (r == -1) {
 	        PANIC("poll()");
 		}
-		check_fds_errors(sess);
+		nfds=2;
+		for (i=0; i < sessions->len; i++) {
+			sess=g_ptr_array_index(sessions, i);
+			if (sess->healthy==1) {	
+				int j;
+				for (j=0; j<sess->nfds; j++) {
+					if (sess->fds[j].events) {
+						memcpy(&sess->fds[j],&fds[nfds],sizeof(struct pollfd));
+						nfds++;
+					}
+				}
+			check_fds_errors(sess);
+			connection_handler_mysql(sess);
+			}
+		}
+		for (i=0; i < sessions->len; i++) {
+			sess=g_ptr_array_index(sessions, i);
+			if (sess->healthy==0) {
+				g_ptr_array_remove_index_fast(sessions,i);
+				i--;
+				free(sess);
+			}
+		}
+		if (fds[0].revents==POLLIN) {
+			int c=accept(listen_tcp_fd, NULL, NULL);
+			if (c>0) {
+				mysql_session_t *ses=NULL;
+				ses=malloc(sizeof(mysql_session_t));
+				if (ses==NULL) { exit(EXIT_FAILURE); }
+				ses->client_fd = c; 
+				int arg_on=1;
+				setsockopt(ses->client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
+				mysql_session_init(ses);
+				mysql_session_init2(ses);
+				send_auth_pkt(ses);			
+				g_ptr_array_add(sessions,ses);
+//				fprintf("thread %d created session %p\n" , thread_id , sess);
+			}
+		}
+		if (fds[1].revents==POLLIN) {
+			int c=accept(listen_unix_fd, NULL, NULL);
+			if (c>0) {
+				mysql_session_t *ses=NULL;
+				ses=malloc(sizeof(mysql_session_t));
+				if (ses==NULL) { exit(EXIT_FAILURE); }
+				ses->client_fd = c; 
+				mysql_session_init(ses);
+				mysql_session_init2(ses);
+				send_auth_pkt(ses);			
+				g_ptr_array_add(sessions,ses);
+			}
+		}
+	}
+	return;
+}
 
+// thread that handles connection
+int connection_handler_mysql(mysql_session_t *sess) {
 
-		//if (sess->client_myds->active==FALSE || sess->server_myds->active==FALSE) {
+	sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
+	if (sess->healthy) {
+	
+
 		if (sess->client_myds->active==FALSE) { // || sess->server_myds->active==FALSE) {
-			sess->healthy=0;
-			continue;
+			mysql_session_close(sess); return -1;
 		}
 
 		if (sync_net(sess,0)==FALSE) {
-			mysql_session_close(sess); return NULL;
+			mysql_session_close(sess); return -1;
 		}
 
 		buffer2array_2(sess);
@@ -121,16 +180,7 @@ void * connection_handler_mysql(void *arg) {
 			hs=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
 			sess->ret=check_client_authentication_packet(hs,sess);
 			g_slice_free1(hs->length, hs->data);
-/*
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-			debug_print("%s\n", "mypkt_free");
-#endif
-			mypkt_free(hs,sess);
-#else
-			g_slice_free1(sizeof(pkt), hs);
-#endif
-*/
+
 			if (sess->ret) {
 				create_err_packet(hs, 2, 1045, "#28000Access denied for user");
 //				authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
@@ -150,7 +200,7 @@ void * connection_handler_mysql(void *arg) {
 		if (process_mysql_client_pkts(sess)==-1) {
 			// we got a COM_QUIT
 			mysql_session_close(sess);
-			return NULL;
+			return -1;
 		}
 		process_mysql_server_pkts(sess);
 		stop_timer(sess->timers,TIMER_processdata);
@@ -163,19 +213,19 @@ void * connection_handler_mysql(void *arg) {
 // or a master/slave didn't occur,
 // or we never connected to a backend
 			if (sync_net(sess,1)==FALSE) {
-				mysql_session_close(sess); return NULL;
+				mysql_session_close(sess); return -1;
 			}
 		}
 		if (sess->client_myds->pkts_sent==2 && sess->client_myds->pkts_recv==1) {
 			if (sess->mysql_schema_cur==NULL) {
-				mysql_session_close(sess); return NULL;
+				mysql_session_close(sess); return -1;
 			}
 		}
-
-	}
-
+		return 0;
+	} else {
 	mysql_session_close(sess);
-	return NULL;
+	return -1;
+	}
 }
 
 
@@ -184,7 +234,6 @@ void * connection_handler_mysql(void *arg) {
 int main(int argc, char **argv) {
 
 	g_thread_init(NULL);
-	conn_queue=g_async_queue_new();
 	// parse all the arguments and the config file
 	main_opts(entries, &argc, &argv, config_file);
 	pthread_mutex_init(&conn_mutex, NULL);
@@ -219,56 +268,31 @@ int main(int argc, char **argv) {
 	start_background_threads(&attr);
 
 
-	//Unix socket is currently hardcoded , needs to become an option	
-#define SERVER_PATH     "/tmp/proxysql.sock"
-	
-	int listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
-	int listen_unix_fd = listen_on_unix(SERVER_PATH);
+	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
+	listen_unix_fd=listen_on_unix(glovars.mysql_socket);
+	int arg_on=1, arg_off=0;
+	ioctl(listen_tcp_fd, FIONBIO, (char *)&arg_on);
+	ioctl(listen_unix_fd, FIONBIO, (char *)&arg_on);
 	struct pollfd fds[2];
 	int nfds=2;
 	fds[0].fd=listen_tcp_fd;
 	fds[1].fd=listen_unix_fd;
 	mysql_library_init(0, NULL, NULL);
 	// starts the main loop
-	while (1)
-	{
-//		pthread_mutex_lock(&conn_mutex);
-		fds[0].events=POLLIN;
-		fds[1].events=POLLIN;
-		// poll() on TCP socket and Unix socket
-		poll(fds,nfds,-1);
-		if (fds[0].revents==POLLIN) {
-			pthread_t child;
-			while(1) if(__sync_val_compare_and_swap(&conn_cnt,0,1)==0) break;
-			//mysql_session_t *sess=NULL;
-			ses=malloc(sizeof(mysql_session_t));
-			if (ses==NULL) { exit(EXIT_FAILURE); }
-			ses->client_fd = accept(listen_tcp_fd, NULL, NULL); // get the connection from TCP socket
-			int arg_on=1;
-			setsockopt(ses->client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
-			g_async_queue_push(conn_queue,ses);
-			//if ( pthread_create(&child, &attr, connection_handler_mysql , sess) != 0 ) {
-			if ( pthread_create(&child, &attr, connection_handler_mysql , NULL) != 0 ) {
-				PANIC("Thread creation");
-			}
-			while(1) if(__sync_val_compare_and_swap(&conn_cnt,2,0)==2) break;
-
-		}
-		if (fds[1].revents==POLLIN) {
-			pthread_t child;
-			while(1) if(__sync_val_compare_and_swap(&conn_cnt,0,1)==0) break;
-			//mysql_session_t *sess=NULL;
-			ses=malloc(sizeof(mysql_session_t));
-			if (ses==NULL) { exit(EXIT_FAILURE); }
-			ses->client_fd = accept(listen_unix_fd, NULL, NULL); // get the connection from Unix socket
-			g_async_queue_push(conn_queue,ses);
-			//if ( pthread_create(&child, &attr, connection_handler_mysql , sess) != 0 ) {
-			if ( pthread_create(&child, &attr, connection_handler_mysql , NULL) != 0 ) {
-				PANIC("Thread creation");
-			}
-			while(1) if(__sync_val_compare_and_swap(&conn_cnt,2,0)==2) break;
-		}
-		
+	pthread_t *thi=malloc(sizeof(pthread_t)*glovars.mysql_threads);
+	int *args=malloc(sizeof(int)*glovars.mysql_threads);
+	if (thi==NULL) exit(EXIT_FAILURE);
+	// while all other threads are detachable, the mysql connections handlers are not
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	for (i=0; i< glovars.mysql_threads; i++) {
+		args[i]=i;
+		if ( pthread_create(&thi[i], &attr, mysql_thread , &args[i]) != 0 )
+			perror("Thread creation");
+    }
+	// wait for graceful shutdown
+	for (i=0; i<glovars.mysql_threads; i++) {
+		pthread_join(thi[i], NULL);
 	}
+	free(thi);
 	return 0;
 }

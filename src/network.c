@@ -43,7 +43,11 @@ int listen_on_port(uint16_t port) {
 int listen_on_unix(char *path) {
 	struct sockaddr_un serveraddr;
 	int sd;
-	unlink(path);
+	int r;
+	r=unlink(path);
+	if ( (r==-1) && (errno!=ENOENT) ) {
+		PANIC("Error unlink Unix Socket");
+	}
 	if ( ( sd = socket(AF_UNIX, SOCK_STREAM, 0)) <0 )
 		PANIC("Socket - Unix");
     memset(&serveraddr, 0, sizeof(serveraddr));
@@ -98,10 +102,10 @@ int read_from_net(mysql_data_stream_t *myds) {
 	debug_print("read %d bytes from fd %d into a buffer of %d bytes free\n", r, myds->fd, s);
 #endif
 	if (r < 1) {
-		if (r==-1) {
-			mysql_data_stream_shut_soft(myds);
-		} //else { printf("%d\n",errno); }
-		if ((r==0) && (!errno)) { mysql_data_stream_shut_soft(myds); }
+//		if (r==-1) {
+		mysql_data_stream_shut_soft(myds);
+//		} //else { printf("%d\n",errno); }
+//		if ((r==0) && (!errno)) { mysql_data_stream_shut_soft(myds); }
 	}
 	else {
 		queue_w(q,r);
@@ -289,7 +293,7 @@ int conn_poll(mysql_session_t *sess) {
 #ifdef DEBUG_poll
         debug_print("calling poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
 #endif
-	r=poll(fds,sess->nfds,glovars.mysql_poll_timeout);
+//	r=poll(fds,sess->nfds,glovars.mysql_poll_timeout);
 	stop_timer(sess->timers,TIMER_poll);
 	return r;
 }
@@ -381,11 +385,11 @@ void array2buffer_2(mysql_session_t *sess) {
 
 
 void check_fds_errors(mysql_session_t *sess) {
-	if ((sess->fds[0].revents == POLLERR) || (sess->fds[0].revents == POLLHUP) || (sess->fds[0].revents == POLLNVAL)) { 
+	if ( ((sess->fds[0].revents & POLLERR)==POLLERR) || ((sess->fds[0].revents & POLLHUP)==POLLHUP) || ((sess->fds[0].revents & POLLNVAL)==POLLNVAL) ) { 
 		mysql_data_stream_shut_soft(sess->client_myds);
 	}
 	if (sess->server_myds!=NULL) { // the backend is initialized
-		if ((sess->fds[1].revents == POLLERR) || (sess->fds[1].revents == POLLHUP) || (sess->fds[1].revents == POLLNVAL)) {
+		if ( ((sess->fds[1].revents & POLLERR)==POLLERR) || ((sess->fds[1].revents & POLLHUP)==POLLHUP) || ((sess->fds[1].revents & POLLNVAL)==POLLNVAL) ) { 
 			mysql_data_stream_shut_soft(sess->server_myds);
 		}
 	}

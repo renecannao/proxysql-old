@@ -69,7 +69,7 @@ int init_global_variables(GKeyFile *gkf) {
 	glovars.thread_id=1;
 
 
-
+	glovars.shutdown=0;
 
 	fdb_system_var.hash_purge_time=10000000;
 	if (g_key_file_has_key(gkf, "fundadb", "fundadb_hash_purge_time", NULL)) {
@@ -210,13 +210,30 @@ int init_global_variables(GKeyFile *gkf) {
 	}
 
 
-	// set mysql_default_schema
-	glovars.mysql_default_schema=strdup("information_schema");	// default mysql_default_schema
-
-	if (g_key_file_has_key(gkf, "mysql", "mysql_default_schema", NULL)) {
-		glovars.mysql_default_schema=g_key_file_get_string(gkf, "mysql", "mysql_default_schema", &error);	
+	// set mysql_threads
+	glovars.mysql_threads=sysconf(_SC_NPROCESSORS_ONLN)*2;
+	if (g_key_file_has_key(gkf, "mysql", "mysql_threads", NULL)) {
+		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_threads", &error);
+		if (r >= 2 ) { 	// 2 threads is the minimum
+			glovars.mysql_threads=r;
+			if ( r > 128 ) // 64 threads is the maximum
+				glovars.mysql_threads=128;
+		}
 	}
 
+	// set mysql_default_schema
+	if (g_key_file_has_key(gkf, "mysql", "mysql_default_schema", NULL)) {
+		glovars.mysql_default_schema=g_key_file_get_string(gkf, "mysql", "mysql_default_schema", &error);	
+	} else {
+		glovars.mysql_default_schema=strdup("information_schema");	// default mysql_default_schema
+	}
+
+	// set mysql_socket
+	if (g_key_file_has_key(gkf, "mysql", "mysql_socket", NULL)) {
+		glovars.mysql_socket=g_key_file_get_string(gkf, "mysql", "mysql_socket", &error);	
+	} else {
+		glovars.mysql_socket=strdup("/tmp/proxysql.sock");	// default mysql_default_schema
+	}
 
 	// enable mysql auto-reconnect
 	glovars.mysql_auto_reconnect_enabled=TRUE;

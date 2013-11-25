@@ -204,7 +204,7 @@ typedef struct _global_variables {
 	pthread_rwlock_t rwlock_global;
 	pthread_rwlock_t rwlock_usernames;
 
-
+	gboolean shutdown;
 
 	unsigned char protocol_version;
 	char *server_version;
@@ -226,7 +226,8 @@ typedef struct _global_variables {
 	gboolean enable_timers;
 
 	int mysql_poll_timeout;
-	
+
+	int mysql_threads;	
 	gboolean mysql_auto_reconnect_enabled;
 	gboolean mysql_query_cache_enabled;
 	int mysql_query_cache_partitions;
@@ -241,6 +242,7 @@ typedef struct _global_variables {
 	unsigned char *mysql_usage_password;
 
 	unsigned char *mysql_default_schema;
+	unsigned char *mysql_socket;
 
 //	unsigned int count_masters;
 //	unsigned int count_slaves;
