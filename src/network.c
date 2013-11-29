@@ -147,14 +147,7 @@ int buffer2array(mysql_data_stream_t *myds) {
 #ifdef DEBUG_buffer2array
 		debug_print("%s\n", "Allocating a new packet");
 #endif
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc	
-		debug_print("%s\n", "mypkt_alloc");
-#endif
 		myds->input.mypkt=mypkt_alloc(myds->sess);	
-#else
-		myds->input.mypkt=g_slice_alloc(sizeof(pkt));
-#endif
 		myds->input.mypkt->length=0;
 	}	
 	if ((myds->input.mypkt->length==0) && queue_data(qin)<sizeof(mysql_hdr)) {

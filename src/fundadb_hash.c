@@ -16,14 +16,7 @@ pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
     if (entry!=NULL) {
 		time_t t=hg->now;
 		if (entry->expire > t) {
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-				debug_print("%s\n", "mypkt_alloc");
-#endif
 				result=mypkt_alloc(sess);
-#else
-				result=g_slice_alloc(sizeof(pkt));
-#endif
 				result->data=g_slice_alloc(entry->length);
     	    	memcpy(result->data,entry->value,entry->length);
 				result->length=entry->length;

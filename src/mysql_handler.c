@@ -158,14 +158,7 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 
 inline pkt * admin_version_comment_pkt(mysql_session_t *sess) {
 	pkt *p;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-	debug_print("%s\n", "mypkt_alloc");
-#endif
 	p=mypkt_alloc(sess);
-#else
-	np=g_slice_alloc(sizeof(pkt));
-#endif
 	// hardcoded, we send " (ProxySQL) "
 	p->length=81;
 	p->data=g_slice_alloc0(p->length);

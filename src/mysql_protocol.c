@@ -36,11 +36,7 @@ void mysql_data_stream_close(mysql_data_stream_t *my) {
 	if(my->input.mypkt) {
 		if(my->input.mypkt->data)
 		g_slice_free1(my->input.mypkt->length, my->input.mypkt->data);
-#ifdef PKTALLOC
 		mypkt_free(my->input.mypkt,my->sess);
-#else
-		g_slice_free1(sizeof(pkt), my->input.mypkt);
-#endif
 	}
 
 	if(my->output.mypkt) {
@@ -330,14 +326,7 @@ void create_err_packet(pkt *mypkt, unsigned int id, uint16_t errcode, char *errs
 int authenticate_mysql_client(mysql_session_t *sess) {
 	// generate a handshake
 	pkt *hs;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-	debug_print("%s\n", "mypkt_alloc");
-#endif
 	hs=mypkt_alloc(sess);
-#else
-	hs=g_slice_alloc(sizeof(pkt));
-#endif
 	create_handshake_packet(hs,sess->scramble_buf);
 
 	// send it to the client
@@ -377,14 +366,7 @@ int authenticate_mysql_client(mysql_session_t *sess) {
 void authenticate_mysql_client_send_OK(mysql_session_t *sess) {
 	// prepare an ok packet
 	pkt *hs;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-	debug_print("%s\n", "mypkt_alloc");
-#endif
 	hs=mypkt_alloc(sess);
-#else
-	hs=g_slice_alloc(sizeof(pkt));
-#endif
 	create_ok_packet(hs,2);
 	// send it to the client
 	write_one_pkt_to_net(sess->client_myds,hs);
@@ -392,14 +374,7 @@ void authenticate_mysql_client_send_OK(mysql_session_t *sess) {
 
 void authenticate_mysql_client_send_ERR(mysql_session_t *sess, uint16_t errcode, char *errstr) {
 	pkt *hs;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-	debug_print("%s\n", "mypkt_alloc");
-#endif
 	hs=mypkt_alloc(sess);
-#else
-	hs=g_slice_alloc(sizeof(pkt));
-#endif
 //	create_err_packet(hs, 2, 1045, "#28000Access denied for user");
 	create_err_packet(hs, 2, errcode, errstr);
 	write_one_pkt_to_net(sess->client_myds,hs);

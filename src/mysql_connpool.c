@@ -90,14 +90,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 #endif
 			// maybe is better if the calling function sends the error to the client. The follow 3 lines should be moved out of here
 			pkt *hs;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-			debug_print("%s\n", "mypkt_alloc");
-#endif
 			hs=mypkt_alloc(sess);
-#else
-			hs=g_slice_alloc(sizeof(pkt));
-#endif
 			create_err_packet(hs, 2, 1045, "#28000Access denied for user");
 			write_one_pkt_to_net(sess->client_myds,hs);
 			return FALSE;

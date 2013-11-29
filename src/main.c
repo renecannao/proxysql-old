@@ -31,14 +31,7 @@ int listen_unix_fd;
 
 void send_auth_pkt(mysql_session_t *sess) {
 	pkt *hs;
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-	debug_print("%s\n", "mypkt_alloc");
-#endif
 	hs=mypkt_alloc(sess);
-#else
-	hs=g_slice_alloc(sizeof(pkt));
-#endif
 	create_handshake_packet(hs,sess->scramble_buf);
 	g_ptr_array_add(sess->client_myds->output.pkts, hs);
 }
