@@ -51,27 +51,11 @@ void mysql_data_stream_close(mysql_data_stream_t *my) {
 */
 	while (my->input.pkts->len) {
 		p=g_ptr_array_remove_index(my->input.pkts, 0);
-		g_slice_free1(p->length, p->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-		debug_print("%s\n", "mypkt_free");
-#endif
-		mypkt_free(p,my->sess);
-#else
-		g_slice_free1(sizeof(pkt),p);
-#endif
+		mypkt_free(p,my->sess,1);
 	}
 	while (my->output.pkts->len) {
 		p=g_ptr_array_remove_index(my->output.pkts, 0);
-		g_slice_free1(p->length, p->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-		debug_print("%s\n", "mypkt_free");
-#endif
-		mypkt_free(p,my->sess);
-#else
-		g_slice_free1(sizeof(pkt),p);
-#endif
+		mypkt_free(p,my->sess,1);
 	}
 
 
@@ -374,15 +358,7 @@ int authenticate_mysql_client(mysql_session_t *sess) {
 //	  r=0;
 //  }
 	// free the packet
-	g_slice_free1(hs->length, hs->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-	debug_print("%s\n", "mypkt_free");
-#endif
-	mypkt_free(hs,sess);
-#else
-	g_slice_free1(sizeof(pkt), hs);
-#endif
+	mypkt_free(hs,sess,1);
 	if (sess->ret) {
 		authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
 //		hs=g_slice_alloc(sizeof(pkt));

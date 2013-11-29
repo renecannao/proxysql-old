@@ -1,11 +1,8 @@
 IDIR =../include
 CC=gcc
-#CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -DDEBUG -DPKTALLOC
 #CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -DDEBUG
-#CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O2
+CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O2
 #CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0`
-CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -DPKTALLOC -O2
-#CFLAGS=-I$(IDIR) -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -DPKTALLOC
 #CFLAGS=-I$(IDIR) -lpthread -lpcre -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0`
 #CFLAGS=-I$(IDIR) -lpthread -lpcre -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O3 -mtune=native
 EXECUTABLE=proxysql

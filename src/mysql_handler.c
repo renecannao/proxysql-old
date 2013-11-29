@@ -62,15 +62,7 @@ void mysql_session_close(mysql_session_t *sess) {
 	while (sess->resultset->len) {
 		pkt *p;
 		p=g_ptr_array_remove_index(sess->resultset, 0);
-		g_slice_free1(p->length, p->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-		debug_print("%s\n", "mypkt_free");
-#endif
-		mypkt_free(p,sess);
-#else
-		g_slice_free1(sizeof(pkt),p);
-#endif
+		mypkt_free(p,sess,1);
 	}	
 	g_ptr_array_free(sess->resultset,TRUE);
 	free(sess->timers);
@@ -190,15 +182,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		// mysql client in interactive mode sends "select @@version_comment limit 1" : we treat this as a special case
 
 		// drop the packet from client
-		g_slice_free1(p->length, p->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-		debug_print("%s\n", "mypkt_free");
-#endif
-		mypkt_free(p,sess);
-#else
-		g_slice_free1(sizeof(pkt), p);
-#endif
+		mypkt_free(p,sess,1);
 
 		// prepare a new packet to send to the client
 		pkt *np=NULL;
@@ -256,15 +240,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 				g_ptr_array_add(sess->client_myds->output.pkts, QCresult);
 				sess->mysql_query_cache_hit=TRUE;
 				sess->query_to_cache=FALSE;	 // query already in cache
-				g_slice_free1(p->length, p->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-				debug_print("%s\n", "mypkt_free");
-#endif
-				mypkt_free(p,sess);
-#else
-				g_slice_free1(sizeof(pkt), p);
-#endif
+				mypkt_free(p,sess,1);
 			} else {
 				sess->send_to_slave=TRUE;
 				if (sess->slave_ptr==NULL) {
@@ -546,15 +522,7 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 		switch (sess->client_command) {
 			case COM_QUIT:
 				client_COM_QUIT(sess);
-				g_slice_free1(p->length, p->data);
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-				debug_print("%s\n", "mypkt_free");
-#endif
-				mypkt_free(p,sess);
-#else
-				g_slice_free1(sizeof(pkt), p);
-#endif
+				mypkt_free(p,sess,1);
 	//			mysql_session_close(sess);
 				return -1;
 				break;

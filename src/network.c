@@ -212,14 +212,7 @@ int array2buffer(mysql_data_stream_t *myds) {
 		debug_print("%s\n", "Removing a packet from array");
 #endif
 			if (myds->output.mypkt) {
-#ifdef PKTALLOC
-#ifdef DEBUG_pktalloc
-				debug_print("%s\n", "mypkt_free");
-#endif
-				mypkt_free(myds->output.mypkt, myds->sess);	
-#else
-				g_slice_free1(sizeof(pkt), myds->output.mypkt);
-#endif
+				mypkt_free(myds->output.mypkt, myds->sess, 0);	
 			}
 			myds->output.mypkt=g_ptr_array_remove_index(myds->output.pkts, 0);
 		} else {

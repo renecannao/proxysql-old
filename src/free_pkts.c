@@ -22,7 +22,10 @@ pkt *mypkt_alloc(mysql_session_t *sess) {
 	return p;
 }
 
-void mypkt_free(pkt *p, mysql_session_t *sess) {
+void mypkt_free(pkt *p, mysql_session_t *sess, int free_data) {
+	if (free_data) {
+		g_slice_free1(p->length, p->data);
+	}
 	debug_print("%p\n", p);
 	g_trash_stack_push(&sess->free_pkts.stack,p);
 }
