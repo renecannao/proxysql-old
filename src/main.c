@@ -36,25 +36,17 @@ void send_auth_pkt(mysql_session_t *sess) {
 	g_ptr_array_add(sess->client_myds->output.pkts, hs);
 }
 
-void mysql_session_init2(mysql_session_t *sess) {
-	sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
-	sess->client_myds->fd=sess->client_fd;
-	sess->fds[0].fd=sess->client_myds->fd;
-	sess->fds[0].events=POLLIN|POLLOUT;
-	sess->nfds=1;
-	sess->query_to_cache=FALSE;
-	sess->client_command=COM_END;	// always reset this
-	sess->send_to_slave=FALSE;
-}
-
 
 void *mysql_thread(void *arg) {
 	int admin=0;
 	mysql_thread_init();
 
-	int thread_id=*(int *)arg;
-	fprintf(stderr, "thread_id = %d\n", thread_id);
-	if (thread_id==glovars.mysql_threads) {
+	proxy_mysql_thread_t thr;
+	thr.thread_id=*(int *)arg;
+	thr.free_pkts.stack=NULL;
+	thr.free_pkts.blocks=g_ptr_array_new();
+	fprintf(stderr, "thread_id = %d\n", thr.thread_id);
+	if (thr.thread_id==glovars.mysql_threads) {
 		fprintf(stderr, "started admin thread\n");
 		admin=1;
 	}
@@ -141,8 +133,7 @@ void *mysql_thread(void *arg) {
 				ses->client_fd = c; 
 				int arg_on=1;
 				setsockopt(ses->client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
-				mysql_session_init(ses);
-				mysql_session_init2(ses);
+				mysql_session_init(ses, &thr);
 				if (admin==1) {
 					ses->admin=1;
 				}
@@ -158,13 +149,18 @@ void *mysql_thread(void *arg) {
 				ses=malloc(sizeof(mysql_session_t));
 				if (ses==NULL) { exit(EXIT_FAILURE); }
 				ses->client_fd = c; 
-				mysql_session_init(ses);
-				mysql_session_init2(ses);
+				mysql_session_init(ses, &thr);
 				send_auth_pkt(ses);			
 				g_ptr_array_add(sessions,ses);
 			}
 		}
 	}
+	while (thr.free_pkts.blocks->len) {
+		void *p=g_ptr_array_remove_index_fast(thr.free_pkts.blocks, 0);
+		free(p);
+    }
+    g_ptr_array_free(thr.free_pkts.blocks,TRUE);
+
 	return;
 }
 

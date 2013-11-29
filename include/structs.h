@@ -155,7 +155,14 @@ struct _shared_trash_stack_t {
 	int incremental;	
 };
 
+
+typedef struct _proxysql_mysql_thread_t {
+	int thread_id;
+	free_pkts_t free_pkts;
+} proxy_mysql_thread_t;
+
 struct _mysql_session_t {
+	proxy_mysql_thread_t *handler_thread;
 	int healthy;
 	int admin;
 	int client_fd;
@@ -196,7 +203,6 @@ struct _mysql_session_t {
 	gboolean mysql_query_cache_hit;
 	gboolean mysql_server_reconnect;
 	gboolean send_to_slave;
-	free_pkts_t free_pkts;
 };
 
 

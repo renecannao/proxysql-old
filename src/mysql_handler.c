@@ -1,7 +1,7 @@
 #include "proxysql.h"
 
 
-void mysql_session_init(mysql_session_t *sess) {
+void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thread) {
 	// register the connection
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	g_ptr_array_add(glomysrvs.mysql_connections, sess);
@@ -32,8 +32,15 @@ void mysql_session_init(mysql_session_t *sess) {
 	// these two are the only regex currently supported . They needs to be extended
 	sess->regex[0] = g_regex_new ("^SELECT ", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
 	sess->regex[1] = g_regex_new ("\\s+FOR\\s+UPDATE\\s*$", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
-	sess->free_pkts.stack=NULL;
-	sess->free_pkts.blocks=g_ptr_array_new();
+	sess->handler_thread=handler_thread;
+	sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
+	sess->client_myds->fd=sess->client_fd;
+	sess->fds[0].fd=sess->client_myds->fd;
+	sess->fds[0].events=POLLIN|POLLOUT;
+	sess->nfds=1;
+	sess->query_to_cache=FALSE;
+	sess->client_command=COM_END;   // always reset this
+	sess->send_to_slave=FALSE;
 }
 
 
@@ -76,11 +83,6 @@ void mysql_session_close(mysql_session_t *sess) {
 	if (sess->mysql_schema_new) { free(sess->mysql_schema_new); sess->mysql_schema_new=NULL; }
 	if (sess->query_checksum) { g_checksum_free(sess->query_checksum); }
 
-	while (sess->free_pkts.blocks->len) {
-		void *p=g_ptr_array_remove_index_fast(sess->free_pkts.blocks, 0);
-		free(p);
-	}
-	g_ptr_array_free(sess->free_pkts.blocks,TRUE);
 	sess->healthy=0;
 	//free(sess);
 	//mysql_con->net.fd=mysql_fd;

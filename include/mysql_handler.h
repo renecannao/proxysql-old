@@ -1,4 +1,4 @@
-void mysql_session_init(mysql_session_t *);
+void mysql_session_init(mysql_session_t *, proxysql_mysql_thread_t *);
 void mysql_session_close(mysql_session_t *);
 inline void client_COM_QUIT(mysql_session_t *);
 inline void client_COM_INIT_DB(mysql_session_t *, pkt *);
