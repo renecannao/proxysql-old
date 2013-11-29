@@ -157,6 +157,7 @@ struct _shared_trash_stack_t {
 
 struct _mysql_session_t {
 	int healthy;
+	int admin;
 	int client_fd;
 	int server_fd;
 	int master_fd;

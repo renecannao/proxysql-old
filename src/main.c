@@ -25,6 +25,7 @@ int conn_cnt=0;
 
 
 int listen_tcp_fd;
+int listen_tcp_admin_fd;
 int listen_unix_fd;
 
 
@@ -55,26 +56,34 @@ void mysql_session_init2(mysql_session_t *sess) {
 
 
 void *mysql_thread(void *arg) {
+	int admin=0;
 	mysql_thread_init();
 
 	int thread_id=*(int *)arg;
 	fprintf(stderr, "thread_id = %d\n", thread_id);
+	if (thread_id==glovars.mysql_threads) {
+		fprintf(stderr, "started admin thread\n");
+		admin=1;
+	}
 	GPtrArray *sessions=g_ptr_array_new();
 	int i, nfds, r;
 	mysql_session_t *sess=NULL;
 	struct pollfd fds[1000];
-	fds[0].fd=listen_tcp_fd;
-	fds[1].fd=listen_unix_fd;
+	if (admin==0) { fds[0].fd=listen_tcp_fd; }
+		else { fds[0].fd=listen_tcp_admin_fd; }
+	if (admin==0) { fds[1].fd=listen_unix_fd; }
 	while(glovars.shutdown==0) {
-		nfds=2;
+		if (admin==0) {nfds=2;} else {nfds=1;}
 		fds[0].events=POLLIN;
-		fds[1].events=POLLIN;
 		fds[0].revents=0;
-		fds[1].revents=0;
+		if (admin==0) {
+			fds[1].events=POLLIN;
+			fds[1].revents=0;
+		}
 		for (i=0; i < sessions->len; i++) {
 			sess=g_ptr_array_index(sessions, i);
 			if (sess->healthy==1) {	
-				if (sess->server_myds) {
+				if (sess->admin==0 && sess->server_myds) {
 				//ioctl(sess->server_fd, FIONBIO, (char *)&arg_on);
 					sess->fds[1].fd=sess->server_myds->fd;
 					sess->last_server_poll_fd=sess->server_myds->fd;	
@@ -102,7 +111,7 @@ void *mysql_thread(void *arg) {
 	    if (r == -1) {
 	        PANIC("poll()");
 		}
-		nfds=2;
+		if (admin==0) {nfds=2;} else {nfds=1;}
 		for (i=0; i < sessions->len; i++) {
 			sess=g_ptr_array_index(sessions, i);
 			if (sess->healthy==1) {	
@@ -126,7 +135,12 @@ void *mysql_thread(void *arg) {
 			}
 		}
 		if (fds[0].revents==POLLIN) {
-			int c=accept(listen_tcp_fd, NULL, NULL);
+			int c;
+			if (admin==0) {
+				c=accept(listen_tcp_fd, NULL, NULL);
+			} else {
+				c=accept(listen_tcp_admin_fd, NULL, NULL);
+			}
 			if (c>0) {
 				mysql_session_t *ses=NULL;
 				ses=malloc(sizeof(mysql_session_t));
@@ -136,7 +150,10 @@ void *mysql_thread(void *arg) {
 				setsockopt(ses->client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
 				mysql_session_init(ses);
 				mysql_session_init2(ses);
-				send_auth_pkt(ses);			
+				if (admin==1) {
+					ses->admin=1;
+				}
+				send_auth_pkt(ses);
 				g_ptr_array_add(sessions,ses);
 //				fprintf("thread %d created session %p\n" , thread_id , sess);
 			}
@@ -269,28 +286,30 @@ int main(int argc, char **argv) {
 
 
 	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
+	listen_tcp_admin_fd=listen_on_port((uint16_t)glovars.proxy_admin_port);
 	listen_unix_fd=listen_on_unix(glovars.mysql_socket);
 	int arg_on=1, arg_off=0;
 	ioctl(listen_tcp_fd, FIONBIO, (char *)&arg_on);
+	ioctl(listen_tcp_admin_fd, FIONBIO, (char *)&arg_on);
 	ioctl(listen_unix_fd, FIONBIO, (char *)&arg_on);
 	struct pollfd fds[2];
 	int nfds=2;
 	fds[0].fd=listen_tcp_fd;
 	fds[1].fd=listen_unix_fd;
 	mysql_library_init(0, NULL, NULL);
-	// starts the main loop
-	pthread_t *thi=malloc(sizeof(pthread_t)*glovars.mysql_threads);
-	int *args=malloc(sizeof(int)*glovars.mysql_threads);
+	// Note: glovars.mysql_threads+1 threads are created. The +1 is for the admin module
+	pthread_t *thi=malloc(sizeof(pthread_t)*(glovars.mysql_threads+1));
+	int *args=malloc(sizeof(int)*(glovars.mysql_threads+1));
 	if (thi==NULL) exit(EXIT_FAILURE);
 	// while all other threads are detachable, the mysql connections handlers are not
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	for (i=0; i< glovars.mysql_threads; i++) {
+	for (i=0; i< glovars.mysql_threads+1; i++) {
 		args[i]=i;
 		if ( pthread_create(&thi[i], &attr, mysql_thread , &args[i]) != 0 )
 			perror("Thread creation");
     }
 	// wait for graceful shutdown
-	for (i=0; i<glovars.mysql_threads; i++) {
+	for (i=0; i<glovars.mysql_threads+1; i++) {
 		pthread_join(thi[i], NULL);
 	}
 	free(thi);

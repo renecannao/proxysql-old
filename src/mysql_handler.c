@@ -26,6 +26,7 @@ void mysql_session_init(mysql_session_t *sess) {
 	sess->server_bytes_at_cmd.bytes_recv=0;
 	sess->mysql_server_reconnect=TRUE;
 	sess->healthy=1;
+	sess->admin=0;
 	sess->resultset=g_ptr_array_new();
 	sess->timers=calloc(sizeof(timer),TOTAL_TIMERS);
 	// these two are the only regex currently supported . They needs to be extended
@@ -114,9 +115,19 @@ inline void client_COM_STATISTICS(mysql_session_t *sess) {
 #ifdef DEBUG_COM
 	debug_print("Got COM_%s packet\n", "STATISTICS");
 #endif
+	if (sess->admin==1) {
+	// we shouldn't forward this if we are in admin mode
+		sess->healthy=0;
+		return;
+	}
 }
 
 inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
+	if (sess->admin==1) {
+	// we shouldn't forward this if we are in admin mode
+		sess->healthy=0;
+		return;
+	}
 	sess->mysql_schema_new=calloc(1,p->length-sizeof(mysql_hdr));
 	memcpy(sess->mysql_schema_new, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1);
 #ifdef DEBUG_COM
@@ -152,7 +163,55 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 	}
 }
 
+
+inline pkt * admin_version_comment_pkt(mysql_session_t *sess) {
+	pkt *p;
+#ifdef PKTALLOC
+#ifdef DEBUG_pktalloc
+	debug_print("%s\n", "mypkt_alloc");
+#endif
+	p=mypkt_alloc(sess);
+#else
+	np=g_slice_alloc(sizeof(pkt));
+#endif
+	// hardcoded, we send " (ProxySQL) "
+	p->length=81;
+	p->data=g_slice_alloc0(p->length);
+	memcpy(p->data,"\x01\x00\x00\x01\x01\x27\x00\x00\x02\x03\x64\x65\x66\x00\x00\x00\x11\x40\x40\x76\x65\x72\x73\x69\x6f\x6e\x5f\x63\x6f\x6d\x6d\x65\x6e\x74\x00\x0c\x21\x00\x18\x00\x00\x00\xfd\x00\x00\x1f\x00\x00\x05\x00\x00\x03\xfe\x00\x00\x02\x00\x0b\x00\x00\x04\x0a\x28\x50\x72\x6f\x78\x79\x53\x51\x4c\x29\x05\x00\x00\x05\xfe\x00\x00\x02\x00",p->length);
+	return p;
+}
+
+inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
+	// enter admin mode
+	// configure the session to not send data to servers
+	sess->mysql_query_cache_hit=TRUE;
+	sess->query_to_cache=FALSE;
+	if (strncmp("select @@version_comment limit 1", p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		// mysql client in interactive mode sends "select @@version_comment limit 1" : we treat this as a special case
+
+		// drop the packet from client
+		g_slice_free1(p->length, p->data);
+#ifdef PKTALLOC
+#ifdef DEBUG_pktalloc
+		debug_print("%s\n", "mypkt_free");
+#endif
+		mypkt_free(p,sess);
+#else
+		g_slice_free1(sizeof(pkt), p);
+#endif
+
+		// prepare a new packet to send to the client
+		pkt *np=NULL;
+		np=admin_version_comment_pkt(sess);
+		g_ptr_array_add(sess->client_myds->output.pkts, np);
+		return;
+	}
+	sess->healthy=0;
+	return;
+}
+
 inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
+
 //	MD5(p->data+sizeof(mysql_hdr)+1,p->length-sizeof(mysql_hdr)-1,md);
 	if (mysql_pkt_get_size(p) > glovars.mysql_max_query_size) {
 		// the packet is too big. Ignore any processing
@@ -424,9 +483,6 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 							debug_print("Query %s was too large ( %d bytes, min %d ) and wasn't stored\n", g_checksum_get_string(sess->query_checksum), sess->resultset_size , glovars.mysql_max_resultset_size );
 #endif
 						}
-
-// send a logging INSERT
-//						  mysql_query(mysql_con,"insert into rene.tbl1 values(NULL)");
 					}
 }
 
@@ -472,7 +528,7 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 		sess->client_command=c;	 // a new packet is read from client, set the COM_
 		sess->mysql_query_cache_hit=FALSE;
 		sess->send_to_slave=FALSE;
-		if (p->length < glovars.mysql_max_query_size) {
+		if ( (sess->admin==0) && ( p->length < glovars.mysql_max_query_size ) ) {
 			switch (sess->client_command) {
 				case COM_INIT_DB:
 				case COM_QUERY:
@@ -506,13 +562,22 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 				client_COM_STATISTICS(sess);
 				break;
 			case COM_INIT_DB:
-				client_COM_INIT_DB(sess, p);
+					client_COM_INIT_DB(sess, p);
 				break;
 			case COM_QUERY:
 				//client_COM_QUERY(conn, p, regex1, regex2);
-				client_COM_QUERY(sess, p);
+				if (sess->admin==0) {
+					client_COM_QUERY(sess, p); 
+				} else {
+					admin_COM_QUERY(sess, p);
+				}
 				break;
 			default:
+				if (sess->admin==1) {
+					// we received an unknown packet
+					// we shouldn't forward this if we are in admin mode
+					sess->healthy=0;
+				}
 				break;
 		}
 		// if the command will be sent to the server and there is no data queued for it
