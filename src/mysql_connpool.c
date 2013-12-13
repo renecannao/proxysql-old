@@ -19,15 +19,11 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 		( sess->server_myds->active==FALSE ) // connection is not active
 		&& (glovars.mysql_auto_reconnect_enabled==FALSE) // auto-reconnect is globally disabled
 	) {
-#ifdef DEBUG_mysql_conn
-		debug_print("%s\n", "mysql_auto_reconnect_enabled is OFF");
-#endif
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "mysql_auto_reconnect_enabled is OFF\n");
 		return FALSE;
 	}
 
-#ifdef DEBUG_mysql_conn
-	debug_print("%s\n", "Entering reconnect_server_on_shut_fd");
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Entering reconnect_server_on_shut_fd\n");
 	mysql_cp_entry_t *mycpe=NULL;
 	if (
 		( sess->server_myds->active==FALSE ) // connection is not active
@@ -37,15 +33,11 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 	) {
 		int tries=10;
 		while (tries--) {
-#ifdef DEBUG_mysql_conn
-	debug_print("%s\n", "Trying to reconnect...");
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Trying to reconnect...\n");
 			if (sess->server_mycpe) {
 //				shutdown(sess->server_mycpe->conn->net.fd, SHUT_RDWR);
 //				close(sess->server_mycpe->conn->net.fd);
-#ifdef DEBUG_mysql_conn
-	debug_print("Closing mysql connection on fd %d\n", sess->server_mycpe->conn->net.fd);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Closing mysql connection on fd %d\n", sess->server_mycpe->conn->net.fd);
 //				sess->server_mycpe->conn->net.vio=0;
 				if (sess->server_mycpe->conn->net.fd==0) {
 					// for some unknown reason, conn->net.fd may be 0. This seems a bug!
@@ -64,13 +56,9 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 			mycpe=mysql_connpool_get_connection(gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
 			// try it
 			if (mycpe) {
-#ifdef DEBUG_mysql_conn
-	debug_print("Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
 				if (mysql_query(mycpe->conn,"SELECT 1")) {
-#ifdef DEBUG_mysql_conn
-			debug_print("SELECT 1 failed on fd %d\n", mycpe->conn->net.fd);
-#endif
+					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 3, "SELECT 1 failed on fd %d\n", mycpe->conn->net.fd);
 					//shutdown(mycpe->conn->net.fd, SHUT_RDWR);
 					mysql_close(mycpe->conn);
 					//close(mycpe->conn->net.fd);
@@ -85,9 +73,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 			}
 		}
 		if (mycpe==NULL) {
-#ifdef DEBUG_mysql_conn
-	debug_print("%s\n", "Unable to return a connection. Reconnection FAILED");
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 3, "Unable to return a connection. Reconnection FAILED\n");
 			// maybe is better if the calling function sends the error to the client. The follow 3 lines should be moved out of here
 			pkt *hs;
 			hs=mypkt_alloc(sess);
@@ -127,18 +113,14 @@ myConnPools *mysql_connpool_init() {
 	pthread_mutex_init(&cp->mutex, NULL);
 	cp->connpools=g_ptr_array_new();
 	cp->enabled=TRUE;	// enabled by default
-#ifdef DEBUG_mysql_conn
-	debug_print("%s\n", "Main connection pool struct created");
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Main connection pool struct created\n");
 	return cp;
 }
 
 
 mysql_connpool *mysql_connpool_find(myConnPools *cp, const char *hostname, const char *username, const char *password, const char *db, unsigned int port) {
 //	NOTE: the calling function must lock the mutex
-#ifdef DEBUG_mysql_conn
-	debug_print("Searching a connection for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Searching a connection for %s %s %s %s %d\n", hostname, username, password, db, port);
 	guint l;
 	for (l=0; l<cp->connpools->len; l++) {
 		mysql_connpool *mcp=g_ptr_array_index(cp->connpools,l);
@@ -149,17 +131,13 @@ mysql_connpool *mysql_connpool_find(myConnPools *cp, const char *hostname, const
 			(strcmp(db,mcp->db)==0) &&
 			(port==mcp->port)
 		) {	// we found the matching hostname/username/password/port
-#ifdef DEBUG_mysql_conn
-			debug_print("Found connection for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Found connection for %s %s %s %s %d\n", hostname, username, password, db, port);
 			return mcp;
 		}// else {
 		//	return NULL;
 		//}
 	}
-#ifdef DEBUG_mysql_conn
-	debug_print("NOT found connection for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "NOT found connection for %s %s %s %s %d\n", hostname, username, password, db, port);
 	return NULL; // no match found
 }
 
@@ -174,17 +152,13 @@ mysql_connpool *mysql_connpool_create(myConnPools *cp, const char *hostname, con
 	mcp->port=port;
 //	mcp->used_conns=g_ptr_array_new();
 	mcp->free_conns=g_ptr_array_new();
-#ifdef DEBUG_mysql_conn
-	debug_print("Created connection pool for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Created connection pool for %s %s %s %s %d\n", hostname, username, password, db, port);
 	return mcp;
 }
 
 mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hostname, const char *username, const char *password, const char *db, unsigned int port) {
 //	NOTE: this function locks the mutex
-#ifdef DEBUG_mysql_conn
-	debug_print("Getting a connection for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Getting a connection for %s %s %s %s %d\n", hostname, username, password, db, port);
 	guint l;
 	mysql_cp_entry_t *mycpe=NULL;
 	struct timeval tv;
@@ -201,9 +175,7 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 			mysql_cp_entry_t *mc=g_ptr_array_index(mcp->free_conns,0);	// get the first connection
 			g_ptr_array_remove_index_fast(mcp->free_conns,0);	// remove it
 			if (mc->expire <= curr_time) {	// if the connection is expired ...
-#ifdef DEBUG_mysql_conn
-				debug_print("Closing expired connection for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Closing expired connection for %s %s %s %s %d\n", hostname, username, password, db, port);
 				mysql_close(mc->conn);	// ... close it
 				free(mc);
 			} else { // found a potential good connection
@@ -234,9 +206,7 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 			// we don't abort because the called may decide to connect to another slave if available
 		} else {
 			if ((mycpe=malloc(sizeof(mysql_cp_entry_t)))==NULL) { exit(1); }
-#ifdef DEBUG_mysql_conn
-			debug_print("Created new connection for %s %s %s %s %d\n", hostname, username, password, db, port);
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Created new connection for %s %s %s %s %d\n", hostname, username, password, db, port);
 			mycpe->conn=mysql_con;
 			mycpe->expire = curr_time + glovars.mysql_wait_timeout;
 /* NEW STUFF
@@ -268,9 +238,7 @@ void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc) {
 	}
 	MYSQL *mysql_con;
 	mysql_con=mc->conn;
-#ifdef DEBUG_mysql_conn
-	debug_print("Detaching connection for %s %s %s %s %d\n", mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Detaching connection for %s %s %s %s %d\n", mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
 	pthread_mutex_lock(&cp->mutex);
 	mysql_connpool *mcp=mysql_connpool_find(cp, mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
 	// we may not find the connection if an INITDB was issued, thus changing db
@@ -282,9 +250,7 @@ void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc) {
 		gettimeofday(&tv, NULL);
 		unsigned long long curr_time=(tv.tv_sec) * 1000000 + (tv.tv_usec);
 		if (mc->expire <= curr_time) {	// if the connection is expired ...
-#ifdef DEBUG_mysql_conn
-			debug_print("Closing expired connection for %s %s %s %s %d\n", mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Closing expired connection for %s %s %s %s %d\n", mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
 			mysql_close(mc->conn);	// ... close it
 			free(mc);
 		} else {

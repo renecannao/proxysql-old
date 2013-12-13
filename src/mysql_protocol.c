@@ -62,8 +62,16 @@ void mysql_data_stream_close(mysql_data_stream_t *my) {
 }
 
 
-char *user_password(char *username) {
+char *user_password(char *username, int admin) {
 	char *ret=NULL; char *pass=NULL;
+	if (admin==1) {
+		if (strncmp(username,glovars.proxy_admin_user,strlen(glovars.proxy_admin_user))==0) {
+			pass=strdup(glovars.proxy_admin_password);
+			return pass;
+		} else {
+			return NULL;
+		}
+	}
 	pthread_rwlock_rdlock(&glovars.rwlock_usernames);
 	ret=g_hash_table_lookup(glovars.usernames,username);
 	if (ret) {
@@ -83,26 +91,18 @@ inline enum MySQL_response_type mysql_response(pkt *p) {
 	unsigned char c=*((char *)p->data+sizeof(mysql_hdr));
 	switch (c) {
 		case 0:
-#ifdef DEBUG_COM
-			debug_print("Packet %s\n", "OK_Packet");
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Packet OK_Packet\n");
 			return OK_Packet;
 		case 0xff:
-#ifdef DEBUG_COM
-			debug_print("Packet %s\n", "ERR_Packet");
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Packet ERR_Packet\n");
 			return ERR_Packet;
 		case 0xfe:
 			if ((p->length-sizeof(mysql_hdr)) < 9) {
-#ifdef DEBUG_COM
-				debug_print("Packet %s\n", "EOF_Packet");
-#endif
+				proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Packet EOF_Packet\n");
 				return EOF_Packet;
 			}
 		default:
-#ifdef DEBUG_COM
-			debug_print("Packet %s\n", "UNKNOWN_Packet");
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Packet UNKNOWN_Packet\n");
 			return UNKNOWN_Packet;
 	}
 }
@@ -172,35 +172,25 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 		scramble_reply=mypkt->data+cur;
 		cur+=c;
 	}
-#ifdef DEBUG_auth
-	debug_print("Username = %s\n" , username);
-#endif
-	sess->mysql_password=user_password(username);
+	proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4,"Username = %s\n" , username);
+	sess->mysql_password=user_password(username, sess->admin);
 	if (sess->mysql_password==NULL)	 {
-#ifdef DEBUG_auth
-		debug_print("Username %s does not exist\n" , username);
-#endif
+		proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Username %s does not exist\n" , username);
 		return ret;
 	}
-#ifdef DEBUG_auth
-	debug_print("Password in hash table = %s\n" , sess->mysql_password);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Password in hash table = %s\n" , sess->mysql_password);
 	unsigned char reply[SHA_DIGEST_LENGTH+1];
 	reply[SHA_DIGEST_LENGTH]='\0';
 	if (scramble_reply) {
 		proxy_scramble(reply, sess->scramble_buf, sess->mysql_password);
 		if (memcmp(reply,scramble_reply,SHA_DIGEST_LENGTH)==0) {
 			ret=0;
-#ifdef DEBUG_auth
-			debug_print("%s\n", "Password match!");
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 6, "Password match!\n");
 		}
 	} else {
 		if (strcmp(sess->mysql_password,"")==0) {
 			ret=0;
-#ifdef DEBUG_auth
-			debug_print("%s\n", "Empty password match!");
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Empty password match!\n");
 		}
 	}
 	if (!ret) {
@@ -214,9 +204,7 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 //				sess->mysql_schema_cur=NULL;
 //			}
 		}
-#ifdef DEBUG_auth
-		debug_print("Username = %s, schema = %s pkt_length = %d\n" , username, sess->mysql_schema_cur, mypkt->length);
-#endif
+		proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 6, "Username = %s, schema = %s pkt_length = %d\n" , username, sess->mysql_schema_cur, mypkt->length);
 	}
 	return ret;
 }
@@ -322,7 +310,8 @@ void create_err_packet(pkt *mypkt, unsigned int id, uint16_t errcode, char *errs
 	memcpy(mypkt->data+sizeof(mysql_hdr)+3,errstr,strlen(errstr));
 }
 
-
+/*
+//DEPRECATED
 int authenticate_mysql_client(mysql_session_t *sess) {
 	// generate a handshake
 	pkt *hs;
@@ -362,7 +351,7 @@ int authenticate_mysql_client(mysql_session_t *sess) {
 
 	return 0;
 }
-
+*/
 void authenticate_mysql_client_send_OK(mysql_session_t *sess) {
 	// prepare an ok packet
 	pkt *hs;
@@ -386,7 +375,7 @@ int mysql_check_alive_and_read_only(const char *hostname, uint16_t port) {
 		exit(EXIT_FAILURE);
 	}
 	if (mysql_real_connect(conn, hostname, glovars.mysql_usage_user, glovars.mysql_usage_password, NULL, port, NULL, 0) == NULL) {
-		fprintf(stderr, "FATAL: server %s\n", mysql_error(conn));
+		proxy_error("FATAL: server %s:%p not alive: \n", hostname, port, mysql_error(conn));
 		mysql_close(conn);
 		return -1;
 	}
@@ -417,7 +406,7 @@ int mysql_check_alive_and_read_only(const char *hostname, uint16_t port) {
 	}
 	char *read_only;
 	read_only=strdup(row[1]);
-	fprintf(stderr, "server %s read_only %s\n" , hostname, read_only);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "server %s read_only %s\n" , hostname, read_only);
 	int r=1;
 	if ((strcmp(read_only,"0") == 0) || (strcmp(read_only,"OFF") == 0)) {
 		r=0;
@@ -488,4 +477,155 @@ void proxy_my_crypt(char *to, const uchar *s1, const uchar *s2, uint len) {
   const uint8 *s1_end= s1 + len;
   while (s1 < s1_end)
     *to++= *s1++ ^ *s2++;
+}
+
+int lencint(uint64_t v) {
+	if (v<251) {
+		return 1;
+	}
+	if (v>=251 && v<65536) {
+		return 3;
+	}
+	if (v>=65536 && v<16777216) {
+		return 4;
+	}
+	if (v>=16777216) {
+		return 9;
+	}
+}
+
+
+int writeencint(void *ptr, uint64_t v) {
+	int l=lencint(v);
+	if (l==1) {
+		memcpy(ptr,&v,1);
+	}
+	if (l==3) {
+		memcpy(ptr, "\xfc", 1);
+		memcpy(ptr+1, &v, 2);
+	}
+	if (l==4) {
+		memcpy(ptr, "\xfd", 1);
+		memcpy(ptr+1, &v, 3);
+	}
+	if (l==9) {
+		memcpy(ptr, "\xfe", 1);
+		memcpy(ptr+1, &v, 8);
+	}
+	return l;
+}
+
+int writeencstrnull(void *ptr, const char *s) {
+	if (s==NULL) {
+		// NULL
+		memcpy(ptr, "\xfb", 1);
+		return 1;
+	}
+	int l=strlen(s);
+	int el=lencint(l);
+	if (el==1) {
+		memcpy(ptr,&l,1);
+	}
+	if (el==3) {
+		memcpy(ptr, "\xfc", 1);
+		memcpy(ptr+1, &l, el-1);
+	}
+	if (el==4) {
+		memcpy(ptr, "\xfd", 1);
+	}
+	if (el==9) {
+		memcpy(ptr, "\xfe", 1);
+		memcpy(ptr+1, &l, el-1);
+	}
+	memcpy(ptr+el,s,l);
+	return l+el;
+}
+
+
+
+void myproto_ok_pkt(pkt *mypkt, unsigned int id, uint64_t affected_rows, uint64_t last_insert_id, uint16_t status, uint16_t warnings) {
+	int i=0;
+	mysql_hdr myhdr;
+	myhdr.pkt_id=id;
+	myhdr.pkt_length=1;
+	myhdr.pkt_length+=lencint(affected_rows);
+	myhdr.pkt_length+=lencint(last_insert_id);
+	myhdr.pkt_length+=sizeof(uint16_t);
+	myhdr.pkt_length+=sizeof(uint16_t);
+	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
+	mypkt->data=g_slice_alloc(mypkt->length);
+	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
+	i=sizeof(mysql_hdr);
+	memcpy(mypkt->data+i, "\x00", 1); // OK header
+	i+=1;
+	writeencint(mypkt->data+i, affected_rows);
+	i+=lencint(affected_rows);
+	writeencint(mypkt->data+i, last_insert_id);
+	i+=lencint(last_insert_id);
+	memcpy(mypkt->data+i, &status, sizeof(uint16_t));
+	i+=sizeof(uint16_t);
+	memcpy(mypkt->data+i, &warnings, sizeof(uint16_t));
+}
+
+void myproto_column_count(pkt *mypkt, unsigned int id, uint64_t cnt) {
+	mysql_hdr myhdr;
+	myhdr.pkt_id=id;
+	myhdr.pkt_length=0;
+	myhdr.pkt_length+=lencint(cnt);
+	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
+	mypkt->data=g_slice_alloc(mypkt->length);
+	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
+	writeencint(mypkt->data+sizeof(mysql_hdr), cnt);
+}
+
+void myproto_column_def(pkt *mypkt, unsigned int id, const char *schema, const char *table, const char *org_table, const char *name, const char *org_name, uint32_t column_length, uint8_t column_type, uint16_t flags, uint8_t decimals) {
+	int i;
+	int length_schema=strlen(schema);
+	int length_table=strlen(table);
+	int length_org_table=strlen(org_table);
+	int length_name=strlen(name);
+	int length_org_name=strlen(org_name);
+	mysql_hdr myhdr;
+	myhdr.pkt_id=id;
+	myhdr.pkt_length=4;
+	myhdr.pkt_length+=lencint(length_schema)+length_schema;
+	myhdr.pkt_length+=lencint(length_table)+length_table;
+	myhdr.pkt_length+=lencint(length_org_table)+length_org_table;
+	myhdr.pkt_length+=lencint(length_name)+length_name;
+	myhdr.pkt_length+=lencint(length_org_name)+length_org_name;
+	myhdr.pkt_length+=1+2;
+	myhdr.pkt_length+=sizeof(uint32_t); //column_length
+	myhdr.pkt_length+=sizeof(uint8_t); //column_type
+	myhdr.pkt_length+=sizeof(uint16_t); //flags
+	myhdr.pkt_length+=sizeof(uint8_t); //decimals
+	myhdr.pkt_length+=2; //filler
+	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
+	mypkt->data=g_slice_alloc(mypkt->length);
+	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr)); i=sizeof(mysql_hdr);
+	memcpy(mypkt->data+i,"\x03\x64\x65\x66",4); i+=4;
+	i+=writeencstrnull(mypkt->data+i,schema);
+	i+=writeencstrnull(mypkt->data+i,table);
+	i+=writeencstrnull(mypkt->data+i,org_table);
+	i+=writeencstrnull(mypkt->data+i,name);
+	i+=writeencstrnull(mypkt->data+i,org_name);
+	memcpy(mypkt->data+i,"\x0c\x21\x00",3); i+=3;
+	memcpy(mypkt->data+i, &column_length, sizeof(uint32_t)); i+=sizeof(uint32_t);
+	memcpy(mypkt->data+i, &column_type, sizeof(uint8_t)); i+=sizeof(uint8_t);
+	memcpy(mypkt->data+i, &flags, sizeof(uint16_t)); i+=sizeof(uint16_t);
+	memcpy(mypkt->data+i, &decimals, sizeof(uint8_t)); i+=sizeof(uint8_t);
+	memcpy(mypkt->data+i,"\x00\x00",2);
+}
+
+
+void myproto_eof(pkt *mypkt, unsigned int id, uint16_t warning_count, uint16_t status_flags) {
+	int i;
+	mysql_hdr myhdr;
+	myhdr.pkt_id=id;
+	myhdr.pkt_length=5;
+	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
+	mypkt->data=g_slice_alloc(mypkt->length);
+	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr)); i=sizeof(mysql_hdr);
+	memcpy(mypkt->data+i,"\xfe",1); i+=1;
+	memcpy(mypkt->data+i,&warning_count,sizeof(uint16_t)); i+=2;
+	memcpy(mypkt->data+i,&status_flags,sizeof(uint16_t));
 }

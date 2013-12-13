@@ -3,6 +3,8 @@
 
 
 void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *config_file) {
+
+
 	// Prepare the processing of config file
 	GKeyFile *keyfile;
 
@@ -21,7 +23,16 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *co
 		exit (1);
 	}
 
-
+	init_debug_struct();
+/*
+	if (gdbg) {
+		int i;
+		for (i=0;i<PROXY_DEBUG_UNKNOWN;i++) {
+			gdbg_lvl[i]=INT_MAX;
+		}
+	}
+*/
+	proxy_debug(PROXY_DEBUG_GENERIC, 1, "processing opts\n");
 
 	// check if file exists and is readable
 	if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
@@ -45,13 +56,78 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *co
 int init_global_variables(GKeyFile *gkf) {
 	int i;
 	GError *error=NULL;
+
+	// open the file and verify it has [global] section
+	proxy_debug(PROXY_DEBUG_GENERIC, 1, "Checking [global]\n");
 	if (g_key_file_has_group(gkf,"global")==FALSE) {
 		g_print("[global] section not found\n"); exit(EXIT_FAILURE);
 	}
 
+	// open the file and verify it has [mysql users] section
+	proxy_debug(PROXY_DEBUG_GENERIC, 1, "Checking [mysql users]\n");
 	if (g_key_file_has_group(gkf,"mysql users")==FALSE) {
 		g_print("[mysql users] section not found\n"); exit(EXIT_FAILURE);
 	}
+
+	// processing [debug] section
+	proxy_debug(PROXY_DEBUG_GENERIC, 1, "Processing [debug]\n");
+	if (g_key_file_has_group(gkf,"mysql users")==FALSE) {
+		proxy_debug(PROXY_DEBUG_GENERIC, 1, "[debug] missing\n");	
+		memset(gdbg_lvl,0,sizeof(int)*PROXY_DEBUG_UNKNOWN);
+	} else {
+		int i;
+		for (i=0; i<PROXY_DEBUG_UNKNOWN; i++) {
+			gdbg_lvl[i].verbosity=0;
+			if (g_key_file_has_key(gkf, "debug", gdbg_lvl[i].name, NULL)) {
+				gint r=g_key_file_get_integer(gkf, "debug", gdbg_lvl[i].name, &error);
+				if (r >= 0 ) { gdbg_lvl[i].verbosity=r; }
+			}	
+		}
+/*
+		gdbg_lvl[PROXY_DEBUG_GENERIC]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_generic", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_generic", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_GENERIC]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_NET]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_net", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_net", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_NET]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_PKT_ARRAY]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_pkt_array", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_pkt_array", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_PKT_ARRAY]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_MEMORY]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_memory", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_memory", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_MEMORY]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_POLL]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_poll", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_poll", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_POLL]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_MYSQL_COM]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_mysql_com", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_mysql_com", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_MYSQL_COM]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_MYSQL_AUTH]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_mysql_auth", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_mysql_auth", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_MYSQL_AUTH]=r; }
+		}
+		gdbg_lvl[PROXY_DEBUG_SQLITE]=0;
+		if (g_key_file_has_key(gkf, "debug", "debug_sqlite", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "debug", "debug_sqlite", &error);
+			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_SQLITE]=r; }
+		}
+*/
+	}
+
+	
 
 	pthread_rwlock_init(&glovars.rwlock_global, NULL);
 	pthread_rwlock_init(&glomysrvs.rwlock, NULL);
@@ -113,7 +189,7 @@ int init_global_variables(GKeyFile *gkf) {
 	}
 
 	// set stack_size
-	glovars.stack_size=256*1024;	// default stack_size
+	glovars.stack_size=512*1024;	// default stack_size
 	if (g_key_file_has_key(gkf, "global", "stack_size", NULL)) {
 		gint r=g_key_file_get_integer(gkf, "global", "stack_size", &error);
 		if (r >= 64*1024 ) {		// minimum stack_size is 64KB
@@ -128,6 +204,9 @@ int init_global_variables(GKeyFile *gkf) {
 		gint r=g_key_file_get_integer(gkf, "global", "net_buffer_size", &error);
 		if (r >= 1024 ) {		// minimum net_buffer_size
 			conn_queue_pool.size=r/1024*1024; // rounding to 1KB
+			if (r >= 1024*1024*16 ) {		// maximum net_buffer_size
+				conn_queue_pool.size=16*1024*1024; // rounding to 1KB
+			}
 		}
 	}
 
@@ -214,9 +293,9 @@ int init_global_variables(GKeyFile *gkf) {
 	glovars.mysql_threads=sysconf(_SC_NPROCESSORS_ONLN)*2;
 	if (g_key_file_has_key(gkf, "mysql", "mysql_threads", NULL)) {
 		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_threads", &error);
-		if (r >= 2 ) { 	// 2 threads is the minimum
+		if (r >= 1 ) { 	// 1 thread is the minimum
 			glovars.mysql_threads=r;
-			if ( r > 128 ) // 64 threads is the maximum
+			if ( r > 128 ) // 128 threads is the maximum
 				glovars.mysql_threads=128;
 		}
 	}
@@ -334,6 +413,18 @@ int init_global_variables(GKeyFile *gkf) {
 			glovars.mysql_usage_password=g_key_file_get_string(gkf, "mysql", "mysql_usage_password", &error);
 	}
 
+	// set proxy_admin_user
+	glovars.proxy_admin_user="admin";	// default
+	if (g_key_file_has_key(gkf, "mysql", "proxy_admin_user", NULL)) {
+			glovars.mysql_usage_user=g_key_file_get_string(gkf, "mysql", "proxy_admin_user", &error);
+	}
+
+	// set proxy_admin_password
+	glovars.proxy_admin_password="admin";	// default
+	if (g_key_file_has_key(gkf, "global", "proxy_admin_password", NULL)) {
+			glovars.proxy_admin_password=g_key_file_get_string(gkf, "global", "proxy_admin_password", &error);
+	}
+
 	glomysrvs.mysql_use_masters_for_reads=1;
 	if (g_key_file_has_key(gkf, "mysql", "mysql_use_masters_for_reads", NULL)) {
 		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_use_masters_for_reads", &error);
@@ -404,7 +495,7 @@ int init_global_variables(GKeyFile *gkf) {
 				if ((p=malloc(sl))==NULL) { exit(EXIT_FAILURE); }
 				*c=' ';
 				sscanf(glomysrvs.mysql_servers_name[i],"%s %s",s,p);
-				fprintf(stderr, "Server %s port %s\n", s, p);
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Configuring server %s port %s\n", s, p);
 				ms->address=g_strdup(s);
 				ms->port=atoi(p);
 				free(s);
@@ -419,9 +510,7 @@ int init_global_variables(GKeyFile *gkf) {
 			} else {
 				ms->alive=1;
 			}
-#ifdef DEBUG_mysql_conn
-			debug_print("Adding slave %s:%d , %s\n", ms->address, ms->port , (ms->alive ? "ACTIVE" : "DEAD"));
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Adding slave %s:%d , %s\n", ms->address, ms->port , (ms->alive ? "ACTIVE" : "DEAD"));
 			if ((ro==1) || (glomysrvs.mysql_use_masters_for_reads==1)) {
 				g_ptr_array_add(glomysrvs.servers_slaves, (gpointer) ms);
 				glomysrvs.count_slaves++;
@@ -429,12 +518,11 @@ int init_global_variables(GKeyFile *gkf) {
 			if (ro==0) {
 				g_ptr_array_add(glomysrvs.servers_masters, (gpointer) ms);
 				glomysrvs.count_masters++;
-#ifdef DEBUG_mysql_conn
-				debug_print("Adding master %s:%d\n", ms->address, ms->port);
-#endif
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Adding master %s:%d\n", ms->address, ms->port);
 			}
 		}
 	} else {
+		// This needs to go away. Servers can be configured in sqlite, or added alter on
 		g_print("mysql_servers not defined in [mysql]\n"); exit(EXIT_FAILURE);
 	}
 
@@ -442,27 +530,34 @@ int init_global_variables(GKeyFile *gkf) {
 	
 { // load usernames and password
 	pthread_rwlock_wrlock(&glovars.rwlock_usernames);
+	glovars.mysql_users_name=g_ptr_array_new();
+	glovars.mysql_users_pass=g_ptr_array_new();
 	glovars.usernames = g_hash_table_new(g_str_hash, g_str_equal);
 	//gchar **users_keys=NULL;
 	gsize l=0;
-	glovars.mysql_users_name=g_key_file_get_keys(gkf, "mysql users", &l, &error);
+	gchar **mysql_users_name=NULL;
+	gchar **mysql_users_pass=NULL;
+	mysql_users_name=g_key_file_get_keys(gkf, "mysql users", &l, &error);
 	if (l==0) {
 		g_print("No mysql users defined in [mysql users]\n"); exit(EXIT_FAILURE);
 	} else {
-		glovars.mysql_users_pass=g_strdupv(glovars.mysql_users_name);
+		mysql_users_pass=g_strdupv(mysql_users_name);
 		int i;
 		for (i=0; i<l; i++) {
-			g_free(glovars.mysql_users_pass[i]);
-			glovars.mysql_users_pass[i]=g_key_file_get_string(gkf, "mysql users", glovars.mysql_users_name[i], &error);
-			if (glovars.mysql_users_pass[i]==NULL) {
-				g_print("Error in password for user %s\n", glovars.mysql_users_name[i]); exit(EXIT_FAILURE);
+			g_free(mysql_users_pass[i]);
+			mysql_users_pass[i]=g_key_file_get_string(gkf, "mysql users", mysql_users_name[i], &error);
+			if (mysql_users_pass[i]==NULL) {
+				g_print("Error in password for user %s\n", mysql_users_name[i]); exit(EXIT_FAILURE);
 			}
-#ifdef DEBUG_auth
-			fprintf(stderr,"user %s password %s (%d)\n", glovars.mysql_users_name[i], glovars.mysql_users_pass[i], strlen(glovars.mysql_users_pass[i]));
-#endif
-			g_hash_table_insert(glovars.usernames, glovars.mysql_users_name[i], glovars.mysql_users_pass[i]);
+			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Adding user %s password %s (%d)\n", mysql_users_name[i], mysql_users_pass[i], strlen(mysql_users_pass[i]));
+			g_ptr_array_add(glovars.mysql_users_name,g_strdup(mysql_users_name[i]));
+			g_ptr_array_add(glovars.mysql_users_pass,g_strdup(mysql_users_pass[i]));
+			g_hash_table_insert(glovars.usernames, g_ptr_array_index(glovars.mysql_users_name,i), g_ptr_array_index(glovars.mysql_users_pass,i));
+
 		}
 	}
+	g_strfreev(mysql_users_name);
+	g_strfreev(mysql_users_pass);
 	pthread_rwlock_unlock(&glovars.rwlock_usernames);
 }
 
@@ -494,9 +589,7 @@ mysql_server * new_server_master() {
 	if ( glomysrvs.count_masters==0 ) return NULL;
 	int i=rand()%glomysrvs.count_masters;
 	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_masters,i);
-#ifdef DEBUG_mysql_server
-	debug_print("using master %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_masters);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using master %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_masters);
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;
 }
@@ -506,9 +599,7 @@ mysql_server * new_server_slave() {
 	if ( glomysrvs.count_slaves==0 ) return NULL;
 	int i=rand()%glomysrvs.count_slaves;
 	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_slaves,i);
-#ifdef DEBUG_mysql_server
-	debug_print("using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;
 }

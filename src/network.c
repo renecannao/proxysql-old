@@ -1,16 +1,12 @@
 #include "proxysql.h"
 
 inline void mysql_data_stream_shut_soft(mysql_data_stream_t *myds) {
-#ifdef DEBUG_shutfd
-	debug_print("Shutdown soft %d\n", myds->fd);
-#endif
+	proxy_debug(PROXY_DEBUG_NET, 4, "Shutdown soft %d\n", myds->fd);
 	myds->active=FALSE;
 }
 
 inline void mysql_data_stream_shut_hard(mysql_data_stream_t *myds) {
-#ifdef DEBUG_shutfd
-	debug_print("Shutdown hard %d\n", myds->fd);
-#endif
+	proxy_debug(PROXY_DEBUG_NET, 4, "Shutdown hard %d\n", myds->fd);
 	if (myds->fd >= 0) {
 		shutdown(myds->fd, SHUT_RDWR);
 		close(myds->fd);
@@ -98,9 +94,7 @@ int read_from_net(mysql_data_stream_t *myds) {
 	queue_t *q=&myds->input.queue;
 	int s=queue_available(q);
 	r = recv(myds->fd, queue_w_ptr(q), s, 0);
-#ifdef DEBUG_read_from_net
-	debug_print("read %d bytes from fd %d into a buffer of %d bytes free\n", r, myds->fd, s);
-#endif
+	proxy_debug(PROXY_DEBUG_NET, 5, "read %d bytes from fd %d into a buffer of %d bytes free\n", r, myds->fd, s);
 	if (r < 1) {
 //		if (r==-1) {
 		mysql_data_stream_shut_soft(myds);
@@ -121,11 +115,7 @@ int write_to_net(mysql_data_stream_t *myds) {
 	int s = queue_data(q);
 	if (s==0) return 0;
 	r = send(myds->fd, queue_r_ptr(q), s, 0);
-#ifdef DEBUG_write_to_net
-	//debug_print("wrote %d bytes to fd %d\n", r, myds->fd);
-	debug_print("wrote %d bytes to fd %d from a buffer with %d bytes of data\n", r, myds->fd, s);
-#endif
-	//if (r < 1) {
+	proxy_debug(PROXY_DEBUG_NET, 5, "wrote %d bytes to fd %d from a buffer with %d bytes of data\n", r, myds->fd, s);
 	if (r < 0) {
 		mysql_data_stream_shut_soft(myds);
 	}
@@ -139,14 +129,10 @@ int write_to_net(mysql_data_stream_t *myds) {
 int buffer2array(mysql_data_stream_t *myds) {
 	int ret=0;
 	queue_t *qin = &myds->input.queue;
-#ifdef DEBUG_buffer2array
-		debug_print("BEGIN : bytes in buffer = %d\n", queue_data(qin));
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "BEGIN : bytes in buffer = %d\n", queue_data(qin));
 	if (queue_data(qin)==0) return ret;
 	if (myds->input.mypkt==NULL) {
-#ifdef DEBUG_buffer2array
-		debug_print("%s\n", "Allocating a new packet");
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Allocating a new packet\n");
 		myds->input.mypkt=mypkt_alloc(myds->sess);	
 		myds->input.mypkt->length=0;
 	}	
@@ -154,14 +140,10 @@ int buffer2array(mysql_data_stream_t *myds) {
 		queue_zero(qin);
 	}
 	if ((myds->input.mypkt->length==0) && queue_data(qin)>=sizeof(mysql_hdr)) {
-#ifdef DEBUG_buffer2array
-		debug_print("%s\n", "Reading the header of a new packet");
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Reading the header of a new packet\n");
 		memcpy(&myds->input.hdr,queue_r_ptr(qin),sizeof(mysql_hdr));
 		queue_r(qin,sizeof(mysql_hdr));
-#ifdef DEBUG_buffer2array
-		debug_print("Allocating %d bytes for a new packet\n", myds->input.hdr.pkt_length+sizeof(mysql_hdr));
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Allocating %d bytes for a new packet\n", myds->input.hdr.pkt_length+sizeof(mysql_hdr));
 		myds->input.mypkt->length=myds->input.hdr.pkt_length+sizeof(mysql_hdr);
 		myds->input.mypkt->data=g_slice_alloc(myds->input.mypkt->length);
 		memcpy(myds->input.mypkt->data, &myds->input.hdr, sizeof(mysql_hdr)); // immediately copy the header into the packet
@@ -170,40 +152,30 @@ int buffer2array(mysql_data_stream_t *myds) {
 	}
 	if ((myds->input.mypkt->length>0) && queue_data(qin)) {
 		int b= ( queue_data(qin) > (myds->input.mypkt->length-myds->input.partial) ? myds->input.mypkt->length-myds->input.partial : queue_data(qin) );
-#ifdef DEBUG_buffer2array
-		debug_print("Copied %d bytes into packet\n", b);
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Copied %d bytes into packet\n", b);
 		memcpy(myds->input.mypkt->data + myds->input.partial, queue_r_ptr(qin),b);
 		queue_r(qin,b);			
 		myds->input.partial+=b;
 		ret+=b;
 	}
 	if ((myds->input.mypkt->length>0) && (myds->input.mypkt->length==myds->input.partial) ) {
-#ifdef DEBUG_buffer2array
-		debug_print("Packet (%d bytes) completely read, moving into input.pkts array\n", myds->input.mypkt->length);
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Packet (%d bytes) completely read, moving into input.pkts array\n", myds->input.mypkt->length);
 		g_ptr_array_add(myds->input.pkts, myds->input.mypkt);
 		myds->pkts_recv+=1;
 		myds->input.mypkt=NULL;
 	}
-#ifdef DEBUG_buffer2array
-		debug_print("END : bytes in buffer = %d\n", queue_data(qin));
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "END : bytes in buffer = %d\n", queue_data(qin));
 	return ret;
 }
 
 int array2buffer(mysql_data_stream_t *myds) {
 	int ret=0;
 	queue_t *qout = &myds->output.queue;
-#ifdef DEBUG_array2buffer
-		debug_print("Entering array2buffer with partial_send = %d and queue_available = %d\n", myds->output.partial, queue_available(qout));
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Entering array2buffer with partial_send = %d and queue_available = %d\n", myds->output.partial, queue_available(qout));
 	if (queue_available(qout)==0) return ret;	// no space to write
 	if (myds->output.partial==0) { // read a new packet
 		if (myds->output.pkts->len) {
-#ifdef DEBUG_array2buffer
-		debug_print("%s\n", "Removing a packet from array");
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "%s\n", "Removing a packet from array");
 			if (myds->output.mypkt) {
 				mypkt_free(myds->output.mypkt, myds->sess, 0);	
 			}
@@ -215,23 +187,20 @@ int array2buffer(mysql_data_stream_t *myds) {
 	int b= ( queue_available(qout) > (myds->output.mypkt->length - myds->output.partial) ? (myds->output.mypkt->length - myds->output.partial) : queue_available(qout) );
 	memcpy(queue_w_ptr(qout), myds->output.mypkt->data + myds->output.partial, b);
 	queue_w(qout,b);	
-#ifdef DEBUG_array2buffer
-	debug_print("Copied %d bytes into send buffer\n", b);
-#endif	
+	proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Copied %d bytes into send buffer\n", b);
 	myds->output.partial+=b;
 	ret=b;
 	if (myds->output.partial==myds->output.mypkt->length) {
 		g_slice_free1(myds->output.mypkt->length, myds->output.mypkt->data);
-#ifdef DEBUG_array2buffer
-		debug_print("%s\n", "Packet completely written into send buffer");
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Packet completely written into send buffer\n");
 		myds->output.partial=0;
 		myds->pkts_sent+=1;
 	}
 	return ret;
 }
 
-
+/*
+// DEPREACTED
 pkt * read_one_pkt_from_net(mysql_data_stream_t *myds) { // this should be used ONLY when sure that only 1 packet is expected, for example during authentication
 	// loop until a packet is read
     while (myds->input.pkts->len==0) {
@@ -244,7 +213,7 @@ pkt * read_one_pkt_from_net(mysql_data_stream_t *myds) { // this should be used 
     }
     return g_ptr_array_remove_index(myds->input.pkts, 0);
 }
-
+*/
 gboolean write_one_pkt_to_net(mysql_data_stream_t *myds, pkt *p) {// this should be used ONLY when sure that only 1 packet is expected, for example during authentication
 	g_ptr_array_add(myds->output.pkts, p);
 	array2buffer(myds);
@@ -255,6 +224,7 @@ gboolean write_one_pkt_to_net(mysql_data_stream_t *myds, pkt *p) {// this should
 		return FALSE;
 	}
 }
+
 
 int conn_poll(mysql_session_t *sess) {
 	int r;
@@ -276,9 +246,7 @@ int conn_poll(mysql_session_t *sess) {
 			if (sess->server_myds->fd > 0 && ( queue_data(&sess->server_myds->output.queue) || sess->server_myds->output.partial || sess->server_myds->output.pkts->len ) ) fds[1].events|=POLLOUT;
 		}
 	}
-#ifdef DEBUG_poll
-        debug_print("calling poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
-#endif
+        proxy_debug(PROXY_DEBUG_POLL, 4, "calling poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
 //	r=poll(fds,sess->nfds,glovars.mysql_poll_timeout);
 	stop_timer(sess->timers,TIMER_poll);
 	return r;
@@ -288,18 +256,14 @@ void read_from_net_2(mysql_session_t *sess) {
 	// read_from_net for both sockets
 	start_timer(sess->timers,TIMER_read_from_net);
 	if ((sess->client_myds->fd > 0) && ((sess->fds[0].revents & POLLIN) == POLLIN)) {
-#ifdef DEBUG_read_from_net
-		debug_print("Calling read_from_net for %s\n", "client");
-#endif
+		proxy_debug(PROXY_DEBUG_NET, 4, "Calling read_from_net for client\n");
 		read_from_net(sess->client_myds);
 	}
 	if (
 		(sess->server_myds!=NULL) && // the backend is initialized
 		(sess->server_myds->fd > 0) &&
 		((sess->fds[1].revents & POLLIN) == POLLIN)) {
-#ifdef DEBUG_read_from_net
-		debug_print("Calling read_from_net for %s\n", "server");
-#endif
+		proxy_debug(PROXY_DEBUG_NET, 4, "Calling read_from_net for server\n");
 		read_from_net(sess->server_myds);
 	}
 	stop_timer(sess->timers,TIMER_read_from_net);
@@ -309,9 +273,7 @@ void write_to_net_2(mysql_session_t *sess, int ignore_revents) {
 	// write_to_net for both sockets
 	start_timer(sess->timers,TIMER_write_to_net);
 	if ((sess->client_myds->fd > 0) && ( ignore_revents || ((sess->fds[0].revents & POLLOUT) == POLLOUT) ) ) {
-#ifdef DEBUG_write_to_net
-		debug_print("Calling write_to_net for %s\n", "client");
-#endif
+		proxy_debug(PROXY_DEBUG_NET, 4, "Calling write_to_net for client\n");
 		write_to_net(sess->client_myds);
 			// if I wrote everything to client, start reading from client
 //		  if ((queue_data(&conn->client_myds->output.queue)==0) && (conn->client_myds->output.pkts->len==0)) {
@@ -323,9 +285,7 @@ void write_to_net_2(mysql_session_t *sess, int ignore_revents) {
 		(sess->server_myds!=NULL) && // the backend is initialized
 		(sess->server_myds->fd > 0)
 		&& ( ignore_revents || ((sess->fds[1].revents & POLLOUT) == POLLOUT) ) ) {
-#ifdef DEBUG_write_to_net
-		debug_print("Calling write_to_net for %s\n", "server");
-#endif
+		proxy_debug(PROXY_DEBUG_NET, 4, "Calling write_to_net for server\n");
 		write_to_net(sess->server_myds);
 			// if I wrote everything to server, start reading from server
 //		  if ((queue_data(&conn->server_myds->output.queue)==0) && (conn->server_myds->output.pkts->len==0)) {
@@ -337,16 +297,10 @@ void write_to_net_2(mysql_session_t *sess, int ignore_revents) {
 
 void buffer2array_2(mysql_session_t *sess) {
 // buffer2array for both connections
-#ifdef DEBUG_buffer2array
-	debug_print("Calling buffer2array for %s\n", "client");
-#endif
 	start_timer(sess->timers,TIMER_buffer2array);
 	while((buffer2array(sess->client_myds)) && (sess->client_myds->fd > 0) ) {}
 
 	if (sess->server_myds!=NULL) { // the backend is initialized
-#ifdef DEBUG_buffer2array
-		debug_print("Calling buffer2array for %s\n", "server");
-#endif
 		while(buffer2array(sess->server_myds) && (sess->server_myds->fd > 0)) {}
 	}
 	stop_timer(sess->timers,TIMER_buffer2array);
@@ -355,15 +309,11 @@ void buffer2array_2(mysql_session_t *sess) {
 
 void array2buffer_2(mysql_session_t *sess) {
 	start_timer(sess->timers,TIMER_array2buffer);
-#ifdef DEBUG_array2buffer
-	debug_print("Calling array2buffer for %s\n", "client");
-#endif
+	proxy_debug(PROXY_DEBUG_PKT_ARRAY, 4, "Calling array2buffer for client\n");
 	while(array2buffer(sess->client_myds)) {}
 
 	if (sess->server_myds!=NULL) { // the backend is initialized
-#ifdef DEBUG_array2buffer
-		debug_print("Calling array2buffer for %s\n", "server");
-#endif
+		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 4, "Calling array2buffer for server\n");
 		while(array2buffer(sess->server_myds)) {}
 	}
 	stop_timer(sess->timers,TIMER_array2buffer);

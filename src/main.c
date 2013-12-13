@@ -14,6 +14,7 @@ static GOptionEntry entries[] =
   { "admin-port", 0, 0, G_OPTION_ARG_INT, &proxy_admin_port, "Administration port", NULL },
   { "mysql-port", 0, 0, G_OPTION_ARG_INT, &proxy_mysql_port, "MySQL proxy port", NULL },
   { "verbose", 'v', 0, G_OPTION_ARG_INT, &verbose, "Verbose level", NULL },
+  { "debug", 'd', 0, G_OPTION_ARG_INT, &gdbg, "debug", NULL },
   { "config", 'c', 0, G_OPTION_ARG_FILENAME, &config_file, "Configuration file", NULL },
   { NULL }
 };
@@ -45,28 +46,38 @@ void *mysql_thread(void *arg) {
 	thr.thread_id=*(int *)arg;
 	thr.free_pkts.stack=NULL;
 	thr.free_pkts.blocks=g_ptr_array_new();
-	fprintf(stderr, "thread_id = %d\n", thr.thread_id);
 	if (thr.thread_id==glovars.mysql_threads) {
-		fprintf(stderr, "started admin thread\n");
+		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started Admin thread_id = %d\n", thr.thread_id);
 		admin=1;
+	} else {
+		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started MySQL thread_id = %d\n", thr.thread_id);
 	}
-	GPtrArray *sessions=g_ptr_array_new();
+	thr.sessions=g_ptr_array_new();
+	thr.QC_rules=NULL;
+	thr.QCRver=0;
 	int i, nfds, r;
 	mysql_session_t *sess=NULL;
-	struct pollfd fds[1000];
+	struct pollfd fds[1000]; // FIXME: this must be dynamic
 	if (admin==0) { fds[0].fd=listen_tcp_fd; }
 		else { fds[0].fd=listen_tcp_admin_fd; }
-	if (admin==0) { fds[1].fd=listen_unix_fd; }
+	if (admin==0) {
+		fds[1].fd=listen_unix_fd; // Unix Domain Socket
+		fds[2].fd=proxyipc.fdIn[thr.thread_id]; // IPC pipe
+	}
 	while(glovars.shutdown==0) {
-		if (admin==0) {nfds=2;} else {nfds=1;}
+		if (admin==0) {nfds=3;} else {nfds=1;}
 		fds[0].events=POLLIN;
 		fds[0].revents=0;
 		if (admin==0) {
+			// Unix Domain Socket
 			fds[1].events=POLLIN;
 			fds[1].revents=0;
+			// IPC pipe
+			fds[2].events=POLLIN;
+			fds[2].revents=0;
 		}
-		for (i=0; i < sessions->len; i++) {
-			sess=g_ptr_array_index(sessions, i);
+		for (i=0; i < thr.sessions->len; i++) {
+			sess=g_ptr_array_index(thr.sessions, i);
 			if (sess->healthy==1) {	
 				if (sess->admin==0 && sess->server_myds) {
 				//ioctl(sess->server_fd, FIONBIO, (char *)&arg_on);
@@ -96,9 +107,39 @@ void *mysql_thread(void *arg) {
 	    if (r == -1) {
 	        PANIC("poll()");
 		}
-		if (admin==0) {nfds=2;} else {nfds=1;}
-		for (i=0; i < sessions->len; i++) {
-			sess=g_ptr_array_index(sessions, i);
+		if (admin==0 && fds[2].revents==POLLIN) { // admin threads is calling
+			char c;
+			int r=read(fds[2].fd,&c,sizeof(char));
+			proxy_debug(PROXY_DEBUG_IPC, 6, "Got byte on thr %d from FD %d\n", thr.thread_id, fds[2].fd);
+			gchar *admincmd=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
+			proxy_debug(PROXY_DEBUG_IPC, 6, "Got command %s on thr %d\n", admincmd, thr.thread_id);
+			if (strncmp(admincmd,"REMOVE SERVER",20)==0) {
+				mysql_server *ms=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
+				proxy_debug(PROXY_DEBUG_IPC, 6, "Got %p on thr %d\n", ms, thr.thread_id);
+				proxy_debug(PROXY_DEBUG_ADMIN, 1, "Received order REMOVE SERVER for server %s:%d\n", ms->address, ms->port);
+				int i;
+				for (i=0; i < thr.sessions->len; i++) {
+					sess=g_ptr_array_index(thr.sessions, i);
+					if(sess->master_ptr==ms) {
+						proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "Disconnecting session %p from master server %s:%d\n", sess, ms->address, ms->port);
+						mysql_session_close(sess); // in future, this needs to be treated more gracefully
+					}
+					if(sess->slave_ptr==ms) {
+						proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "Disconnecting session %p from slave server %s:%d\n", sess, ms->address, ms->port);
+						mysql_session_close(sess); // in future, this needs to be treated more gracefully
+					}	
+				}
+
+			}
+			g_free(admincmd);
+			gchar *ack=g_malloc0(20);
+			sprintf(ack,"ACK from %d",thr.thread_id);
+			proxy_debug(PROXY_DEBUG_IPC, 6, "Sending ACK from thr %d\n", thr.thread_id);
+			g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
+		}
+		if (admin==0) {nfds=3;} else {nfds=1;}
+		for (i=0; i < thr.sessions->len; i++) {
+			sess=g_ptr_array_index(thr.sessions, i);
 			if (sess->healthy==1) {	
 				int j;
 				for (j=0; j<sess->nfds; j++) {
@@ -111,12 +152,12 @@ void *mysql_thread(void *arg) {
 			connection_handler_mysql(sess);
 			}
 		}
-		for (i=0; i < sessions->len; i++) {
-			sess=g_ptr_array_index(sessions, i);
+		for (i=0; i < thr.sessions->len; i++) {
+			sess=g_ptr_array_index(thr.sessions, i);
 			if (sess->healthy==0) {
-				g_ptr_array_remove_index_fast(sessions,i);
+				g_ptr_array_remove_index_fast(thr.sessions,i);
 				i--;
-				free(sess);
+				g_free(sess);
 			}
 		}
 		if (fds[0].revents==POLLIN) {
@@ -128,8 +169,8 @@ void *mysql_thread(void *arg) {
 			}
 			if (c>0) {
 				mysql_session_t *ses=NULL;
-				ses=malloc(sizeof(mysql_session_t));
-				if (ses==NULL) { exit(EXIT_FAILURE); }
+				ses=g_malloc0(sizeof(mysql_session_t));
+				//if (ses==NULL) { exit(EXIT_FAILURE); }
 				ses->client_fd = c; 
 				int arg_on=1;
 				setsockopt(ses->client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
@@ -138,20 +179,19 @@ void *mysql_thread(void *arg) {
 					ses->admin=1;
 				}
 				send_auth_pkt(ses);
-				g_ptr_array_add(sessions,ses);
-//				fprintf("thread %d created session %p\n" , thread_id , sess);
+				g_ptr_array_add(thr.sessions,ses);
 			}
 		}
-		if (fds[1].revents==POLLIN) {
+		if (admin==0 && fds[1].revents==POLLIN) {
 			int c=accept(listen_unix_fd, NULL, NULL);
 			if (c>0) {
 				mysql_session_t *ses=NULL;
-				ses=malloc(sizeof(mysql_session_t));
-				if (ses==NULL) { exit(EXIT_FAILURE); }
+				ses=g_malloc0(sizeof(mysql_session_t));
+				//if (ses==NULL) { exit(EXIT_FAILURE); }
 				ses->client_fd = c; 
 				mysql_session_init(ses, &thr);
 				send_auth_pkt(ses);			
-				g_ptr_array_add(sessions,ses);
+				g_ptr_array_add(thr.sessions,ses);
 			}
 		}
 	}
@@ -238,10 +278,43 @@ int connection_handler_mysql(mysql_session_t *sess) {
 
 
 int main(int argc, char **argv) {
-
+	gdbg=0;
+	int i;
 	g_thread_init(NULL);
+
+/*
+    i = sqlite3_open_v2(SQLITE_ADMINDB, &sqlite3configdb, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX , NULL);
+    if(i){
+        fprintf(stderr, "SQLITE: Error on sqlite3_open(): %s\n", sqlite3_errmsg(sqlite3configdb));
+		exit(EXIT_FAILURE);
+    }
+
+	{
+		char *s[4];
+		s[0]="PRAGMA journal_mode = WAL";
+//	proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: 	
+	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA journal_mode = WAL");
+//	pragma_exit_on_failure(sqlite3configdb, "PRAGMA journal_mode = OFF");
+	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA synchronous = NORMAL");
+//	pragma_exit_on_failure(sqlite3configdb, "PRAGMA synchronous = 0");
+	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA locking_mode = EXCLUSIVE");
+	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA foreign_keys = ON");
+//	pragma_exit_on_failure(sqlite3configdb, "PRAGMA PRAGMA wal_autocheckpoint=10000");
+	}
+
+*/
+
 	// parse all the arguments and the config file
 	main_opts(entries, &argc, &argv, config_file);
+
+	admin_init_sqlite3();
+
+	sqlite3_flush_users_mem_to_db(0,1);
+	sqlite3_flush_debug_levels_mem_to_db(0);
+	// copying back and forth should merge the data
+	sqlite3_flush_users_db_to_mem();
+	sqlite3_flush_debug_levels_db_to_mem();
+
 	pthread_mutex_init(&conn_mutex, NULL);
 
 	//  command line options take precedences over config file
@@ -250,28 +323,20 @@ int main(int argc, char **argv) {
 	if (verbose>=0) { glovars.verbose=verbose; }
 
 	if (glovars.proxy_admin_port==glovars.proxy_mysql_port) {
-		fprintf(stderr, "Fatal error: proxy_admin_port (%d) matches proxy_mysql_port (%d) . Configure them to use different ports\n", glovars.proxy_admin_port, glovars.proxy_mysql_port);
+		proxy_error("Fatal error: proxy_admin_port (%d) matches proxy_mysql_port (%d) . Configure them to use different ports\n", glovars.proxy_admin_port, glovars.proxy_mysql_port);
 		exit(EXIT_FAILURE);
 	}
 
 	if (glovars.verbose>0) {
-		fprintf(stderr, "mysql port %d, admin port %d, config file %s, verbose %d\n", glovars.proxy_mysql_port, glovars.proxy_admin_port, config_file, verbose);
-		fprintf(stderr, "Query cache partitions: %d\n", glovars.mysql_query_cache_partitions);
-		fprintf(stderr, "MySQL USAGE user: %s, password: %s\n", glovars.mysql_usage_user, glovars.mysql_usage_password);
-		fprintf(stderr, "Max query size: %d, Max resultset size: %d\n", glovars.mysql_max_query_size, glovars.mysql_max_resultset_size);
-		fprintf(stderr, "verbose level: %d, print_statistics_interval: %d\n", glovars.verbose, glovars.print_statistics_interval);
+		proxy_debug(PROXY_DEBUG_GENERIC, 1, "mysql port %d, admin port %d, config file %s, verbose %d\n", glovars.proxy_mysql_port, glovars.proxy_admin_port, config_file, verbose);
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 1, "Query cache partitions: %d\n", glovars.mysql_query_cache_partitions);
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "MySQL USAGE user: %s, password: %s\n", glovars.mysql_usage_user, glovars.mysql_usage_password);
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 1, "Max query size: %d, Max resultset size: %d\n", glovars.mysql_max_query_size, glovars.mysql_max_resultset_size);
+		//fprintf(stderr, "verbose level: %d, print_statistics_interval: %d\n", glovars.verbose, glovars.print_statistics_interval);
 	}
 
 	// FIXME : this needs to moved elsewhere
-	int i;
 	for (i=0;i<TOTAL_TIMERS;i++) { glotimers[i]=0; }
-
-	// Set threads attributes . For now only setstacksize is defined
-	pthread_attr_t attr;
-	set_thread_attr(&attr,glovars.stack_size);
-
-
-	start_background_threads(&attr);
 
 
 	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
@@ -286,21 +351,40 @@ int main(int argc, char **argv) {
 	fds[0].fd=listen_tcp_fd;
 	fds[1].fd=listen_unix_fd;
 	mysql_library_init(0, NULL, NULL);
+
+
+
+
+	// Set threads attributes . For now only setstacksize is defined
+	pthread_attr_t attr;
+	set_thread_attr(&attr,glovars.stack_size);
+
+//	start background threads:
+//	- mysql QC purger ( purgeHash_thread )
+//	- timer dumper ( dump_timers )
+//	- mysql connection pool purger ( mysql_connpool_purge_thread )
+	start_background_threads(&attr);
+
+
+	init_proxyipc();
+
 	// Note: glovars.mysql_threads+1 threads are created. The +1 is for the admin module
-	pthread_t *thi=malloc(sizeof(pthread_t)*(glovars.mysql_threads+1));
-	int *args=malloc(sizeof(int)*(glovars.mysql_threads+1));
-	if (thi==NULL) exit(EXIT_FAILURE);
+	pthread_t *thi=g_malloc0(sizeof(pthread_t)*(glovars.mysql_threads+1));
+	int *args=g_malloc0(sizeof(int)*(glovars.mysql_threads+1));
+
 	// while all other threads are detachable, the mysql connections handlers are not
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	for (i=0; i< glovars.mysql_threads+1; i++) {
 		args[i]=i;
-		if ( pthread_create(&thi[i], &attr, mysql_thread , &args[i]) != 0 )
-			perror("Thread creation");
-    }
+		int rc;
+		rc=pthread_create(&thi[i], &attr, mysql_thread , &args[i]);
+		assert(rc==0);
+	}
 	// wait for graceful shutdown
 	for (i=0; i<glovars.mysql_threads+1; i++) {
 		pthread_join(thi[i], NULL);
 	}
-	free(thi);
+	g_free(thi);
+	g_free(args);
 	return 0;
 }

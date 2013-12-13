@@ -32,6 +32,38 @@ extern unsigned int hash_initialized;
 EXTERN fdb_system_var_t fdb_system_var;
 EXTERN fdb_hash_t **fdb_hashes;
 
+struct __fdb_hash_t {
+    pthread_rwlock_t lock;
+    GHashTable *hash;
+    GPtrArray *ptrArray;
+    unsigned long long dataSize;
+    unsigned long long purgeChunkSize;
+    unsigned long long purgeIdx;
+};
+
+struct __fdb_hashes_group_t {
+	fdb_hash_t **fdb_hashes;
+	int size;
+	time_t now;
+    unsigned int hash_expire_default;
+    unsigned long long cntDel;
+    unsigned long long cntGet;
+    unsigned long long cntGetOK;
+    unsigned long long cntSet;
+	unsigned long long cntPurge;
+};
+
+struct __fdb_hash_entry {
+    char *key;
+    char *value;
+    fdb_hash_t *hash;
+    struct __fdb_hash_entry *self;
+    unsigned int klen;
+    unsigned int length;
+    time_t expire;
+    time_t access;
+};
+
 pkt * fdb_get(fdb_hashes_group_t *, const char *, mysql_session_t *);
 gboolean fdb_set(fdb_hashes_group_t * , void *, unsigned int , void *, unsigned int , time_t, gboolean);
 long long fdb_del(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);

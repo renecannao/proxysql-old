@@ -1,4 +1,3 @@
-
 void queue_init(queue_t *);
 void queue_destroy(queue_t *);
 inline void queue_zero(queue_t *);

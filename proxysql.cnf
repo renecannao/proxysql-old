@@ -1,111 +1,29 @@
 [global]
-# thread stack size
-stack_size=262144
-
-# Each connection uses 4 buffers, 2 for the client (recv/send) and 2 for the server (recv/send)
-net_buffer_size=8192
-# network buffers (also called connection queues) are allocated in blocks
-conn_queue_allocator_blocks=128
-
-# administrative port : unused for now 
-# it defaults to proxy_mysql_port -1
-proxy_admin_port=6032
-
-# verbosity
-verbose=10
-#verbose=1
-
-# backlog used by listen
-backlog=2000
-
-# how often statistics are printed ( if verbose >= 10 )
-print_statistics_interval=10
-
-# enable of disable timers
-#enable_timers=0
-
-# core dump file size
 core_dump_file_size=268435456
-
-
-
+verbose=10
 [mysql]
-# default schema if not specified in the command line
-mysql_default_schema=information_schema
-
-# port that access connections from clients
-proxy_mysql_port=6033
-
-# ping idle connections (seconds)
-mysql_ping=100
-
-# mysql poll timeout (milliseconds)
-mysql_poll_timeout=10000
-
-# enable mysql auto-reconnect
-mysql_auto_reconnect_enabled=0
-
-# enable mysql query cache
-mysql_query_cache_enabled=1
-
-# number of partitions within the query cache
-mysql_query_cache_partitions=16
-
-# if a resultset if bigger then mysql_max_resultset_size , the resultset is not stored internally but sent to the client ASAP
-mysql_max_resultset_size=1048576
-
-# queries longer than mysql_max_query_size bytes are not processed, but only forwarded
-# maximum value is 16MB, hardcoded
-mysql_max_query_size=1048576
-
-# default timeout of entries in query cache
-mysql_query_cache_default_timeout=30
-
-# MySQL version as reported by proxysql
-mysql_server_version=5.5.32-log
-
-# this user is used to verify that the server is alive, and if read_only or not
 mysql_usage_user=proxy
 mysql_usage_password=proxy
-
-#list of mysql servers
-# note: currently this is parsed but ignored. It always connect to 127.0.0.1:3306
-mysql_servers=127.0.0.1:3306;127.0.0.1:3307;127.0.0.1:3308;127.0.0.2:3306;127.0.0.3:3306
-
-# masters are used for both writes and reads by default
-# if mysql_use_masters_for_reads=0 , SELECTs are sent only to slaves
+mysql_servers=127.0.0.1:3306;127.0.0.2:3306;127.0.0.3:3306
 mysql_use_masters_for_reads=1
-
-# enable connection pool
 mysql_connection_pool_enabled=1
-
-#idle connections not used for longer than mysql_wait_timeout seconds are deallocated
-mysql_wait_timeout=28800
-
-
-
-[fundadb]
-## microtuning , do not change
-## in future versions these variables should auto tune according to load
-# how long it takes to scan a single hash table (not a group). In milliseconds.
-# default is 10000
-fundadb_hash_purge_time=10000
-# how long to pause between purge loops. In milliseconds
-# default is 100
-fundadb_hash_purge_loop=1000
-
-
-
-[debug]
-## TO DO
-## list all the debug info that needs to be enabled
-
-## list of mysql users
-# a user with no password should be defined as " user= "
-
-
-
+mysql_max_resultset_size=1048576
+mysql_max_query_size=1048576
+mysql_query_cache_enabled=1
+mysql_query_cache_partitions=16
+mysql_query_cache_default_timeout=30
+mysql_threads=3
+mysql_socket=/tmp/proxysql.sock
 [mysql users]
 vegaicm=password
 root=
-vegaicm2=pass2
+[debug]
+debug_generic=6
+debug_net=6
+debug_pkt_array=3
+debug_memory=3
+debug_mysql_com=6
+debug_mysql_connection=6
+debug_admin=6
+debug_mysql_auth=6
+debug_sqlite=6

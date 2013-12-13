@@ -3,7 +3,9 @@
 mem_block_t * create_mem_block(mem_superblock_t *msb) {
 	mem_block_t *mb=g_slice_new(mem_block_t);
 //	mb->mem=g_slice_alloc0(msb->size*msb->incremental); // initialize to 0 . If a block is not zero-ed means it is already used/initialized
-	if (posix_memalign(&mb->mem, sysconf(_SC_PAGESIZE), msb->size*msb->incremental)) { exit(EXIT_FAILURE); }
+	int rc=0;
+	rc=posix_memalign(&mb->mem, sysconf(_SC_PAGESIZE), msb->size*msb->incremental);
+	assert(rc==0);
 	mb->used=g_ptr_array_sized_new(msb->incremental);
 	mb->free=g_ptr_array_sized_new(msb->incremental);
 	int i;
@@ -50,11 +52,12 @@ void * stack_alloc(shared_trash_stack_t *ts) {
 	p=g_trash_stack_pop(&ts->stack);
 	if (p) {
 		pthread_mutex_unlock(&myds_pool.mutex);
-		debug_print("%p\n", p);
+		proxy_debug(PROXY_DEBUG_MEMORY, 5, "%p\n", p);
 		return p;
 	}
 	void *m;
-	if ((m=malloc(ts->size*ts->incremental))==NULL) { exit(EXIT_FAILURE); }
+	//if ((m=malloc(ts->size*ts->incremental))==NULL) { exit(EXIT_FAILURE); }
+	m=g_malloc0(ts->size*ts->incremental);
 	g_ptr_array_add(ts->blocks,m);
 	int i;
 	for (i=0; i<ts->incremental; i++) {
@@ -63,13 +66,13 @@ void * stack_alloc(shared_trash_stack_t *ts) {
 	}
 	p=g_trash_stack_pop(&ts->stack);
 	pthread_mutex_unlock(&myds_pool.mutex);
-	debug_print("%p\n", p);
+	proxy_debug(PROXY_DEBUG_MEMORY, 5, "%p\n", p);
 	return p;
 }
 
 void stack_free(void *p, shared_trash_stack_t *ts) {
 	pthread_mutex_lock(&myds_pool.mutex);
-	debug_print("%p\n", p);
+	proxy_debug(PROXY_DEBUG_MEMORY, 5, "%p\n", p);
 	g_trash_stack_push(&ts->stack, p);
 	pthread_mutex_unlock(&myds_pool.mutex);
 }

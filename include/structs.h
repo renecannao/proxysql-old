@@ -1,36 +1,7 @@
 
-
-typedef struct __fdb_hash_t {
-    pthread_rwlock_t lock;
-    GHashTable *hash;
-    GPtrArray *ptrArray;
-    unsigned long long dataSize;
-    unsigned long long purgeChunkSize;
-    unsigned long long purgeIdx;
-} fdb_hash_t;
-
-typedef struct __fdb_hashes_group_t {
-	fdb_hash_t **fdb_hashes;
-	int size;
-	time_t now;
-    unsigned int hash_expire_default;
-    unsigned long long cntDel;
-    unsigned long long cntGet;
-    unsigned long long cntGetOK;
-    unsigned long long cntSet;
-	unsigned long long cntPurge;
-} fdb_hashes_group_t;
-
-typedef struct __fdb_hash_entry {
-    char *key;
-    char *value;
-    fdb_hash_t *hash;
-    struct __fdb_hash_entry *self;
-    unsigned int klen;
-    unsigned int length;
-    time_t expire;
-    time_t access;
-} fdb_hash_entry;
+typedef struct __fdb_hash_t fdb_hash_t;
+typedef struct __fdb_hashes_group_t fdb_hashes_group_t;
+typedef struct __fdb_hash_entry fdb_hash_entry;
 
 typedef struct __fdb_system_var_t {
     long long hash_purge_time;
@@ -74,6 +45,7 @@ typedef struct _queue_t {
 	int head;
 	int tail;
 } queue_t;
+
 
 // structure that defines mysql protocol header
 typedef struct _mysql_hdr {
@@ -155,10 +127,21 @@ struct _shared_trash_stack_t {
 	int incremental;	
 };
 
+typedef struct _QC_rule_t {
+	GRegex *regex;
+	int flagIN;
+	char *match_pattern;
+	int flagOUT;
+	char *replace_pattern;
+	int caching_ttl;
+} QC_rule_t;
 
 typedef struct _proxysql_mysql_thread_t {
 	int thread_id;
 	free_pkts_t free_pkts;
+	GPtrArray *QC_rules;
+	int QCRver;
+	GPtrArray *sessions;
 } proxy_mysql_thread_t;
 
 struct _mysql_session_t {
@@ -247,6 +230,9 @@ typedef struct _global_variables {
 	// and it is use only to create a connection
 	unsigned char *mysql_usage_user;
 	unsigned char *mysql_usage_password;
+	
+	unsigned char *proxy_admin_user;
+	unsigned char *proxy_admin_password;
 
 	unsigned char *mysql_default_schema;
 	unsigned char *mysql_socket;
@@ -257,8 +243,10 @@ typedef struct _global_variables {
 //	GPtrArray *servers_slaves;
 //	gchar **mysql_servers_name;	// used to parse config file
 	GHashTable *usernames;
-	gchar **mysql_users_name; // used to parse config file
-	gchar **mysql_users_pass; // used to parse config file
+//	gchar **mysql_users_name; // used to parse config file
+//	gchar **mysql_users_pass; // used to parse config file
+	GPtrArray *mysql_users_name;
+	GPtrArray *mysql_users_pass;
 //	unsigned int mysql_connections_max;
 //	unsigned int mysql_connections_cur;
 //	GPtrArray *mysql_connections;
@@ -306,3 +294,44 @@ typedef struct _mem_superblock_t {
 	int size;
 	int incremental;
 } mem_superblock_t;
+
+
+/* ProxyIPC is a struct used for inter-thread communication between the admin thread and the the mysql threads
+because mysql threads are normally blocked on poll(), the best way to wake them up is to send them a signal on a pipe
+fdIn and fdOut represents the two endpoints of the pipe
+The data should should be the follow:
+- admin thread sends a message in each mysql thread queue
+- admin thread sends a byte to all fdIn
+- all the mysql threads will wake up reading from fdOut 
+- all the mysql threads will read the message from their async queue
+- all the mysql threads will perform an action and send an ack to the admin thread
+- all the mysql threads may enter in a maintenance mode and just wait on async queue, or go back in the main loop
+*/
+typedef struct _ProxyIPC {
+	int *fdIn;
+	int *fdOut;
+	GAsyncQueue **queue;
+} ProxyIPC;
+
+
+enum debug_module {
+	PROXY_DEBUG_GENERIC,
+	PROXY_DEBUG_NET,
+	PROXY_DEBUG_PKT_ARRAY,
+	PROXY_DEBUG_POLL,
+	PROXY_DEBUG_MYSQL_COM,
+	PROXY_DEBUG_MYSQL_SERVER,
+	PROXY_DEBUG_MYSQL_CONNECTION,
+	PROXY_DEBUG_MYSQL_RW_SPLIT,
+	PROXY_DEBUG_MYSQL_AUTH,
+	PROXY_DEBUG_MEMORY,
+	PROXY_DEBUG_ADMIN,
+	PROXY_DEBUG_SQLITE,
+	PROXY_DEBUG_IPC,
+	PROXY_DEBUG_QUERY_CACHE,
+	PROXY_DEBUG_UNKNOWN
+};
+
+
+typedef struct _debug_level debug_level;
+typedef struct _admin_sqlite_table_def_t admin_sqlite_table_def_t;

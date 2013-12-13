@@ -45,9 +45,7 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 
 
 void mysql_session_close(mysql_session_t *sess) {
-#ifdef DEBUG_mysql_conn
-        debug_print("Closing connection on client fd %d (myds %d , sess %p)\n", sess->client_fd, sess->client_myds->fd, sess);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Closing connection on client fd %d (myds %d , sess %p)\n", sess->client_fd, sess->client_myds->fd, sess);
 	mysql_data_stream_close(sess->client_myds);
 	if (sess->client_myds->fd) { mysql_data_stream_shut_hard(sess->client_myds); }
 	if (sess->master_myds) {
@@ -100,15 +98,11 @@ void mysql_session_close(mysql_session_t *sess) {
 
 
 inline void client_COM_QUIT(mysql_session_t *sess) {
-#ifdef DEBUG_COM
-	debug_print("Got COM_%s packet\n", "QUIT");
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got COM_QUIT packet\n");
 }
 
 inline void client_COM_STATISTICS(mysql_session_t *sess) {
-#ifdef DEBUG_COM
-	debug_print("Got COM_%s packet\n", "STATISTICS");
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got COM_STATISTICS packet\n");
 	if (sess->admin==1) {
 	// we shouldn't forward this if we are in admin mode
 		sess->healthy=0;
@@ -124,9 +118,7 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 	}
 	sess->mysql_schema_new=calloc(1,p->length-sizeof(mysql_hdr));
 	memcpy(sess->mysql_schema_new, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1);
-#ifdef DEBUG_COM
-	debug_print("Got COM_%s packet for schema %s\n", "INIT_DB", sess->mysql_schema_new);
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got COM_INIT_DB packet for schema %s\n", sess->mysql_schema_new);
 	if ((sess->mysql_schema_cur) && (strcmp(sess->mysql_schema_new, sess->mysql_schema_cur)==0)) {
 		// already on target schema, don't forward
 		sess->mysql_query_cache_hit=TRUE;
@@ -169,10 +161,55 @@ inline pkt * admin_version_comment_pkt(mysql_session_t *sess) {
 }
 
 inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
+	int rc;
 	// enter admin mode
-	// configure the session to not send data to servers
+	// configure the session to not send data to servers using a hack: pretend the result set is cached
 	sess->mysql_query_cache_hit=TRUE;
 	sess->query_to_cache=FALSE;
+	if (strncasecmp("FLUSH DEBUG",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		int affected_rows=sqlite3_flush_debug_levels_db_to_mem();
+	    pkt *ok=mypkt_alloc(sess);
+		myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+		g_ptr_array_add(sess->client_myds->output.pkts, ok);
+		return;
+	}
+	if (strncasecmp("FLUSH USERS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		int affected_rows=sqlite3_flush_users_db_to_mem();
+	    pkt *ok=mypkt_alloc(sess);
+		myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+		g_ptr_array_add(sess->client_myds->output.pkts, ok);
+		return;
+	}
+	if (strncasecmp("REMOVE SERVER",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		mysql_server *ms=new_server_master();
+		// TESTING : BEGIN
+		int i;
+		for (i=0; i<glovars.mysql_threads; i++) {
+			gpointer admincmd=g_malloc0(20);
+			sprintf(admincmd,"%s", "REMOVE SERVER");
+			fprintf(stderr,"Sending %s to %d\n", "REMOVE SERVER", i);
+			g_async_queue_push(proxyipc.queue[i],admincmd);
+			fprintf(stderr,"Sent %s to %d\n", "REMOVE SERVER", i);
+			g_async_queue_push(proxyipc.queue[i],ms);
+			fprintf(stderr,"Sent %p to %d\n", ms, i);
+		}
+		char c;
+		for (i=0; i<glovars.mysql_threads; i++) {
+			fprintf(stderr,"Writing 1 bytes to thread %d on fd %d\n", i, proxyipc.fdOut[i]);
+			int r=write(proxyipc.fdOut[i],&c,sizeof(char));
+		}
+		for (i=0; i<glovars.mysql_threads; i++) {
+			gpointer ack;
+			fprintf(stderr,"Waiting ACK # %d\n", i);
+			ack=g_async_queue_pop(proxyipc.queue[glovars.mysql_threads]);
+			g_free(ack);
+		}
+	    pkt *ok=mypkt_alloc(sess);
+		myproto_ok_pkt(ok,1,0,0,2,0);
+		g_ptr_array_add(sess->client_myds->output.pkts, ok);
+		// TESTING : END
+		return;
+	}
 	if (strncmp("select @@version_comment limit 1", p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 		// mysql client in interactive mode sends "select @@version_comment limit 1" : we treat this as a special case
 
@@ -185,7 +222,13 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		g_ptr_array_add(sess->client_myds->output.pkts, np);
 		return;
 	}
-	sess->healthy=0;
+	rc=mysql_pkt_to_sqlite_exec(p, sess);
+	mypkt_free(p,sess,1);
+
+	if (rc==-1) {
+		sess->healthy=0;
+	}
+//	sess->healthy=0; // for now, always
 	return;
 }
 
@@ -212,9 +255,7 @@ if the query is cached:
 if the query is not cached, mark it as to be cached and modify the code on result set
 
 */
-#ifdef DEBUG_COM
-		debug_print("Got COM_%s packet , MD5 %s , Query %s\n", "QUERY", g_checksum_get_string(sess->query_checksum) , (char *)p->data+sizeof(mysql_hdr)+1);
-#endif
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Got COM_QUERY packet , MD5 %s , Query %s\n", g_checksum_get_string(sess->query_checksum) , (char *)p->data+sizeof(mysql_hdr)+1);
 		if (
 			(sess->client_command==COM_QUERY) &&
 			query_is_cachable(sess, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)
@@ -226,9 +267,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 			QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_checksum), sess);
 //					  g_slice_free1(length,data);
 //					  length=0;
-#ifdef DEBUG_COM
-			debug_print("Called GET on QC , checksum %s\n", g_checksum_get_string(sess->query_checksum));
-#endif
+			proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Called GET on QC , checksum %s\n", g_checksum_get_string(sess->query_checksum));
 			if (QCresult) {
 //						  result->length=length;
 //						  result->data=data;
@@ -254,9 +293,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 					}
 					sess->slave_fd=sess->slave_mycpe->conn->net.fd;
 					sess->slave_myds=mysql_data_stream_init(sess->slave_fd , sess);
-#ifdef DEBUG_mysql_conn
-					debug_print("Created new slave_connection fd: %d\n", sess->slave_fd);
-#endif
+					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new slave_connection fd: %d\n", sess->slave_fd);
 				}	
 				sess->server_myds=sess->slave_myds;
 				sess->server_fd=sess->slave_fd;
@@ -272,16 +309,14 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 
 inline void server_COM_QUIT(mysql_session_t *sess, pkt *p, enum MySQL_response_type r) {
 	if (r==OK_Packet) {
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got OK on COM_QUIT\n");
 #ifdef DEBUG_COM
-		debug_print("%s\n" , "Got OK on COM_QUIT");
 #endif
 		g_ptr_array_add(sess->client_myds->output.pkts, p);
 	}
 }
 inline void server_COM_STATISTICS(mysql_session_t *sess, pkt *p) {
-#ifdef DEBUG_COM
-	debug_print("%s\n" , "Got packet on COM_STATISTICS");
-#endif
+	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got packet on COM_STATISTICS\n");
 	g_ptr_array_add(sess->client_myds->output.pkts, p);
 	// sync for auto-reconnect
 	sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
@@ -290,9 +325,7 @@ inline void server_COM_STATISTICS(mysql_session_t *sess, pkt *p) {
 
 inline void server_COM_INIT_DB(mysql_session_t *sess, pkt *p, enum MySQL_response_type r) {
 	if (r==OK_Packet) {
-#ifdef DEBUG_COM
-		debug_print("Got %s on COM_INIT_DB for schema %s\n", "OK", sess->mysql_schema_new);
-#endif
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got OK on COM_INIT_DB for schema %s\n", sess->mysql_schema_new);
 		if (sess->mysql_schema_cur) {
 			free(sess->mysql_schema_cur);
 			sess->mysql_schema_cur=strdup(sess->mysql_schema_new);
@@ -301,9 +334,7 @@ inline void server_COM_INIT_DB(mysql_session_t *sess, pkt *p, enum MySQL_respons
 		g_ptr_array_add(sess->client_myds->output.pkts, p);
 	}
 	if (r==ERR_Packet) {
-#ifdef DEBUG_COM
-		debug_print("Got %s on COM_INIT_DB for schema %s\n", "ERR", sess->mysql_schema_new);
-#endif
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got ERR on COM_INIT_DB for schema %s\n", sess->mysql_schema_new);
 		g_ptr_array_add(sess->client_myds->output.pkts, p);
 	}
 	if (sess->mysql_schema_new) {
@@ -323,9 +354,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 						if (sess->resultset_progress==RESULTSET_WAITING) {
 							// this is really an OK Packet
 							sess->resultset_progress=RESULTSET_COMPLETED;
-#ifdef DEBUG_COM
-							debug_print("%s\n" , "Got OK on COM_QUERY");
-#endif
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got OK on COM_QUERY\n");
 						} else {
 							// this is a ROW packet
 							 sess->resultset_progress=RESULTSET_ROWS;
@@ -333,43 +362,31 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 					}
 					if (r==ERR_Packet) {
 						sess->resultset_progress=RESULTSET_COMPLETED;
-#ifdef DEBUG_COM
-						debug_print("%s\n" , "Got ERR on COM_QUERY");
-#endif
+						proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got ERR on COM_QUERY\n");
 					}
 					if (r==EOF_Packet) {
 						if (sess->resultset_progress==RESULTSET_COLUMN_DEFINITIONS) {
-#ifdef DEBUG_COM
-							debug_print("%s\n" , "Got 1st EOF on COM_QUERY");
-#endif
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Got 1st EOF on COM_QUERY\n");
 							sess->resultset_progress=RESULTSET_EOF1;
 						} else {
-#ifdef DEBUG_COM
-							debug_print("%s\n" , "Got 2nd EOF on COM_QUERY");
-#endif
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Got 2nd EOF on COM_QUERY\n");
 							sess->resultset_progress=RESULTSET_COMPLETED;
 						}
 					}
 					if (r==UNKNOWN_Packet) {
 						switch (sess->resultset_progress) {
 							case RESULTSET_WAITING:
-#ifdef DEBUG_COM
-								debug_print("%s\n" , "Got column count on COM_QUERY");
-#endif
+								proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Got column count on COM_QUERY\n");
 								sess->resultset_progress=RESULTSET_COLUMN_COUNT;
 								break;
 							case RESULTSET_COLUMN_COUNT:
 							case RESULTSET_COLUMN_DEFINITIONS:
-#ifdef DEBUG_COM
-								debug_print("%s\n" , "Got column def on COM_QUERY");
-#endif
+								proxy_debug(PROXY_DEBUG_MYSQL_COM, 6, "Got column def on COM_QUERY\n");
 								sess->resultset_progress=RESULTSET_COLUMN_DEFINITIONS;
 								break;
 							case RESULTSET_EOF1:
 							case RESULTSET_ROWS:
-#ifdef DEBUG_COM
-//							  debug_print("%s\n" , "Got row on COM_QUERY");
-#endif
+							  	proxy_debug(PROXY_DEBUG_MYSQL_COM, 7, "Got row on COM_QUERY\n");
 								sess->resultset_progress=RESULTSET_ROWS;
 								break;
 						}
@@ -397,9 +414,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 
 
 						// return control to master if we were using a slave
-#ifdef DEBUG_mysql_rw_split
-						debug_print("Returning control to master. FDs: current: %d master: %d slave: %d\n", sess->server_fd , sess->master_fd , sess->slave_fd);
-#endif
+						proxy_debug(PROXY_DEBUG_MYSQL_RW_SPLIT, 5, "Returning control to master. FDs: current: %d master: %d slave: %d\n", sess->server_fd , sess->master_fd , sess->slave_fd);
 						if (sess->send_to_slave==TRUE) {
 							sess->send_to_slave=FALSE;
 							if (sess->master_myds) {
@@ -414,12 +429,8 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 
 //					  conn->status &= ~CONNECTION_READING_SERVER;
 						if (sess->query_to_cache==TRUE) {
-#ifdef DEBUG_COM
-							debug_print("Query %s needs to be cached\n", g_checksum_get_string(sess->query_checksum));
-#endif
-#ifdef DEBUG_COM
-							debug_print("Resultset size = %d\n", sess->resultset_size);
-#endif
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s needs to be cached\n", g_checksum_get_string(sess->query_checksum));
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Resultset size = %d\n", sess->resultset_size);
 							// prepare the entry to enter in the query cache
 							void *kp=g_strdup(g_checksum_get_string(sess->query_checksum));
 							void *vp=g_malloc(sess->resultset_size);
@@ -431,9 +442,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 								copied+=p->length;
 							}
 							// insert in the query cache
-#ifdef DEBUG_COM
-							debug_print("Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
-#endif
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
 							fdb_set(&QC,kp,strlen(kp),vp,sess->resultset_size,0,FALSE);
 							//g_free(kp);
 							//g_free(vp);
@@ -450,9 +459,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 								p=g_ptr_array_remove_index(sess->resultset, sess->resultset->len-1);
 							}
 						} else {
-#ifdef DEBUG_COM
-							debug_print("Query %s was too large ( %d bytes, min %d ) and wasn't stored\n", g_checksum_get_string(sess->query_checksum), sess->resultset_size , glovars.mysql_max_resultset_size );
-#endif
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s was too large ( %d bytes, min %d ) and wasn't stored\n", g_checksum_get_string(sess->query_checksum), sess->resultset_size , glovars.mysql_max_resultset_size );
 						}
 					}
 }
@@ -572,9 +579,7 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 					}
 					sess->master_fd=sess->master_mycpe->conn->net.fd;
 					sess->master_myds=mysql_data_stream_init(sess->master_fd, sess);
-#ifdef DEBUG_mysql_conn
-					debug_print("Created new master_connection fd: %d\n", sess->master_fd);
-#endif
+					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new master_connection fd: %d\n", sess->master_fd);
 					sess->server_myds=sess->master_myds;
 					sess->server_fd=sess->master_fd;
 					sess->server_mycpe=sess->master_mycpe;

@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <netdb.h>
+#include <sys/syscall.h>
 
 #include <signal.h>
 #include <errno.h>
@@ -33,6 +34,7 @@
 #include <mysql_com.h>
 #include <mysql/plugin.h>
 
+#include "sqlite3.h"
 #include "external.h"
 #include "structs.h"
 #include "queue.h"
@@ -45,6 +47,7 @@
 #include "debug.h"
 #include "mem.h"
 #include "free_pkts.h"
+#include "admin_sqlite.h"
 
 #undef max
 #define max(x,y) ((x) > (y) ? (x) : (y))

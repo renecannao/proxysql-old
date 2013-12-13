@@ -92,9 +92,11 @@ Currently 5 groups are available, but only 4 parsed:
 
 * **stack_size**
 
-  Specify the stack size used by every thread created in proxysql , in bytes . Default is 262144 ( 256KB ) , minimum is 65536 ( 64KB ) , and no maximum is defined.
+  Specify the stack size used by every thread created in proxysql , in bytes . Default is 524288 ( 512KB ) , minimum is 65536 ( 64KB ) , and no maximum is defined.
 
   The default stack_size in Linux is 8MB. Starting hundreds of connections/threads will quickly eat all memory so we need to lower this down to be more memory efficient.
+
+  Latest versions of ProxySQL use threads pool instead of one thread per connection, therefore now the stack size has little memory footprint.
 
 * **net_buffer_size**
 
@@ -110,7 +112,7 @@ Currently 5 groups are available, but only 4 parsed:
 
 * **proxy_admin_port**
 
-  **Unused**. It will define the administrative port.
+  It defines the administrative port for runtime configuration and statistics.
 
 * **backlog**
 
@@ -172,7 +174,7 @@ Currently 5 groups are available, but only 4 parsed:
 
 * **mysql_query_cache_default_timeout**
 
-  Every cached resultset has a time to live . *mysql_query_cache_default_timeout* defines the default time to live . Defaults is 1 seconds, causing the entries to expire very quickly. It is recommended to increase the *mysql_query_cache_default_timeout* for better performance. Note: in future release will be possible to define what to cache and for how long on a per query basis.
+  Every cached resultset has a time to live . *mysql_query_cache_default_timeout* defines the default time to live in case a TTL is not specified for a specific query pattern. Defaults is 1 seconds, causing the entries to expire very quickly. It is recommended to increase the *mysql_query_cache_default_timeout* for better performance. *mysql_query_cache_default_timeout*=0 disables caching for any query not explicity 
 
 * **mysql_server_version**
 

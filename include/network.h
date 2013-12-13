@@ -7,8 +7,8 @@ int read_from_net(mysql_data_stream_t *);
 int write_to_net(mysql_data_stream_t *);
 int buffer2array(mysql_data_stream_t *);
 int array2buffer(mysql_data_stream_t *);
-pkt * read_one_pkt_from_net(mysql_data_stream_t *); // this should be used ONLY when sure that only 1 packet is expected, for example during authentication
-gboolean write_one_pkt_to_net(mysql_data_stream_t *, pkt *); // this should be used ONLY when sure that only 1 packet is expected, for example during authentication
+//pkt * read_one_pkt_from_net(mysql_data_stream_t *); // this should be used ONLY when sure that only 1 packet is expected, for example during authentication
+gboolean write_one_pkt_to_net(mysql_data_stream_t *, pkt *); 
 int conn_poll(mysql_session_t *);
 void read_from_net_2(mysql_session_t *);
 void write_to_net_2(mysql_session_t *, int);
