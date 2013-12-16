@@ -41,6 +41,7 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 	sess->query_to_cache=FALSE;
 	sess->client_command=COM_END;   // always reset this
 	sess->send_to_slave=FALSE;
+	memset(&sess->query_info,0,sizeof(mysql_query_metadata_t));
 }
 
 
@@ -82,6 +83,7 @@ void mysql_session_close(mysql_session_t *sess) {
 	if (sess->query_checksum) { g_checksum_free(sess->query_checksum); }
 
 	sess->healthy=0;
+	init_query_metadata(sess, NULL);
 	//free(sess);
 	//mysql_con->net.fd=mysql_fd;
 	//if (mysql_con) { mysql_close(mysql_con); }
@@ -173,8 +175,43 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		g_ptr_array_add(sess->client_myds->output.pkts, ok);
 		return;
 	}
+	if (strncasecmp("SHOW TABLES", p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		char *str="SELECT name AS tables FROM sqlite_master WHERE type='table'";
+		g_slice_free1(p->length, p->data);
+		int l=strlen(str);
+		p->data=g_slice_alloc0(l+sizeof(mysql_hdr)+1);
+		p->length=l+sizeof(mysql_hdr)+1;
+		memset(p->data+sizeof(mysql_hdr), COM_QUERY, 1);
+		memcpy(p->data+sizeof(mysql_hdr)+1,str,l);
+	}
+	{
+		static char *strA="SHOW CREATE TABLE ";
+		static char *strB="SELECT name AS 'table' , sql AS 'Create Table' FROM sqlite_master WHERE type='table' AND name='%s'";
+		int strAl=strlen(strA);	
+		if (strncasecmp("SHOW CREATE TABLE ", p->data+sizeof(mysql_hdr)+1, strAl)==0) {
+			int strBl=strlen(strB);
+			int tblnamelen=p->length-sizeof(mysql_hdr)-1-strAl;
+			int l=strBl+tblnamelen-2;
+			char *buff=g_malloc0(l);
+			snprintf(buff,l,strB,p->data+sizeof(mysql_hdr)+1+strAl);
+			buff[l-1]='\'';
+			g_slice_free1(p->length, p->data);
+			p->data=g_slice_alloc0(l+sizeof(mysql_hdr)+1);
+			p->length=l+sizeof(mysql_hdr)+1;
+			memset(p->data+sizeof(mysql_hdr), COM_QUERY, 1);
+			memcpy(p->data+sizeof(mysql_hdr)+1,buff,l);
+			g_free(buff);
+		}
+	}
 	if (strncasecmp("FLUSH USERS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 		int affected_rows=sqlite3_flush_users_db_to_mem();
+	    pkt *ok=mypkt_alloc(sess);
+		myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+		g_ptr_array_add(sess->client_myds->output.pkts, ok);
+		return;
+	}
+	if (strncasecmp("FLUSH QC RULES",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		int affected_rows=sqlite3_flush_query_rules_db_to_mem();
 	    pkt *ok=mypkt_alloc(sess);
 		myproto_ok_pkt(ok,1,affected_rows,0,2,0);
 		g_ptr_array_add(sess->client_myds->output.pkts, ok);
@@ -239,6 +276,7 @@ inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		// the packet is too big. Ignore any processing
 		sess->client_command=COM_END;
 	} else {
+		init_query_metadata(sess, p);
 		sess->resultset_progress=RESULTSET_WAITING;
 		sess->resultset_size=0;
 		if (sess->query_checksum) {
@@ -256,9 +294,11 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 
 */
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Got COM_QUERY packet , MD5 %s , Query %s\n", g_checksum_get_string(sess->query_checksum) , (char *)p->data+sizeof(mysql_hdr)+1);
+		if (sess->client_command==COM_QUERY) { process_QC_rules(sess); }
 		if (
 			(sess->client_command==COM_QUERY) &&
-			query_is_cachable(sess, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)
+			( sess->query_info.caching_ttl > 0 )
+			//query_is_cachable(sess, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)
 		) {
 			sess->query_to_cache=TRUE;	  // cache the query
 //					  void *data=NULL;
@@ -443,7 +483,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 							}
 							// insert in the query cache
 							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
-							fdb_set(&QC,kp,strlen(kp),vp,sess->resultset_size,0,FALSE);
+							fdb_set(&QC, kp, strlen(kp), vp, sess->resultset_size, sess->query_info.caching_ttl, FALSE);
 							//g_free(kp);
 							//g_free(vp);
 						}
@@ -601,3 +641,92 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 	}
 	return 0;
 }
+
+
+void reset_QC_rules() {
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Resetting QC rules\n");
+	if (gloQCR.QC_rules == NULL) {
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Initializing QC rules\n");
+		gloQCR.QC_rules=g_ptr_array_new();
+		return;
+	}
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "%d QC rules to reset\n", gloQCR.QC_rules->len);
+	while ( gloQCR.QC_rules->len ) {
+		QC_rule_t *qcr = g_ptr_array_remove_index_fast(gloQCR.QC_rules,0);
+		if (qcr->regex) {
+			g_regex_unref(qcr->regex);
+		}
+		if (qcr->match_pattern) {
+			g_free(qcr->match_pattern);
+		}
+		if (qcr->replace_pattern) {
+			g_free(qcr->replace_pattern);
+		}
+		g_slice_free1(sizeof(QC_rule_t), qcr);
+	}
+}
+
+inline void init_gloQCR() {
+	pthread_rwlock_init(&gloQCR.rwlock, NULL);
+	gloQCR.QC_rules=NULL;
+	reset_QC_rules();
+}
+
+
+void init_query_metadata(mysql_session_t *sess, pkt *p) {
+	sess->query_info.p=p;
+	if (sess->query_info.query_checksum) { g_checksum_free(sess->query_info.query_checksum); }
+	sess->query_info.flagOUT=0;
+	sess->query_info.rewritten=0;
+	sess->query_info.caching_ttl=0;
+	sess->query_info.destination_hostgroup=0;
+	sess->query_info.mysql_query_cache_hit=0;
+	if (p) {
+		sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
+		sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;	
+	} else {
+		sess->query_info.query=NULL;
+		sess->query_info.query_len=0;
+	}
+}
+
+void process_QC_rules(mysql_session_t *sess) {
+	int i;
+	int flagIN=0;
+	gboolean rc;
+	GMatchInfo *match_info;
+	pthread_rwlock_rdlock(&gloQCR.rwlock);
+	for (i=0;i<gloQCR.QC_rules->len;i++) {
+		QC_rule_t *qcr=g_ptr_array_index(gloQCR.QC_rules, i);
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Processing rule %d\n", qcr->rule_id);
+		if (qcr->flagIN != flagIN) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has no matching flagIN\n", qcr->rule_id);
+			continue;
+		}
+		rc = g_regex_match_full (qcr->regex, sess->query_info.query , sess->query_info.query_len, 0, 0, &match_info, NULL);
+		if (
+			(rc==TRUE && qcr->negate_match==1) || ( rc==FALSE && qcr->negate_match==0 )
+		) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has no matching pattern\n", qcr->rule_id);
+			g_match_info_free(match_info);
+			continue;
+		}
+		if (qcr->flagOUT) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has changed flagOUT\n", qcr->rule_id);
+			flagIN=qcr->flagOUT;
+			sess->query_info.flagOUT=flagIN;
+		}
+		if (qcr->caching_ttl) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has non-zero caching_ttl: %d. Query will%s hit the cache\n", qcr->rule_id, qcr->caching_ttl, (qcr->caching_ttl < 0 ? " NOT" : "" ));
+			sess->query_info.caching_ttl=qcr->caching_ttl;
+		}
+		g_match_info_free(match_info);
+		if (sess->query_info.caching_ttl) {
+			goto exit_process_QC_rules;
+		}
+	}
+	exit_process_QC_rules:
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "End processing QC rules\n");
+	pthread_rwlock_unlock(&gloQCR.rwlock);
+}
+

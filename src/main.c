@@ -53,8 +53,11 @@ void *mysql_thread(void *arg) {
 		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started MySQL thread_id = %d\n", thr.thread_id);
 	}
 	thr.sessions=g_ptr_array_new();
-	thr.QC_rules=NULL;
-	thr.QCRver=0;
+//	thr.QC_rules=NULL;
+//	thr.QCRver=0;
+//	if (admin==0) { // no need for QC rules in
+//		reset_QC_rules(thr.QC_rules);
+//	}
 	int i, nfds, r;
 	mysql_session_t *sess=NULL;
 	struct pollfd fds[1000]; // FIXME: this must be dynamic
@@ -312,8 +315,9 @@ int main(int argc, char **argv) {
 	sqlite3_flush_users_mem_to_db(0,1);
 	sqlite3_flush_debug_levels_mem_to_db(0);
 	// copying back and forth should merge the data
-	sqlite3_flush_users_db_to_mem();
 	sqlite3_flush_debug_levels_db_to_mem();
+	sqlite3_flush_users_db_to_mem();
+	sqlite3_flush_query_rules_db_to_mem();
 
 	pthread_mutex_init(&conn_mutex, NULL);
 

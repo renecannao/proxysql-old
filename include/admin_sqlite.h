@@ -3,7 +3,7 @@
 #define ADMIN_SQLITE_TABLE_USERS "CREATE TABLE users ( username VARCHAR NOT NULL PRIMARY KEY , password VARCHAR , active INT NOT NULL DEFAULT 1)"
 #define ADMIN_SQLITE_TABLE_DEBUG_LEVELS "CREATE TABLE debug_levels (module VARCHAR NOT NULL PRIMARY KEY, verbosity INT NOT NULL DEFAULT 0)"
 #define ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES "CREATE TABLE global_variables ( name VARCHAR NOT NULL PRIMARY KEY , value VARCHAR NOT NULL )"
-#define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, match_pattern VARCHAR NOT NULL , replace_pattern , caching_ttl INT)"
+#define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, caching_ttl INT NOT NULL DEFAULT 0)"
 
 struct _admin_sqlite_table_def_t {
 	char *table_name;
@@ -19,4 +19,4 @@ int sqlite3_flush_debug_levels_db_to_mem();
 void sqlite3_flush_users_mem_to_db(int, int);
 int sqlite3_flush_users_db_to_mem();
 void admin_init_sqlite3();
-void load_query_rules_from_sqlite(proxy_mysql_thread_t *);
+int sqlite3_flush_query_rules_db_to_mem();

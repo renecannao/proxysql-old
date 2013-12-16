@@ -4,12 +4,13 @@ use warnings;
 
 my %proxycfg = () ; 
 
-my $verb="";
-
+my $bool="";
+my $dbglvl=0;
 my $configfile="";
 
 my %defaults = (
 	core_dump_file_size => 0,
+	debug => 0,
 	stack_size => 524288,
 	proxy_mysql_port => 6033,
 	proxy_admin_port => 6032,
@@ -47,9 +48,15 @@ High Performance and High Availability proxy for MySQL
 
 
 sub config_to_string {
-$configfile="# ProxySQL config file
+$configfile="
+#
+# ProxySQL config file
+#
+# Generated using proxysql_interactive_config.pl
+#
 [global]
 core_dump_file_size=$proxycfg{'core_dump_file_size'}
+debug=$proxycfg{'debug'}
 stack_size=$proxycfg{'stack_size'}
 proxy_admin_port=$proxycfg{'proxy_admin_port'}
 proxy_admin_user=$proxycfg{'proxy_admin_user'}
@@ -72,8 +79,17 @@ mysql_wait_timeout=$proxycfg{'mysql_wait_timeout'}
 mysql_servers=$proxycfg{'mysql_servers'}
 mysql_usage_user=$proxycfg{'mysql_usage_user'}
 mysql_usage_password=$proxycfg{'mysql_usage_password'}
-
 $proxycfg{'mysql_users'}
+[debug]
+debug_generic=$dbglvl
+debug_net=$dbglvl
+debug_pkt_array=$dbglvl
+debug_memory=$dbglvl
+debug_mysql_com=$dbglvl
+debug_mysql_connection=$dbglvl
+debug_admin=$dbglvl
+debug_mysql_auth=$dbglvl
+debug_sqlite=$dbglvl
 "
 };
 
@@ -332,7 +348,7 @@ sub conf_mysql_users {
 $proxycfg{'mysql_users'}="[mysql users]\n";
 print "
 
-ProxySQL authenticates clients connection, and then uses the same credentials to connect to the backends.
+ProxySQL authenticates clients' connections, and then uses the same credentials to connect to the backends.
 ProxySQL needs to know clients' usernames and passwords because a single client connection can generate multiple connections to the backend.
 
 ";
@@ -401,27 +417,46 @@ You can create the user with GRANT USAGE ON *.* TO '$proxycfg{'mysql_usage_user'
 }
 
 sub enable_verb {
+$bool="";
 print "\nIf you compiled ProxySQL with debug information (enabled by default) you can enable debug verbosity.\n\n";
 do {
 	print "\tWould you like to enable debug verbosity? (Y-N) [N]: ";
 	my $input = <STDIN>;
 	chomp $input;
-	if ( $input =~ /^$/ ) { $verb="N" }	
-	if ( $input =~ /^N(o|)$/i ) { $verb="N" }
-	if ( $input =~ /^Y(es|)$/i ) { $verb="Y" }
-} until ($verb ne "");
+	if ( $input =~ /^$/ ) { $proxycfg{'debug'}=0 }	
+	if ( $input =~ /^N(o|)$/i ) { $proxycfg{'debug'}=0 }
+	if ( $input =~ /^Y(es|)$/i ) { $proxycfg{'debug'}=1 }
+} until (defined $proxycfg{'debug'});
+if ($proxycfg{'debug'}==1) {
+print "
+
+Several modules can be debugged and each of them can be configured with a different verbosity level.
+You can now configure the default verbosity level, and you can fine tune it later on
+
+";
+do {
+    print "\tdefault debug level (0-9) [$dbglvl]: ";
+    my $input = <STDIN>;
+    chomp $input;
+    if ( ( $input =~ /^\d+$/ ) && ( $input >= 0 ) && ($input <= 9 ) ) { $proxycfg{'dbglvl'}=$input }
+    if ( $input =~ /^$/ ) { $proxycfg{'dbglvl'}=$dbglvl; }
+} until (defined $proxycfg{'dbglvl'});
+$dbglvl=$proxycfg{'dbglvl'};
+}
 }
 
 
 sub save_to_file {
+$bool="";
 do {
-	print "\tWould you like to write a configuration file? (Y-N) [Y]: ";
+	print "\n\nWould you like to write a configuration file? (Y-N) [Y]: ";
 	my $input = <STDIN>;
 	chomp $input;
-	if ( $input =~ /^$/ ) { $verb="Y" }	
-	if ( $input =~ /^N(o|)$/i ) { $verb="N" }
-	if ( $input =~ /^Y(es|)$/i ) { $verb="Y" }
-} until ($verb ne "");
+	if ( $input =~ /^$/ ) { $bool="Y" }	
+	if ( $input =~ /^N(o|)$/i ) { $bool="N" }
+	if ( $input =~ /^Y(es|)$/i ) { $bool="Y" }
+} until ($bool ne "");
+if ($bool eq "Y") {
 my $filewritten=0;
 do {
 	print "\tconfig filename [$defaults{'config_file'}]: ";
@@ -438,7 +473,7 @@ do {
 		$filewritten=1;
 	}
 } until ($filewritten==1 );
-
+}
 
 }
 
@@ -454,7 +489,7 @@ conf_mysql_backends1();
 conf_mysql_backends2();
 conf_mysql_users;
 print "\nBasic configuration completed!\n\n";
-#enable_verb();
+enable_verb();
 config_to_string();
 print "\n\n$configfile";
 save_to_file();

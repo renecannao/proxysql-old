@@ -1,4 +1,4 @@
-void mysql_session_init(mysql_session_t *, proxysql_mysql_thread_t *);
+void mysql_session_init(mysql_session_t *, proxy_mysql_thread_t *);
 void mysql_session_close(mysql_session_t *);
 inline void client_COM_QUIT(mysql_session_t *);
 inline void client_COM_INIT_DB(mysql_session_t *, pkt *);
@@ -11,3 +11,7 @@ inline void server_COM_QUERY(mysql_session_t *, pkt *, enum MySQL_response_type)
 inline void server_COM_QUERY(mysql_session_t *, pkt *, enum MySQL_response_type);
 void process_mysql_server_pkts(mysql_session_t *);
 int process_mysql_client_pkts(mysql_session_t *);
+void reset_QC_rules();
+inline void init_gloQCR();
+void init_query_metadata(mysql_session_t *, pkt *);
+void process_QC_rules(mysql_session_t *);

@@ -234,6 +234,14 @@ int init_global_variables(GKeyFile *gkf) {
 	
 
 
+	// set debug
+	if (g_key_file_has_key(gkf, "global", "debug", NULL)) {
+		gint r=g_key_file_get_integer(gkf, "global", "debug", &error);
+		if (r >= 0 ) {
+			gdbg=1;
+		}
+	}
+
 	// set verbose
 	glovars.verbose=0;
 	if (g_key_file_has_key(gkf, "global", "verbose", NULL)) {
@@ -332,6 +340,8 @@ int init_global_variables(GKeyFile *gkf) {
 			glovars.mysql_query_cache_enabled=FALSE;
 		}
 	}
+	// init gloQCR;
+	init_gloQCR();
 
 	if (glovars.mysql_query_cache_enabled==TRUE ) {
 	// set query_cache_partitions

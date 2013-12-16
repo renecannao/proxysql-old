@@ -127,22 +127,44 @@ struct _shared_trash_stack_t {
 	int incremental;	
 };
 
-typedef struct _QC_rule_t {
+typedef struct _QC_rule_t { // use g_slice_alloc 
 	GRegex *regex;
+	int rule_id;
 	int flagIN;
-	char *match_pattern;
+	char *match_pattern; // use g_malloc/g_free
+	int negate_match;
 	int flagOUT;
-	char *replace_pattern;
+	char *replace_pattern; // use g_malloc/g_free
 	int caching_ttl;
 } QC_rule_t;
+
+
+typedef struct _global_QC_rules_t {
+	pthread_rwlock_t rwlock;
+	GPtrArray *QC_rules;
+} global_QC_rules_t;
+
 
 typedef struct _proxysql_mysql_thread_t {
 	int thread_id;
 	free_pkts_t free_pkts;
-	GPtrArray *QC_rules;
-	int QCRver;
+//	GPtrArray *QC_rules;   // regex should be thread-safe, use just a global one
+//	int QCRver;
 	GPtrArray *sessions;
 } proxy_mysql_thread_t;
+
+
+typedef struct _mysql_query_metadata_t {
+	pkt *p;
+	GChecksum *query_checksum;
+	int flagOUT;
+	int rewritten;
+	int caching_ttl;
+	int destination_hostgroup;
+	int mysql_query_cache_hit;
+	char *query;
+	int query_len;
+} mysql_query_metadata_t ;
 
 struct _mysql_session_t {
 	proxy_mysql_thread_t *handler_thread;
@@ -161,10 +183,11 @@ struct _mysql_session_t {
 	enum enum_server_command client_command;
 	enum enum_resultset_progress resultset_progress;
 	int resultset_size;
-	GChecksum *query_checksum;
-	gboolean query_to_cache;
-	GRegex *regex[2];
-	GPtrArray *resultset;
+	mysql_query_metadata_t query_info;
+	GChecksum *query_checksum; // must go into query_info
+	gboolean query_to_cache; // must go into query_info
+	GRegex *regex[2]; // must go away
+	GPtrArray *resultset; 
 	mysql_server *server_ptr;
 	mysql_server *master_ptr;
 	mysql_server *slave_ptr;
@@ -183,9 +206,9 @@ struct _mysql_session_t {
 	char *mysql_schema_new;	
 	char scramble_buf[21];
 	timer *timers;
-	gboolean mysql_query_cache_hit;
+	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
-	gboolean send_to_slave;
+	gboolean send_to_slave; // must go into query_info
 };
 
 
@@ -253,6 +276,8 @@ typedef struct _global_variables {
 //	unsigned int net_buffer_size;
 //	unsigned int conn_queue_allocator_blocks;
 //	GPtrArray *conn_queue_allocator;
+//	GPtrArray *QC_rules;
+//	int QCRver;
 } global_variables;
 
 
@@ -269,8 +294,6 @@ typedef struct _global_mysql_servers {
 	GPtrArray *mysql_connections;
 	gboolean mysql_use_masters_for_reads;	
 } global_mysql_servers;
-
-
 
 
 enum MySQL_response_type {

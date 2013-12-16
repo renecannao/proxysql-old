@@ -40,6 +40,7 @@
 #include "queue.h"
 #include "mysql_protocol.h"
 #include "mysql_connpool.h"
+#include "mysql_handler.h"
 #include "network.h"
 #include "fundadb.h"
 #include "threads.h"
