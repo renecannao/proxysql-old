@@ -8,7 +8,7 @@ inline int mysql_pkt_get_size(pkt *);
 inline enum MySQL_response_type mysql_response(pkt *);
 
 
-gboolean query_is_cachable(mysql_session_t *, const char *, int);
+//gboolean query_is_cachable(mysql_session_t *, const char *, int);
 
 typedef struct _rand_struct_t {
   unsigned long seed1,seed2,max_value;

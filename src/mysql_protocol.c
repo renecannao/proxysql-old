@@ -107,7 +107,7 @@ inline enum MySQL_response_type mysql_response(pkt *p) {
 	}
 }
 
-
+/*
 gboolean query_is_cachable(mysql_session_t *sess, const char *query, int length) {
 	if (glovars.mysql_query_cache_enabled==FALSE) {
 		return FALSE;
@@ -153,7 +153,7 @@ gboolean query_is_cachable(mysql_session_t *sess, const char *query, int length)
 	}
 	return ret;
 }
-
+*/
 
 int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	// WARNING : for now it only checks the password
