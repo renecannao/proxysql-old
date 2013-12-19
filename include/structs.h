@@ -186,7 +186,7 @@ struct _mysql_session_t {
 	mysql_query_metadata_t query_info;
 	GChecksum *query_checksum; // must go into query_info
 	gboolean query_to_cache; // must go into query_info
-	GRegex *regex[2]; // must go away
+//	GRegex *regex[2]; // must go away
 	GPtrArray *resultset; 
 	mysql_server *server_ptr;
 	mysql_server *master_ptr;

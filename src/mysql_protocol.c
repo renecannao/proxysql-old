@@ -630,3 +630,19 @@ void myproto_eof(pkt *mypkt, unsigned int id, uint16_t warning_count, uint16_t s
 	memcpy(mypkt->data+i,&warning_count,sizeof(uint16_t)); i+=2;
 	memcpy(mypkt->data+i,&status_flags,sizeof(uint16_t));
 }
+
+void mysql_new_payload_select(pkt *mypkt, void *payload, int len) {
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 7, "Creating new pkt with SELECT %s\n", (char *)payload);
+	int i;
+	mysql_hdr myhdr;
+	unsigned char c=COM_QUERY;
+	g_slice_free1(mypkt->length, mypkt->data);
+	if (len==-1) { len=strlen(payload); }
+	myhdr.pkt_id=0;
+	myhdr.pkt_length=len+1;
+	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
+	mypkt->data=g_slice_alloc(mypkt->length);
+	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr)); i=sizeof(mysql_hdr);
+	memcpy(mypkt->data+i,&c,1); i+=1;
+	memcpy(mypkt->data+i,payload,len);	
+}	

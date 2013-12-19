@@ -30,8 +30,8 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 	sess->resultset=g_ptr_array_new();
 	sess->timers=calloc(sizeof(timer),TOTAL_TIMERS);
 	// these two are the only regex currently supported . They needs to be extended
-	sess->regex[0] = g_regex_new ("^SELECT ", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
-	sess->regex[1] = g_regex_new ("\\s+FOR\\s+UPDATE\\s*$", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
+	//sess->regex[0] = g_regex_new ("^SELECT ", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
+	//sess->regex[1] = g_regex_new ("\\s+FOR\\s+UPDATE\\s*$", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
 	sess->handler_thread=handler_thread;
 	sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
 	sess->client_myds->fd=sess->client_fd;
@@ -73,8 +73,8 @@ void mysql_session_close(mysql_session_t *sess) {
 	g_ptr_array_free(sess->resultset,TRUE);
 	free(sess->timers);
 
-	g_regex_unref(sess->regex[0]);
-	g_regex_unref(sess->regex[1]);
+	//g_regex_unref(sess->regex[0]);
+	//g_regex_unref(sess->regex[1]);
 
 	if (sess->mysql_username) { free(sess->mysql_username); sess->mysql_username=NULL; }
 	if (sess->mysql_password) { free(sess->mysql_password); sess->mysql_password=NULL; }
@@ -710,6 +710,27 @@ void process_QC_rules(mysql_session_t *sess) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has no matching pattern\n", qcr->rule_id);
 			g_match_info_free(match_info);
 			continue;
+		}
+		if (qcr->replace_pattern) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d on match_pattern \"%s\" has a replace_pattern \"%s\"to apply\n", qcr->rule_id, qcr->match_pattern, qcr->replace_pattern);
+			GError *error=NULL;
+			char *new_query;
+			new_query=g_regex_replace(qcr->regex, sess->query_info.query , sess->query_info.query_len, 0, qcr->replace_pattern, 0, &error);
+			if (error) {
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 3, "g_regex_replace() on QC rule %d generated error %d\n", qcr->rule_id, error->message);
+				g_error_free(error);
+				if (new_query) {
+					g_free(new_query);
+				}
+				g_match_info_free(match_info);
+				continue;
+			}
+			sess->query_info.rewritten=1;
+			mysql_new_payload_select(sess->query_info.p, new_query, -1);
+			pkt *p=sess->query_info.p;
+			sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
+			sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;
+			g_free(new_query);
 		}
 		if (qcr->flagOUT) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has changed flagOUT\n", qcr->rule_id);

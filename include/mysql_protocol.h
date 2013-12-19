@@ -37,3 +37,4 @@ void myproto_ok_pkt(pkt *, unsigned int , uint64_t , uint64_t, uint16_t, uint16_
 void myproto_column_count(pkt *, unsigned int , uint64_t);
 void myproto_column_def(pkt *, unsigned int , const char *, const char *, const char *, const char *, const char *, uint32_t , uint8_t, uint16_t , uint8_t);
 void myproto_eof(pkt *, unsigned int , uint16_t , uint16_t);
+void mysql_new_payload_select(pkt *, void *, int);
