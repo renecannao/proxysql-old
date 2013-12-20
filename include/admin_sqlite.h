@@ -3,7 +3,7 @@
 #define ADMIN_SQLITE_TABLE_USERS "CREATE TABLE users ( username VARCHAR NOT NULL PRIMARY KEY , password VARCHAR , active INT NOT NULL DEFAULT 1)"
 #define ADMIN_SQLITE_TABLE_DEBUG_LEVELS "CREATE TABLE debug_levels (module VARCHAR NOT NULL PRIMARY KEY, verbosity INT NOT NULL DEFAULT 0)"
 #define ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES "CREATE TABLE global_variables ( name VARCHAR NOT NULL PRIMARY KEY , value VARCHAR NOT NULL )"
-#define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, caching_ttl INT NOT NULL DEFAULT 0)"
+#define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY,  username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, caching_ttl INT NOT NULL DEFAULT 0)"
 
 struct _admin_sqlite_table_def_t {
 	char *table_name;

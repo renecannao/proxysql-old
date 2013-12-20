@@ -131,10 +131,15 @@ typedef struct _query_rule_t { // use g_slice_alloc
 	GRegex *regex;
 	int rule_id;
 	int flagIN;
+	char *username;
+	char *schemaname;
 	char *match_pattern; // use g_malloc/g_free
 	int negate_match_pattern;
 	int flagOUT;
 	char *replace_pattern; // use g_malloc/g_free
+	int destination_hostgroup;
+	int audit_log;
+	int performance_log;
 	int caching_ttl;
 } query_rule_t;
 
@@ -161,6 +166,8 @@ typedef struct _mysql_query_metadata_t {
 	int rewritten;
 	int caching_ttl;
 	int destination_hostgroup;
+	int audit_log;
+	int performance_log;
 	int mysql_query_cache_hit;
 	char *query;
 	int query_len;

@@ -330,7 +330,7 @@ int sqlite3_flush_query_rules_db_to_mem() {
 	int i;
 	proxy_debug(PROXY_DEBUG_SQLITE, 1, "Loading query rules from db");
 	sqlite3_stmt *statement;
-	char *query="SELECT rule_id, flagIN, match_pattern, negate_match_pattern , flagOUT, replace_pattern, caching_ttl FROM query_rules ORDER BY rule_id";
+	char *query="SELECT rule_id, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, caching_ttl FROM query_rules ORDER BY rule_id";
 	if(sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0) != SQLITE_OK) {
 		proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Error on sqlite3_prepare_v2() running query \"%s\" : %s\n", query, sqlite3_errmsg(sqlite3configdb));
 		sqlite3_finalize(statement);
@@ -351,8 +351,10 @@ int sqlite3_flush_query_rules_db_to_mem() {
 			proxy_error("Out of range value for flagIN (%d) on rule_id %d\n", qr->flagIN, qr->rule_id);
 			qr->flagIN=0;
 		}
-		qr->match_pattern=g_strdup(sqlite3_column_text(statement,2));
-		qr->negate_match_pattern=sqlite3_column_int(statement,3);
+		qr->username=g_strdup(sqlite3_column_text(statement,2));
+		qr->schemaname=g_strdup(sqlite3_column_text(statement,3));
+		qr->match_pattern=g_strdup(sqlite3_column_text(statement,4));
+		qr->negate_match_pattern=sqlite3_column_int(statement,5);
 		//some sanity check
 		if (qr->negate_match_pattern > 1) {
 			proxy_error("Out of range value for negate_match_pattern (%d) on rule_id %d\n", qr->negate_match_pattern, qr->rule_id);
@@ -362,20 +364,38 @@ int sqlite3_flush_query_rules_db_to_mem() {
 			proxy_error("Out of range value for negate_match_pattern (%d) on rule_id %d\n", qr->negate_match_pattern, qr->rule_id);
 			qr->negate_match_pattern=0;
 		}
-		qr->flagOUT=sqlite3_column_int(statement,4);
+		qr->flagOUT=sqlite3_column_int(statement,6);
 		//some sanity check
 		if (qr->flagOUT < 0) {
 			proxy_error("Out of range value for flagOUT (%d) on rule_id %d\n", qr->flagOUT, qr->rule_id);
 			qr->flagOUT=0;
 		}
-		qr->replace_pattern=g_strdup(sqlite3_column_text(statement,5));
-		qr->caching_ttl=sqlite3_column_int(statement,6);
+		qr->replace_pattern=g_strdup(sqlite3_column_text(statement,7));
+		qr->destination_hostgroup=sqlite3_column_int(statement,8);
+		//some sanity check
+		if (qr->destination_hostgroup < 0) {
+			proxy_error("Out of range value for destination_hostgroup (%d) on rule_id %d\n", qr->destination_hostgroup, qr->rule_id);
+			qr->destination_hostgroup=0;
+		}
+		qr->audit_log=sqlite3_column_int(statement,9);
+		//some sanity check
+		if (qr->audit_log < 0 || qr->audit_log > 1) {
+			proxy_error("Out of range value for audit_log (%d) on rule_id %d\n", qr->audit_log, qr->rule_id);
+			qr->audit_log= ( qr->audit_log < 0 ? 0 : 1 );
+		}
+		qr->performance_log=sqlite3_column_int(statement,10);
+		//some sanity check
+		if (qr->performance_log < 0 || qr->performance_log > 1) {
+			proxy_error("Out of range value for performance_log (%d) on rule_id %d\n", qr->performance_log, qr->rule_id);
+			qr->performance_log= ( qr->performance_log < 0 ? 0 : 1 );
+		}
+		qr->caching_ttl=sqlite3_column_int(statement,11);
 		//some sanity check
 		if (qr->caching_ttl < -1) {
 			proxy_error("Out of range value for caching_ttl (%d) on rule_id %d\n", qr->caching_ttl, qr->rule_id);
 			qr->caching_ttl=-1;
 		}
-		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Adding query rules with id %d : flagIN %d ; match_pattern \"%s\" ; negate_match_pattern %d ; flagOUT %d ; replace_pattern \"%s\" ; caching_ttl %d\n", qr->rule_id, qr->flagIN , qr->match_pattern , qr->negate_match_pattern , qr->flagOUT , qr->replace_pattern , qr->caching_ttl);
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Adding query rules with id %d : flagIN %d ; username \"%s\" ; schema \"%s\" ; match_pattern \"%s\" ; negate_match_pattern %d ; flagOUT %d ; replace_pattern \"%s\" ; destination_hostgroup %d ; audit_log %d ; performance_log %d ; caching_ttl %d\n", qr->rule_id, qr->flagIN , qr->username , qr->schemaname , qr->match_pattern , qr->negate_match_pattern , qr->flagOUT , qr->replace_pattern , qr->destination_hostgroup , qr->audit_log , qr->performance_log , qr->caching_ttl);
 		qr->regex=g_regex_new(qr->match_pattern, G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
 		g_ptr_array_add(gloQR.query_rules, qr);
 		rownum++;

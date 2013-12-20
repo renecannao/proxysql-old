@@ -656,6 +656,12 @@ void reset_query_rules() {
 		if (qr->regex) {
 			g_regex_unref(qr->regex);
 		}
+		if (qr->username) {
+			g_free(qr->username);
+		}
+		if (qr->schemaname) {
+			g_free(qr->schemaname);
+		}
 		if (qr->match_pattern) {
 			g_free(qr->match_pattern);
 		}
@@ -680,6 +686,8 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	sess->query_info.rewritten=0;
 	sess->query_info.caching_ttl=0;
 	sess->query_info.destination_hostgroup=0;
+	sess->query_info.audit_log=0;
+	sess->query_info.performance_log=0;
 	sess->query_info.mysql_query_cache_hit=0;
 	if (p) {
 		sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
@@ -702,6 +710,18 @@ void process_query_rules(mysql_session_t *sess) {
 		if (qr->flagIN != flagIN) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has no matching flagIN\n", qr->rule_id);
 			continue;
+		}
+		if (qr->username) {
+			if (strcmp(qr->username,sess->mysql_username)!=0) {
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has no matching username\n", qr->rule_id);
+				continue;
+			}
+		}
+		if (qr->schemaname) {
+			if (strcmp(qr->schemaname,sess->mysql_schema_cur)!=0) {
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has no matching schema\n", qr->rule_id);
+				continue;
+			}
 		}
 		rc = g_regex_match_full (qr->regex, sess->query_info.query , sess->query_info.query_len, 0, 0, &match_info, NULL);
 		if (
@@ -742,6 +762,18 @@ void process_query_rules(mysql_session_t *sess) {
 			sess->query_info.caching_ttl=qr->caching_ttl;
 		}
 		g_match_info_free(match_info);
+		if (qr->destination_hostgroup>0) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has changed destination_hostgroup %d\n", qr->rule_id, qr->destination_hostgroup);
+			sess->query_info.destination_hostgroup=qr->destination_hostgroup;
+		}
+		if (qr->audit_log==1) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has set audit_log\n", qr->rule_id);
+			sess->query_info.audit_log=qr->audit_log;
+		}
+		if (qr->performance_log==1) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has set performance_log\n", qr->rule_id);
+			sess->query_info.performance_log=qr->performance_log;
+		}
 		if (sess->query_info.caching_ttl) {
 			goto exit_process_query_rules;
 		}
@@ -749,5 +781,14 @@ void process_query_rules(mysql_session_t *sess) {
 	exit_process_query_rules:
 	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "End processing query rules\n");
 	pthread_rwlock_unlock(&gloQR.rwlock);
+	// if the query reached this point with caching_ttl==0 , we set it to the default
+	if (sess->query_info.caching_ttl==0) {
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Query has no caching TTL, setting the default\n");
+		sess->query_info.caching_ttl=glovars.mysql_query_cache_default_timeout;
+	}
+	// if the query is flagged to be cached but mysql_query_cache_enabled=0 , the query needs to be flagged to NOT be cached
+	if (glovars.mysql_query_cache_enabled==FALSE) {
+		sess->query_info.caching_ttl=-1;
+	}
 }
 
