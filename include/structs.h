@@ -191,9 +191,7 @@ struct _mysql_session_t {
 	enum enum_resultset_progress resultset_progress;
 	int resultset_size;
 	mysql_query_metadata_t query_info;
-	GChecksum *query_checksum; // must go into query_info
 	gboolean query_to_cache; // must go into query_info
-//	GRegex *regex[2]; // must go away
 	GPtrArray *resultset; 
 	mysql_server *server_ptr;
 	mysql_server *master_ptr;
@@ -250,6 +248,7 @@ typedef struct _global_variables {
 	int mysql_threads;	
 	gboolean mysql_auto_reconnect_enabled;
 	gboolean mysql_query_cache_enabled;
+	gboolean mysql_query_cache_precheck;
 	int mysql_query_cache_partitions;
 	unsigned int mysql_query_cache_default_timeout;
 	unsigned long long mysql_wait_timeout;

@@ -21,7 +21,6 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 	sess->mysql_password=NULL;
 	sess->mysql_schema_cur=NULL;
 	sess->mysql_schema_new=NULL;
-	sess->query_checksum=NULL;
 	sess->server_bytes_at_cmd.bytes_sent=0;
 	sess->server_bytes_at_cmd.bytes_recv=0;
 	sess->mysql_server_reconnect=TRUE;
@@ -74,7 +73,6 @@ void mysql_session_close(mysql_session_t *sess) {
 	if (sess->mysql_password) { free(sess->mysql_password); sess->mysql_password=NULL; }
 	if (sess->mysql_schema_cur) { free(sess->mysql_schema_cur); sess->mysql_schema_cur=NULL; }
 	if (sess->mysql_schema_new) { free(sess->mysql_schema_new); sess->mysql_schema_new=NULL; }
-	if (sess->query_checksum) { g_checksum_free(sess->query_checksum); }
 
 	sess->healthy=0;
 	init_query_metadata(sess, NULL);
@@ -263,9 +261,19 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 	return;
 }
 
+
+
+inline void compute_query_checksum(mysql_session_t *sess) {
+	if (sess->query_info.query_checksum==NULL) {
+		sess->query_info.query_checksum=g_checksum_new(G_CHECKSUM_MD5);
+		g_checksum_update(sess->query_info.query_checksum, sess->query_info.query, sess->query_info.query_len);
+		g_checksum_update(sess->query_info.query_checksum, sess->mysql_username, strlen(sess->mysql_username));
+		g_checksum_update(sess->query_info.query_checksum, sess->mysql_schema_cur, strlen(sess->mysql_schema_cur));
+	}
+}
+
 inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
 
-//	MD5(p->data+sizeof(mysql_hdr)+1,p->length-sizeof(mysql_hdr)-1,md);
 	if (mysql_pkt_get_size(p) > glovars.mysql_max_query_size) {
 		// the packet is too big. Ignore any processing
 		sess->client_command=COM_END;
@@ -273,11 +281,6 @@ inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		init_query_metadata(sess, p);
 		sess->resultset_progress=RESULTSET_WAITING;
 		sess->resultset_size=0;
-		if (sess->query_checksum) {
-			g_checksum_free(sess->query_checksum);
-		}
-		sess->query_checksum=g_checksum_new(G_CHECKSUM_MD5);
-		g_checksum_update(sess->query_checksum, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1);
 
 /*
 if the query is cached:
@@ -287,29 +290,38 @@ if the query is cached:
 if the query is not cached, mark it as to be cached and modify the code on result set
 
 */
-		proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Got COM_QUERY packet , MD5 %s , Query %s\n", g_checksum_get_string(sess->query_checksum) , (char *)p->data+sizeof(mysql_hdr)+1);
-		if (sess->client_command==COM_QUERY) { process_query_rules(sess); }
+		if (glovars.mysql_query_cache_enabled && glovars.mysql_query_cache_precheck) {
+			compute_query_checksum(sess);
+			pkt *QCresult=NULL;
+			QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_info.query_checksum), sess);
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Called GET on QC for checksum %s in precheck\n", g_checksum_get_string(sess->query_info.query_checksum));
+			if (QCresult) {
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Found QC entry for checksum %s in precheck\n", g_checksum_get_string(sess->query_info.query_checksum));
+				g_ptr_array_add(sess->client_myds->output.pkts, QCresult);
+				sess->mysql_query_cache_hit=TRUE;
+				sess->query_to_cache=FALSE;	 // query already in cache
+				mypkt_free(p,sess,1);
+				return;
+			}			
+		}
+		process_query_rules(sess);
 		if (
 			(sess->client_command==COM_QUERY) &&
 			( sess->query_info.caching_ttl > 0 )
-			//query_is_cachable(sess, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)
 		) {
 			sess->query_to_cache=TRUE;	  // cache the query
-//					  void *data=NULL;
-//					  unsigned long length=0;
+			compute_query_checksum(sess);
 			pkt *QCresult=NULL;
-			QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_checksum), sess);
-//					  g_slice_free1(length,data);
-//					  length=0;
-			proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Called GET on QC , checksum %s\n", g_checksum_get_string(sess->query_checksum));
+			QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_info.query_checksum), sess);
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Called GET on QC for checksum %s after query preprocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
 			if (QCresult) {
-//						  result->length=length;
-//						  result->data=data;
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Found QC entry for checksum %s after query preprocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
 				g_ptr_array_add(sess->client_myds->output.pkts, QCresult);
 				sess->mysql_query_cache_hit=TRUE;
 				sess->query_to_cache=FALSE;	 // query already in cache
 				mypkt_free(p,sess,1);
 			} else {
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Not found QC entry for checksum %s after query prepocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
 				sess->send_to_slave=TRUE;
 				if (sess->slave_ptr==NULL) {
 					// no slave assigned yet, find one!
@@ -463,10 +475,10 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 
 //					  conn->status &= ~CONNECTION_READING_SERVER;
 						if (sess->query_to_cache==TRUE) {
-							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s needs to be cached\n", g_checksum_get_string(sess->query_checksum));
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s needs to be cached\n", g_checksum_get_string(sess->query_info.query_checksum));
 							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Resultset size = %d\n", sess->resultset_size);
 							// prepare the entry to enter in the query cache
-							void *kp=g_strdup(g_checksum_get_string(sess->query_checksum));
+							void *kp=g_strdup(g_checksum_get_string(sess->query_info.query_checksum));
 							void *vp=g_malloc(sess->resultset_size);
 							//void *vp=g_slice_alloc(conn->resultset_size);
 							size_t copied=0;
@@ -493,7 +505,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 								p=g_ptr_array_remove_index(sess->resultset, sess->resultset->len-1);
 							}
 						} else {
-							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s was too large ( %d bytes, min %d ) and wasn't stored\n", g_checksum_get_string(sess->query_checksum), sess->resultset_size , glovars.mysql_max_resultset_size );
+							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s was too large ( %d bytes, min %d ) and wasn't stored\n", g_checksum_get_string(sess->query_info.query_checksum), sess->resultset_size , glovars.mysql_max_resultset_size );
 						}
 					}
 }
@@ -675,7 +687,10 @@ inline void init_gloQR() {
 
 void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	sess->query_info.p=p;
-	if (sess->query_info.query_checksum) { g_checksum_free(sess->query_info.query_checksum); }
+	if (sess->query_info.query_checksum) {
+		g_checksum_free(sess->query_info.query_checksum);
+		sess->query_info.query_checksum=NULL;
+	}
 	sess->query_info.flagOUT=0;
 	sess->query_info.rewritten=0;
 	sess->query_info.caching_ttl=0;
@@ -726,7 +741,7 @@ void process_query_rules(mysql_session_t *sess) {
 			continue;
 		}
 		if (qr->replace_pattern) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d on match_pattern \"%s\" has a replace_pattern \"%s\"to apply\n", qr->rule_id, qr->match_pattern, qr->replace_pattern);
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d on match_pattern \"%s\" has a replace_pattern \"%s\" to apply\n", qr->rule_id, qr->match_pattern, qr->replace_pattern);
 			GError *error=NULL;
 			char *new_query;
 			new_query=g_regex_replace(qr->regex, sess->query_info.query , sess->query_info.query_len, 0, qr->replace_pattern, 0, &error);
@@ -740,6 +755,10 @@ void process_query_rules(mysql_session_t *sess) {
 				continue;
 			}
 			sess->query_info.rewritten=1;
+			if (sess->query_info.query_checksum) { 
+				g_checksum_free(sess->query_info.query_checksum); // remove checksum, as it may needs to be computed again
+				sess->query_info.query_checksum=NULL;
+			}
 			mysql_new_payload_select(sess->query_info.p, new_query, -1);
 			pkt *p=sess->query_info.p;
 			sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
@@ -780,9 +799,14 @@ void process_query_rules(mysql_session_t *sess) {
 		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Query has no caching TTL, setting the default\n");
 		sess->query_info.caching_ttl=glovars.mysql_query_cache_default_timeout;
 	}
+	// if the query reached this point with caching_ttl==-1 , we set it to 0
+	if (sess->query_info.caching_ttl==-1) {
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Query won't be cached\n");
+		sess->query_info.caching_ttl=0;
+	}
 	// if the query is flagged to be cached but mysql_query_cache_enabled=0 , the query needs to be flagged to NOT be cached
 	if (glovars.mysql_query_cache_enabled==FALSE) {
-		sess->query_info.caching_ttl=-1;
+		sess->query_info.caching_ttl=0;
 	}
 }
 

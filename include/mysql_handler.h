@@ -15,3 +15,4 @@ void reset_query_rules();
 inline void init_gloQR();
 void init_query_metadata(mysql_session_t *, pkt *);
 void process_query_rules(mysql_session_t *);
+inline void compute_query_checksum(mysql_session_t *);

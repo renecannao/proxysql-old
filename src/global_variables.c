@@ -331,6 +331,8 @@ int init_global_variables(GKeyFile *gkf) {
 		}
 	}
 
+	// init gloQR
+	init_gloQR();
 
 	// set query cache	
 	glovars.mysql_query_cache_enabled=TRUE;
@@ -340,11 +342,9 @@ int init_global_variables(GKeyFile *gkf) {
 			glovars.mysql_query_cache_enabled=FALSE;
 		}
 	}
-	// init gloQR
-	init_gloQR();
 
 	if (glovars.mysql_query_cache_enabled==TRUE ) {
-	// set query_cache_partitions
+		// set query_cache_partitions
 		glovars.mysql_query_cache_partitions=16;	// default mysql query cache partitions
 		if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_partitions", NULL)) {
 			gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_partitions", &error);
@@ -353,12 +353,21 @@ int init_global_variables(GKeyFile *gkf) {
 			}
 		}
 
-	// set query_cache default timeout
+		// set query_cache default timeout
 		glovars.mysql_query_cache_default_timeout=1;
 		if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_default_timeout", NULL)) {
 			gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_default_timeout", &error);
 			if (r >= 0 && r<fdb_system_var.hash_expire_max ) {
 				glovars.mysql_query_cache_default_timeout=r;
+			}
+		}
+
+		// set query_cache_precheck
+		glovars.mysql_query_cache_precheck=1;	// enabled by default
+		if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_precheck", NULL)) {
+			gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_precheck", &error);
+			if (r == 0 ) {
+				glovars.mysql_query_cache_precheck=r;
 			}
 		}
 	}
