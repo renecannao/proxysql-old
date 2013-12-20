@@ -705,7 +705,7 @@ void process_query_rules(mysql_session_t *sess) {
 		}
 		rc = g_regex_match_full (qr->regex, sess->query_info.query , sess->query_info.query_len, 0, 0, &match_info, NULL);
 		if (
-			(rc==TRUE && qr->negate_match==1) || ( rc==FALSE && qr->negate_match==0 )
+			(rc==TRUE && qr->negate_match_pattern==1) || ( rc==FALSE && qr->negate_match_pattern==0 )
 		) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has no matching pattern\n", qr->rule_id);
 			g_match_info_free(match_info);

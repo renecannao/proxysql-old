@@ -132,7 +132,7 @@ typedef struct _query_rule_t { // use g_slice_alloc
 	int rule_id;
 	int flagIN;
 	char *match_pattern; // use g_malloc/g_free
-	int negate_match;
+	int negate_match_pattern;
 	int flagOUT;
 	char *replace_pattern; // use g_malloc/g_free
 	int caching_ttl;
