@@ -7,9 +7,6 @@ char *user_password(char *, int);
 inline int mysql_pkt_get_size(pkt *);
 inline enum MySQL_response_type mysql_response(pkt *);
 
-
-//gboolean query_is_cachable(mysql_session_t *, const char *, int);
-
 typedef struct _rand_struct_t {
   unsigned long seed1,seed2,max_value;
   double max_value_dbl;
@@ -19,7 +16,6 @@ void create_ok_packet(pkt *, unsigned int);
 void create_handshake_packet(pkt *, char *);
 int check_client_authentication_packet(pkt *, mysql_session_t *);
 void create_err_packet(pkt *, unsigned int , uint16_t,char *);
-//int authenticate_mysql_client(mysql_session_t *);
 void authenticate_mysql_client_send_OK(mysql_session_t *);
 void authenticate_mysql_client_send_ERR(mysql_session_t *, uint16_t , char *);
 int mysql_check_alive_and_read_only(const char *, uint16_t);

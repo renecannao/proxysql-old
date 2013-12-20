@@ -107,53 +107,6 @@ inline enum MySQL_response_type mysql_response(pkt *p) {
 	}
 }
 
-/*
-gboolean query_is_cachable(mysql_session_t *sess, const char *query, int length) {
-	if (glovars.mysql_query_cache_enabled==FALSE) {
-		return FALSE;
-	}
-	gboolean ret=FALSE;
-	gboolean r;
-	char *query_copy=NULL;
-	GRegex *regex;
-	GMatchInfo *match_info;
-	GError *error = NULL;
-
-
-	//regex = g_regex_new ("^SELECT.*(^\\s+FOR\\s+UPDATE\\s*$)", G_REGEX_CASELESS, 0, NULL);
-//	regex = g_regex_new ("^SELECT ", G_REGEX_CASELESS, 0, NULL);
-//	g_regex_match_full (regex, string, -1, 0, 0, &match_info, &error);
-	ret = g_regex_match (sess->regex[0], query, 0, &match_info);
-//	while (g_match_info_matches (match_info))
-//	{
-//	}
-	g_match_info_free (match_info);
-////	g_regex_unref (regex);
-	if (ret==FALSE) { return ret; }
-
-	// we need a NULL terminated query, thus we copy it
-	query_copy=malloc(length+1);
-	if (query_copy==NULL) { exit(EXIT_FAILURE); }
-	query_copy[length]='\0';
-	memcpy(query_copy,query,length);
-
-	//regex = g_regex_new ("FOR UPDATE$", G_REGEX_CASELESS | G_REGEX_DOLLAR_ENDONLY, 0, NULL);
-////	regex = g_regex_new ("\\s+FOR\\s+UPDATE\\s*$", G_REGEX_CASELESS , 0, NULL);
-	r = g_regex_match (sess->regex[1], query_copy, 0, &match_info);
-	//r = g_regex_match (regex, query, 0, &match_info);
-	g_match_info_free (match_info);
-////	g_regex_unref (regex);
-	if (r==TRUE) { ret=FALSE; }
-	
-
-
-	return_query_is_cachable:
-	if (query_copy) {
-		free(query_copy);	
-	}
-	return ret;
-}
-*/
 
 int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	// WARNING : for now it only checks the password
@@ -311,48 +264,6 @@ void create_err_packet(pkt *mypkt, unsigned int id, uint16_t errcode, char *errs
 	memcpy(mypkt->data+sizeof(mysql_hdr)+3,errstr,strlen(errstr));
 }
 
-/*
-//DEPRECATED
-int authenticate_mysql_client(mysql_session_t *sess) {
-	// generate a handshake
-	pkt *hs;
-	hs=mypkt_alloc(sess);
-	create_handshake_packet(hs,sess->scramble_buf);
-
-	// send it to the client
-	if (write_one_pkt_to_net(sess->client_myds,hs)==FALSE) {
-		//mysql_session_close(sess); return NULL;
-		return -1;
-	}
-
-	hs=read_one_pkt_from_net(sess->client_myds);
-	if (hs==NULL) {
-		return -1;
-		//mysql_session_close(sess); return NULL;
-	}
-//  if (hs->length > 52 ) {
-		//r=check_client_authentication_packet(hs,sess->scramble_buf);
-		sess->ret=check_client_authentication_packet(hs,sess);
-//  } else {
-//	  r=0;
-//  }
-	// free the packet
-	mypkt_free(hs,sess,1);
-	if (sess->ret) {
-		authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
-//		hs=g_slice_alloc(sizeof(pkt));
-//		create_err_packet(hs, 2, 1045, "#28000Access denied for user");
-//		write_one_pkt_to_net(sess->client_myds,hs);
-		return -1;
-		//mysql_session_close(sess); return NULL;
-	}
-	if (sess->mysql_schema_cur==NULL) {
-		sess->mysql_schema_cur=strdup(glovars.mysql_default_schema);
-	}
-
-	return 0;
-}
-*/
 void authenticate_mysql_client_send_OK(mysql_session_t *sess) {
 	// prepare an ok packet
 	pkt *hs;

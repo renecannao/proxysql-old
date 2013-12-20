@@ -29,9 +29,6 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 	sess->admin=0;
 	sess->resultset=g_ptr_array_new();
 	sess->timers=calloc(sizeof(timer),TOTAL_TIMERS);
-	// these two are the only regex currently supported . They needs to be extended
-	//sess->regex[0] = g_regex_new ("^SELECT ", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
-	//sess->regex[1] = g_regex_new ("\\s+FOR\\s+UPDATE\\s*$", G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
 	sess->handler_thread=handler_thread;
 	sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
 	sess->client_myds->fd=sess->client_fd;
@@ -72,9 +69,6 @@ void mysql_session_close(mysql_session_t *sess) {
 	}	
 	g_ptr_array_free(sess->resultset,TRUE);
 	free(sess->timers);
-
-	//g_regex_unref(sess->regex[0]);
-	//g_regex_unref(sess->regex[1]);
 
 	if (sess->mysql_username) { free(sess->mysql_username); sess->mysql_username=NULL; }
 	if (sess->mysql_password) { free(sess->mysql_password); sess->mysql_password=NULL; }

@@ -199,21 +199,6 @@ int array2buffer(mysql_data_stream_t *myds) {
 	return ret;
 }
 
-/*
-// DEPREACTED
-pkt * read_one_pkt_from_net(mysql_data_stream_t *myds) { // this should be used ONLY when sure that only 1 packet is expected, for example during authentication
-	// loop until a packet is read
-    while (myds->input.pkts->len==0) {
-        read_from_net(myds);
-        buffer2array(myds);
-		if ((myds->active==FALSE)) {
-			// the connection is broken , return NULL
-			return NULL;
-		}
-    }
-    return g_ptr_array_remove_index(myds->input.pkts, 0);
-}
-*/
 gboolean write_one_pkt_to_net(mysql_data_stream_t *myds, pkt *p) {// this should be used ONLY when sure that only 1 packet is expected, for example during authentication
 	g_ptr_array_add(myds->output.pkts, p);
 	array2buffer(myds);
