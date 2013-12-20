@@ -11,7 +11,7 @@ inline void server_COM_QUERY(mysql_session_t *, pkt *, enum MySQL_response_type)
 inline void server_COM_QUERY(mysql_session_t *, pkt *, enum MySQL_response_type);
 void process_mysql_server_pkts(mysql_session_t *);
 int process_mysql_client_pkts(mysql_session_t *);
-void reset_QC_rules();
-inline void init_gloQCR();
+void reset_query_rules();
+inline void init_gloQR();
 void init_query_metadata(mysql_session_t *, pkt *);
-void process_QC_rules(mysql_session_t *);
+void process_query_rules(mysql_session_t *);

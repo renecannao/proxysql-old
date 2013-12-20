@@ -210,7 +210,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		g_ptr_array_add(sess->client_myds->output.pkts, ok);
 		return;
 	}
-	if (strncasecmp("FLUSH QC RULES",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+	if (strncasecmp("FLUSH QUERY RULES",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 		int affected_rows=sqlite3_flush_query_rules_db_to_mem();
 	    pkt *ok=mypkt_alloc(sess);
 		myproto_ok_pkt(ok,1,affected_rows,0,2,0);
@@ -294,7 +294,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 
 */
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Got COM_QUERY packet , MD5 %s , Query %s\n", g_checksum_get_string(sess->query_checksum) , (char *)p->data+sizeof(mysql_hdr)+1);
-		if (sess->client_command==COM_QUERY) { process_QC_rules(sess); }
+		if (sess->client_command==COM_QUERY) { process_query_rules(sess); }
 		if (
 			(sess->client_command==COM_QUERY) &&
 			( sess->query_info.caching_ttl > 0 )
@@ -643,33 +643,33 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 }
 
 
-void reset_QC_rules() {
-	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Resetting QC rules\n");
-	if (gloQCR.QC_rules == NULL) {
-		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Initializing QC rules\n");
-		gloQCR.QC_rules=g_ptr_array_new();
+void reset_query_rules() {
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Resetting query rules\n");
+	if (gloQR.query_rules == NULL) {
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Initializing query rules\n");
+		gloQR.query_rules=g_ptr_array_new();
 		return;
 	}
-	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "%d QC rules to reset\n", gloQCR.QC_rules->len);
-	while ( gloQCR.QC_rules->len ) {
-		QC_rule_t *qcr = g_ptr_array_remove_index_fast(gloQCR.QC_rules,0);
-		if (qcr->regex) {
-			g_regex_unref(qcr->regex);
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "%d query rules to reset\n", gloQR.query_rules->len);
+	while ( gloQR.query_rules->len ) {
+		query_rule_t *qr = g_ptr_array_remove_index_fast(gloQR.query_rules,0);
+		if (qr->regex) {
+			g_regex_unref(qr->regex);
 		}
-		if (qcr->match_pattern) {
-			g_free(qcr->match_pattern);
+		if (qr->match_pattern) {
+			g_free(qr->match_pattern);
 		}
-		if (qcr->replace_pattern) {
-			g_free(qcr->replace_pattern);
+		if (qr->replace_pattern) {
+			g_free(qr->replace_pattern);
 		}
-		g_slice_free1(sizeof(QC_rule_t), qcr);
+		g_slice_free1(sizeof(query_rule_t), qr);
 	}
 }
 
-inline void init_gloQCR() {
-	pthread_rwlock_init(&gloQCR.rwlock, NULL);
-	gloQCR.QC_rules=NULL;
-	reset_QC_rules();
+inline void init_gloQR() {
+	pthread_rwlock_init(&gloQR.rwlock, NULL);
+	gloQR.query_rules=NULL;
+	reset_query_rules();
 }
 
 
@@ -690,34 +690,34 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	}
 }
 
-void process_QC_rules(mysql_session_t *sess) {
+void process_query_rules(mysql_session_t *sess) {
 	int i;
 	int flagIN=0;
 	gboolean rc;
 	GMatchInfo *match_info;
-	pthread_rwlock_rdlock(&gloQCR.rwlock);
-	for (i=0;i<gloQCR.QC_rules->len;i++) {
-		QC_rule_t *qcr=g_ptr_array_index(gloQCR.QC_rules, i);
-		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Processing rule %d\n", qcr->rule_id);
-		if (qcr->flagIN != flagIN) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has no matching flagIN\n", qcr->rule_id);
+	pthread_rwlock_rdlock(&gloQR.rwlock);
+	for (i=0;i<gloQR.query_rules->len;i++) {
+		query_rule_t *qr=g_ptr_array_index(gloQR.query_rules, i);
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Processing rule %d\n", qr->rule_id);
+		if (qr->flagIN != flagIN) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has no matching flagIN\n", qr->rule_id);
 			continue;
 		}
-		rc = g_regex_match_full (qcr->regex, sess->query_info.query , sess->query_info.query_len, 0, 0, &match_info, NULL);
+		rc = g_regex_match_full (qr->regex, sess->query_info.query , sess->query_info.query_len, 0, 0, &match_info, NULL);
 		if (
-			(rc==TRUE && qcr->negate_match==1) || ( rc==FALSE && qcr->negate_match==0 )
+			(rc==TRUE && qr->negate_match==1) || ( rc==FALSE && qr->negate_match==0 )
 		) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has no matching pattern\n", qcr->rule_id);
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has no matching pattern\n", qr->rule_id);
 			g_match_info_free(match_info);
 			continue;
 		}
-		if (qcr->replace_pattern) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d on match_pattern \"%s\" has a replace_pattern \"%s\"to apply\n", qcr->rule_id, qcr->match_pattern, qcr->replace_pattern);
+		if (qr->replace_pattern) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d on match_pattern \"%s\" has a replace_pattern \"%s\"to apply\n", qr->rule_id, qr->match_pattern, qr->replace_pattern);
 			GError *error=NULL;
 			char *new_query;
-			new_query=g_regex_replace(qcr->regex, sess->query_info.query , sess->query_info.query_len, 0, qcr->replace_pattern, 0, &error);
+			new_query=g_regex_replace(qr->regex, sess->query_info.query , sess->query_info.query_len, 0, qr->replace_pattern, 0, &error);
 			if (error) {
-				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 3, "g_regex_replace() on QC rule %d generated error %d\n", qcr->rule_id, error->message);
+				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 3, "g_regex_replace() on query rule %d generated error %d\n", qr->rule_id, error->message);
 				g_error_free(error);
 				if (new_query) {
 					g_free(new_query);
@@ -732,22 +732,22 @@ void process_QC_rules(mysql_session_t *sess) {
 			sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;
 			g_free(new_query);
 		}
-		if (qcr->flagOUT) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has changed flagOUT\n", qcr->rule_id);
-			flagIN=qcr->flagOUT;
+		if (qr->flagOUT) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has changed flagOUT\n", qr->rule_id);
+			flagIN=qr->flagOUT;
 			sess->query_info.flagOUT=flagIN;
 		}
-		if (qcr->caching_ttl) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "QC rule %d has non-zero caching_ttl: %d. Query will%s hit the cache\n", qcr->rule_id, qcr->caching_ttl, (qcr->caching_ttl < 0 ? " NOT" : "" ));
-			sess->query_info.caching_ttl=qcr->caching_ttl;
+		if (qr->caching_ttl) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has non-zero caching_ttl: %d. Query will%s hit the cache\n", qr->rule_id, qr->caching_ttl, (qr->caching_ttl < 0 ? " NOT" : "" ));
+			sess->query_info.caching_ttl=qr->caching_ttl;
 		}
 		g_match_info_free(match_info);
 		if (sess->query_info.caching_ttl) {
-			goto exit_process_QC_rules;
+			goto exit_process_query_rules;
 		}
 	}
-	exit_process_QC_rules:
-	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "End processing QC rules\n");
-	pthread_rwlock_unlock(&gloQCR.rwlock);
+	exit_process_query_rules:
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "End processing query rules\n");
+	pthread_rwlock_unlock(&gloQR.rwlock);
 }
 

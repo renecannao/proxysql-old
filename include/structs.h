@@ -127,7 +127,7 @@ struct _shared_trash_stack_t {
 	int incremental;	
 };
 
-typedef struct _QC_rule_t { // use g_slice_alloc 
+typedef struct _query_rule_t { // use g_slice_alloc 
 	GRegex *regex;
 	int rule_id;
 	int flagIN;
@@ -136,13 +136,13 @@ typedef struct _QC_rule_t { // use g_slice_alloc
 	int flagOUT;
 	char *replace_pattern; // use g_malloc/g_free
 	int caching_ttl;
-} QC_rule_t;
+} query_rule_t;
 
 
-typedef struct _global_QC_rules_t {
+typedef struct _global_query_rules_t {
 	pthread_rwlock_t rwlock;
-	GPtrArray *QC_rules;
-} global_QC_rules_t;
+	GPtrArray *query_rules;
+} global_query_rules_t;
 
 
 typedef struct _proxysql_mysql_thread_t {

@@ -337,50 +337,50 @@ int sqlite3_flush_query_rules_db_to_mem() {
 		proxy_error("Error loading query rules");
 		assert(0);
 	}
-	pthread_rwlock_wrlock(&gloQCR.rwlock);
+	pthread_rwlock_wrlock(&gloQR.rwlock);
 	// remove all QC rules
-	reset_QC_rules();
+	reset_query_rules();
 	int rownum = 0;
 	int result = 0;
 	while ((result=sqlite3_step(statement))==SQLITE_ROW) {
-		QC_rule_t *qcr=g_slice_alloc0(sizeof(QC_rule_t));
-		qcr->rule_id=sqlite3_column_int(statement,0);
-		qcr->flagIN=sqlite3_column_int(statement,1);
+		query_rule_t *qr=g_slice_alloc0(sizeof(query_rule_t));
+		qr->rule_id=sqlite3_column_int(statement,0);
+		qr->flagIN=sqlite3_column_int(statement,1);
 		//some sanity check
-		if (qcr->flagIN < 0) {
-			proxy_error("Out of range value for flagIN (%d) on rule_id %d\n", qcr->flagIN, qcr->rule_id);
-			qcr->flagIN=0;
+		if (qr->flagIN < 0) {
+			proxy_error("Out of range value for flagIN (%d) on rule_id %d\n", qr->flagIN, qr->rule_id);
+			qr->flagIN=0;
 		}
-		qcr->match_pattern=g_strdup(sqlite3_column_text(statement,2));
-		qcr->negate_match=sqlite3_column_int(statement,3);
+		qr->match_pattern=g_strdup(sqlite3_column_text(statement,2));
+		qr->negate_match=sqlite3_column_int(statement,3);
 		//some sanity check
-		if (qcr->negate_match > 1) {
-			proxy_error("Out of range value for negate_match (%d) on rule_id %d\n", qcr->negate_match, qcr->rule_id);
-			qcr->negate_match=1;
+		if (qr->negate_match > 1) {
+			proxy_error("Out of range value for negate_match (%d) on rule_id %d\n", qr->negate_match, qr->rule_id);
+			qr->negate_match=1;
 		}
-		if (qcr->negate_match < 0) {
-			proxy_error("Out of range value for negate_match (%d) on rule_id %d\n", qcr->negate_match, qcr->rule_id);
-			qcr->negate_match=0;
+		if (qr->negate_match < 0) {
+			proxy_error("Out of range value for negate_match (%d) on rule_id %d\n", qr->negate_match, qr->rule_id);
+			qr->negate_match=0;
 		}
-		qcr->flagOUT=sqlite3_column_int(statement,4);
+		qr->flagOUT=sqlite3_column_int(statement,4);
 		//some sanity check
-		if (qcr->flagOUT < 0) {
-			proxy_error("Out of range value for flagOUT (%d) on rule_id %d\n", qcr->flagOUT, qcr->rule_id);
-			qcr->flagOUT=0;
+		if (qr->flagOUT < 0) {
+			proxy_error("Out of range value for flagOUT (%d) on rule_id %d\n", qr->flagOUT, qr->rule_id);
+			qr->flagOUT=0;
 		}
-		qcr->replace_pattern=g_strdup(sqlite3_column_text(statement,5));
-		qcr->caching_ttl=sqlite3_column_int(statement,6);
+		qr->replace_pattern=g_strdup(sqlite3_column_text(statement,5));
+		qr->caching_ttl=sqlite3_column_int(statement,6);
 		//some sanity check
-		if (qcr->caching_ttl < -1) {
-			proxy_error("Out of range value for caching_ttl (%d) on rule_id %d\n", qcr->caching_ttl, qcr->rule_id);
-			qcr->caching_ttl=-1;
+		if (qr->caching_ttl < -1) {
+			proxy_error("Out of range value for caching_ttl (%d) on rule_id %d\n", qr->caching_ttl, qr->rule_id);
+			qr->caching_ttl=-1;
 		}
-		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Adding QC rules with id %d : flagIN %d ; match_pattern \"%s\" ; negate_match %d ; flagOUT %d ; replace_pattern \"%s\" ; caching_ttl %d\n", qcr->rule_id, qcr->flagIN , qcr->match_pattern , qcr->negate_match , qcr->flagOUT , qcr->replace_pattern , qcr->caching_ttl);
-		qcr->regex=g_regex_new(qcr->match_pattern, G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
-		g_ptr_array_add(gloQCR.QC_rules, qcr);
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Adding query rules with id %d : flagIN %d ; match_pattern \"%s\" ; negate_match %d ; flagOUT %d ; replace_pattern \"%s\" ; caching_ttl %d\n", qr->rule_id, qr->flagIN , qr->match_pattern , qr->negate_match , qr->flagOUT , qr->replace_pattern , qr->caching_ttl);
+		qr->regex=g_regex_new(qr->match_pattern, G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
+		g_ptr_array_add(gloQR.query_rules, qr);
 		rownum++;
 	}
-	pthread_rwlock_unlock(&gloQCR.rwlock);
+	pthread_rwlock_unlock(&gloQR.rwlock);
 	sqlite3_finalize(statement);
 	return rownum;
 };

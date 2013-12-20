@@ -17,7 +17,7 @@ EXTERN global_mysql_servers glomysrvs;
 EXTERN fdb_hashes_group_t QC;
 //EXTERN int QC_version;
 
-EXTERN global_QC_rules_t gloQCR;
+EXTERN global_query_rules_t gloQR;
 
 EXTERN long long glotimenew;
 EXTERN long long glotimeold;

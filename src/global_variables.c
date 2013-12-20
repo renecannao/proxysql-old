@@ -340,8 +340,8 @@ int init_global_variables(GKeyFile *gkf) {
 			glovars.mysql_query_cache_enabled=FALSE;
 		}
 	}
-	// init gloQCR;
-	init_gloQCR();
+	// init gloQR
+	init_gloQR();
 
 	if (glovars.mysql_query_cache_enabled==TRUE ) {
 	// set query_cache_partitions
