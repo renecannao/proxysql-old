@@ -140,7 +140,10 @@ typedef struct _query_rule_t { // use g_slice_alloc
 	int destination_hostgroup;
 	int audit_log;
 	int performance_log;
-	int caching_ttl;
+	int cache_tag;
+	int invalidate_cache_tag;
+	char *invalidate_cache_pattern; // use g_malloc/g_free
+	int cache_ttl;
 } query_rule_t;
 
 
@@ -164,7 +167,7 @@ typedef struct _mysql_query_metadata_t {
 	GChecksum *query_checksum;
 	int flagOUT;
 	int rewritten;
-	int caching_ttl;
+	int cache_ttl;
 	int destination_hostgroup;
 	int audit_log;
 	int performance_log;
@@ -225,7 +228,7 @@ typedef struct _global_variables {
 	gboolean shutdown;
 
 	unsigned char protocol_version;
-	char *server_version;
+	char *mysql_server_version;
 	uint16_t server_capabilities;
 	uint8_t server_language;
 	uint16_t server_status;
@@ -364,3 +367,22 @@ enum debug_module {
 
 typedef struct _debug_level debug_level;
 typedef struct _admin_sqlite_table_def_t admin_sqlite_table_def_t;
+
+typedef struct _global_variable_entry_t global_variable_entry_t;
+
+struct _global_variable_entry_t {
+	const char *group_name;
+	const char *key_name;
+	GOptionArg arg;
+	void *arg_data;
+	const char *description;
+	int value_min;
+	int value_max;
+	int value_round;
+	int value_multiplier;
+	int int_default;
+	const char *char_default;
+	void (*func_pre)(global_variable_entry_t *);
+	void (*func_post)(global_variable_entry_t *);
+};
+

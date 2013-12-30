@@ -21,7 +21,7 @@ EXTERN global_query_rules_t gloQR;
 
 EXTERN long long glotimenew;
 EXTERN long long glotimeold;
-EXTERN myConnPools *gloconnpool;
+EXTERN myConnPools gloconnpool;
 
 EXTERN mem_superblock_t conn_queue_pool;
 EXTERN shared_trash_stack_t myds_pool;
@@ -38,4 +38,9 @@ EXTERN debug_level *gdbg_lvl;	// global debug levels
 int init_global_variables(GKeyFile *);
 mysql_server * new_server_master();
 mysql_server * new_server_slave();
+void process_global_variables_from_file(GKeyFile *);
 void main_opts(const GOptionEntry *, gint *, gchar ***, gchar *);
+
+void pre_variable_mysql_threads(global_variable_entry_t *);
+void post_variable_core_dump_file_size(global_variable_entry_t *);
+void post_variable_net_buffer_size(global_variable_entry_t *);

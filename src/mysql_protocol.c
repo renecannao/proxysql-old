@@ -168,7 +168,7 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 	mysql_hdr myhdr;
 	myhdr.pkt_id=0;
 	myhdr.pkt_length=sizeof(glovars.protocol_version)
-		+ (strlen(glovars.server_version)+1)
+		+ (strlen(glovars.mysql_server_version)+1)
 		+ sizeof(uint32_t)  // thread_id
 		+ 8  // scramble1
 		+ 1  // 0x00
@@ -199,7 +199,7 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 	rand_st.seed2=rand()%rand_st.max_value;
 
 	memcpy(mypkt->data+l, &glovars.protocol_version, sizeof(glovars.protocol_version)); l+=sizeof(glovars.protocol_version);
-	memcpy(mypkt->data+l, glovars.server_version, strlen(glovars.server_version)); l+=strlen(glovars.server_version)+1;
+	memcpy(mypkt->data+l, glovars.mysql_server_version, strlen(glovars.mysql_server_version)); l+=strlen(glovars.mysql_server_version)+1;
 	memcpy(mypkt->data+l, &thread_id, sizeof(uint32_t)); l+=sizeof(uint32_t);
 #ifdef MARIADB_BASE_VERSION
 	proxy_create_random_string(scramble_buf+0,8,(struct my_rnd_struct *)&rand_st);

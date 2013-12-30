@@ -1,5 +1,82 @@
 #include "proxysql.h"
 
+static global_variable_entry_t glo_entries[]= {
+	{"global", "core_dump_file_size", G_OPTION_ARG_INT, &glovars.core_dump_file_size, "core dump file size", 0, INT_MAX, 0, 0, 0, NULL, NULL, post_variable_core_dump_file_size},
+	{"global", "stack_size", G_OPTION_ARG_INT, &glovars.stack_size, "stack size", 64*1024, 32*1024*1024 , 1024, 0, 512*1024, NULL, NULL, NULL},
+	{"global", "net_buffer_size", G_OPTION_ARG_INT, &conn_queue_pool.size, "net buffer size", 1024, 16*1024*1024 , 1024, 0, 8*1024, NULL, NULL, post_variable_net_buffer_size},
+	{"global", "backlog", G_OPTION_ARG_INT, &glovars.backlog, "backlog for listen()", 50, 10000 , 0, 0, 2000, NULL, NULL, NULL},
+	{"global", "proxy_admin_port", G_OPTION_ARG_INT, &glovars.proxy_admin_port, "administrative port", 0, 65535, 0, 0, 6032, NULL, NULL, NULL},
+	{"mysql", "proxy_mysql_port", G_OPTION_ARG_INT, &glovars.proxy_mysql_port, "mysql port", 0, 65535, 0, 0, 6033, NULL, NULL, NULL},
+	{"mysql", "mysql_server_version", G_OPTION_ARG_STRING, &glovars.mysql_server_version, "mysql server version", 0, 0, 0, 0, 0, "5.1.30", NULL, NULL},
+	{"mysql", "mysql_socket", G_OPTION_ARG_STRING, &glovars.mysql_socket, "mysql socket", 0, 0, 0, 0, 0, "/tmp/proxysql.sock", NULL, NULL},
+	{"mysql", "mysql_default_schema", G_OPTION_ARG_STRING, &glovars.mysql_default_schema, "mysql default schema", 0, 0, 0, 0, 0, "information_schema", NULL, NULL},
+	{"mysql", "mysql_connection_pool_enabled", G_OPTION_ARG_INT, &gloconnpool.enabled, "enable/disable connection pool", 0, 1, 0, 0, 1, NULL, NULL, mysql_connpool_init},
+	{"mysql", "mysql_query_cache_enabled", G_OPTION_ARG_INT, &glovars.mysql_query_cache_enabled, "enable/disable query cache", 0, 1, 0, 0, 1, NULL, NULL, NULL},
+	{"mysql", "mysql_query_cache_partitions", G_OPTION_ARG_INT, &glovars.mysql_query_cache_partitions, "number of mysql query cache", 1, 128, 0, 0, 16, NULL, NULL, NULL},
+	{"mysql", "mysql_query_cache_default_timeout", G_OPTION_ARG_INT, &glovars.mysql_query_cache_default_timeout, "default timeout for query cache", 0, 3600*24*365*10, 0, 0, 1, NULL, NULL, NULL},
+	{"mysql", "mysql_query_cache_precheck", G_OPTION_ARG_INT, &glovars.mysql_query_cache_precheck, "enable/disable query cache precheck", 0, 1, 0, 0, 1, NULL, NULL, NULL},
+	{"mysql", "mysql_auto_reconnect_enabled", G_OPTION_ARG_INT, &glovars.mysql_auto_reconnect_enabled, "enable/disable auto-reconnect", 0, 1, 0, 0, 0, NULL, NULL, NULL},
+	{"mysql", "mysql_usage_user", G_OPTION_ARG_STRING, &glovars.mysql_usage_user, "mysql usage user", 0, 0, 0, 0, 0, "proxy", NULL, NULL},
+	{"mysql", "mysql_usage_password", G_OPTION_ARG_STRING, &glovars.mysql_usage_password, "mysql usage password", 0, 0, 0, 0, 0, "proxy", NULL, NULL},
+	{"global", "proxy_admin_user", G_OPTION_ARG_STRING, &glovars.proxy_admin_user, "proxy admin user", 0, 0, 0, 0, 0, "admin", NULL, NULL},
+	{"global", "proxy_admin_password", G_OPTION_ARG_STRING, &glovars.proxy_admin_password, "proxy admin password", 0, 0, 0, 0, 0, "admin", NULL, NULL},
+	{"mysql", "mysql_threads", G_OPTION_ARG_INT, &glovars.mysql_threads, "number of threads to handle mysql connections", 1, 128, 0, 0, 2, NULL, pre_variable_mysql_threads, NULL},
+	{"mysql", "mysql_max_query_size", G_OPTION_ARG_INT, &glovars.mysql_max_query_size, "mysql max size of a COM_QUERY command", 0, 16777210, 0, 0, 1024*1024, NULL, NULL, NULL},
+	{"mysql", "mysql_max_resultset_size", G_OPTION_ARG_INT, &glovars.mysql_max_resultset_size, "mysql max resultset size", 0, INT_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
+	{"mysql", "mysql_poll_timeout", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout, "poll() timeout", 100, INT_MAX, 0, 0, 10000, NULL, NULL, NULL},
+	{"mysql", "mysql_wait_timeout", G_OPTION_ARG_INT64, &glovars.mysql_wait_timeout, "timeout to drop unused connection", 1, 3600*24*7, 0, 1000000, 3600*8, NULL, NULL, NULL},
+};
+
+
+void process_global_variables_from_file(GKeyFile *gkf) {
+	int i;
+	GError *error;
+	for (i=0;i<sizeof(glo_entries)/sizeof(global_variable_entry_t);i++) {
+        global_variable_entry_t *gve=glo_entries+i;
+		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Parsing variable %s in [%s] : %s\n", gve->key_name, gve->group_name, gve->description);
+		if (gve->func_pre) {
+			proxy_debug(PROXY_DEBUG_GENERIC, 5, "Variable %s is initialized via function\n", gve->key_name);
+			gve->func_pre(gve);
+		}
+		if (g_key_file_has_key(gkf, gve->group_name, gve->key_name, NULL)) {
+			if (gve->arg == G_OPTION_ARG_STRING) {
+				*(char **)gve->arg_data=g_key_file_get_string(gkf, gve->group_name, gve->key_name,  &error);
+			}
+			if (gve->arg == G_OPTION_ARG_INT || gve->arg == G_OPTION_ARG_INT64) {
+				*(int *)gve->arg_data=gve->int_default;
+				gint r=g_key_file_get_integer(gkf, gve->group_name, gve->key_name, &error);
+        		if (r < gve->value_min ) { r=gve->value_min; }
+        		if (r > gve->value_max ) { r=gve->value_max; }
+				if ( gve->value_round ) { r=r/gve->value_round; r=r*gve->value_round; }
+				if (gve->arg == G_OPTION_ARG_INT) {
+					*(int *)gve->arg_data=r*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );
+				} else {
+					long long r=(long long) r*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );
+					memcpy(gve->arg_data,&r,sizeof(long long));
+				}
+            }
+		} else {
+			if (gve->func_pre == NULL) {
+					// set defaults
+				if (gve->arg == G_OPTION_ARG_STRING) {
+					*(char **)gve->arg_data=strdup(gve->char_default);
+				}
+				if (gve->arg == G_OPTION_ARG_INT) {
+					*(int *)gve->arg_data=gve->int_default*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );	
+				}
+				if (gve->arg == G_OPTION_ARG_INT64) {
+					//*(long long *)gve->arg_data= (long long) gve->int_default*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );	
+					long long r=(long long) gve->int_default*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );	
+					memcpy(gve->arg_data,&r,sizeof(long long));
+				}
+			}
+		}
+		if (gve->func_post) {
+			proxy_debug(PROXY_DEBUG_GENERIC, 5, "Variable %s has post function\n", gve->key_name);
+			gve->func_post(gve);
+		}
+	}
+}
 
 
 void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *config_file) {
@@ -83,48 +160,6 @@ int init_global_variables(GKeyFile *gkf) {
 				if (r >= 0 ) { gdbg_lvl[i].verbosity=r; }
 			}	
 		}
-/*
-		gdbg_lvl[PROXY_DEBUG_GENERIC]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_generic", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_generic", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_GENERIC]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_NET]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_net", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_net", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_NET]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_PKT_ARRAY]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_pkt_array", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_pkt_array", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_PKT_ARRAY]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_MEMORY]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_memory", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_memory", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_MEMORY]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_POLL]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_poll", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_poll", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_POLL]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_MYSQL_COM]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_mysql_com", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_mysql_com", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_MYSQL_COM]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_MYSQL_AUTH]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_mysql_auth", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_mysql_auth", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_MYSQL_AUTH]=r; }
-		}
-		gdbg_lvl[PROXY_DEBUG_SQLITE]=0;
-		if (g_key_file_has_key(gkf, "debug", "debug_sqlite", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "debug", "debug_sqlite", &error);
-			if (r >= 0 ) { gdbg_lvl[PROXY_DEBUG_SQLITE]=r; }
-		}
-*/
 	}
 
 	
@@ -177,47 +212,8 @@ int init_global_variables(GKeyFile *gkf) {
 	}
 
 
-	
-	// set core dump file size
-	glovars.core_dump_file_size=0;
-	if (g_key_file_has_key(gkf, "global", "core_dump_file_size", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "core_dump_file_size", &error);
-		struct rlimit rlim;
-		rlim.rlim_cur=r;
-		rlim.rlim_max=r;
-		setrlimit(RLIMIT_CORE,&rlim);
-	}
 
-	// set stack_size
-	glovars.stack_size=512*1024;	// default stack_size
-	if (g_key_file_has_key(gkf, "global", "stack_size", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "stack_size", &error);
-		if (r >= 64*1024 ) {		// minimum stack_size is 64KB
-			glovars.stack_size=r/1024*1024;	// rounding to 1K
-		}
-	}
 
-	pthread_mutex_init(&conn_queue_pool.mutex, NULL);
-	// set net_buffer_size
-	conn_queue_pool.size=8*1024;	// default net_buffer_size
-	if (g_key_file_has_key(gkf, "global", "net_buffer_size", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "net_buffer_size", &error);
-		if (r >= 1024 ) {		// minimum net_buffer_size
-			conn_queue_pool.size=r/1024*1024; // rounding to 1KB
-			if (r >= 1024*1024*16 ) {		// maximum net_buffer_size
-				conn_queue_pool.size=16*1024*1024; // rounding to 1KB
-			}
-		}
-	}
-
-	// set conn_qeue_allocator_blocks : this defines how many queues are allocated when more queues are needed
-	conn_queue_pool.incremental=128; // default queue allocator blocks size
-	if (g_key_file_has_key(gkf, "global", "conn_queue_allocator_blocks", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "conn_queue_allocator_blocks", &error);
-		if (r >= 64 ) {		// minimum conn_queue_allocator_blocks
-			conn_queue_pool.incremental=r/16*16; // rounding to 16
-		}
-	}
 
 	
 	pthread_mutex_init(&myds_pool.mutex, NULL);
@@ -269,180 +265,8 @@ int init_global_variables(GKeyFile *gkf) {
 		}
 	}
 
-	// set backlog
-	glovars.backlog=2000;	// used by listen()
-	if (g_key_file_has_key(gkf, "global", "backlog", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "backlog", &error);
-		if (r >= 50 ) {		// minimum backlog length
-			glovars.backlog=r;
-		}
-	}
-
-	// set proxy_mysql_port
-	glovars.proxy_mysql_port=6033;	// default proxy mysql port
-	if (g_key_file_has_key(gkf, "mysql", "proxy_mysql_port", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "proxy_mysql_port", &error);
-		if (r >= 0 ) {
-			glovars.proxy_mysql_port=r;
-		}
-	}
-
-	// set proxy_admin_port
-	glovars.proxy_admin_port=glovars.proxy_mysql_port-1;	// default proxy admin port is proxy mysql port -1
-	if (g_key_file_has_key(gkf, "global", "proxy_admin_port", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "proxy_admin_port", &error);
-		if (r >= 0 ) {
-			glovars.proxy_admin_port=r;
-		}
-	}
-
-
-	// set mysql_threads
-	glovars.mysql_threads=sysconf(_SC_NPROCESSORS_ONLN)*2;
-	if (g_key_file_has_key(gkf, "mysql", "mysql_threads", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_threads", &error);
-		if (r >= 1 ) { 	// 1 thread is the minimum
-			glovars.mysql_threads=r;
-			if ( r > 128 ) // 128 threads is the maximum
-				glovars.mysql_threads=128;
-		}
-	}
-
-	// set mysql_default_schema
-	if (g_key_file_has_key(gkf, "mysql", "mysql_default_schema", NULL)) {
-		glovars.mysql_default_schema=g_key_file_get_string(gkf, "mysql", "mysql_default_schema", &error);	
-	} else {
-		glovars.mysql_default_schema=strdup("information_schema");	// default mysql_default_schema
-	}
-
-	// set mysql_socket
-	if (g_key_file_has_key(gkf, "mysql", "mysql_socket", NULL)) {
-		glovars.mysql_socket=g_key_file_get_string(gkf, "mysql", "mysql_socket", &error);	
-	} else {
-		glovars.mysql_socket=strdup("/tmp/proxysql.sock");	// default mysql_default_schema
-	}
-
-	// enable mysql auto-reconnect
-	glovars.mysql_auto_reconnect_enabled=TRUE;
-	if (g_key_file_has_key(gkf, "mysql", "mysql_auto_reconnect_enabled", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_auto_reconnect_enabled", &error);
-		if (r == 0 ) {
-			glovars.mysql_auto_reconnect_enabled=FALSE;
-		}
-	}
-
 	// init gloQR
 	init_gloQR();
-
-	// set query cache	
-	glovars.mysql_query_cache_enabled=TRUE;
-	if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_enabled", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_enabled", &error);
-		if (r == 0 ) {
-			glovars.mysql_query_cache_enabled=FALSE;
-		}
-	}
-
-	if (glovars.mysql_query_cache_enabled==TRUE ) {
-		// set query_cache_partitions
-		glovars.mysql_query_cache_partitions=16;	// default mysql query cache partitions
-		if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_partitions", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_partitions", &error);
-			if (r >= 1 ) { 	// minimum query cache partitions
-				glovars.mysql_query_cache_partitions=r;
-			}
-		}
-
-		// set query_cache default timeout
-		glovars.mysql_query_cache_default_timeout=1;
-		if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_default_timeout", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_default_timeout", &error);
-			if (r >= 0 && r<fdb_system_var.hash_expire_max ) {
-				glovars.mysql_query_cache_default_timeout=r;
-			}
-		}
-
-		// set query_cache_precheck
-		glovars.mysql_query_cache_precheck=1;	// enabled by default
-		if (g_key_file_has_key(gkf, "mysql", "mysql_query_cache_precheck", NULL)) {
-			gint r=g_key_file_get_integer(gkf, "mysql", "mysql_query_cache_precheck", &error);
-			if (r == 0 ) {
-				glovars.mysql_query_cache_precheck=r;
-			}
-		}
-	}
-
-	// set mysql_max_resultset_size
-	glovars.mysql_max_resultset_size=1024*1024;	// default max_resultset_size
-	if (g_key_file_has_key(gkf, "mysql", "mysql_max_resultset_size", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_max_resultset_size", &error);
-		if (r >= 0 ) { 	// no minimum resultset_size
-			glovars.mysql_max_resultset_size=r;
-		}
-	}
-
-
-//#define MAX_PKT_SIZE 16777216
-#define MAX_PKT_SIZE 16777210
-	// set mysql_max_query_size
-	glovars.mysql_max_query_size=1024*1024;	// default max_query_size
-	if (g_key_file_has_key(gkf, "mysql", "mysql_max_query_size", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_max_query_size", &error);
-		if (r <= MAX_PKT_SIZE ) { 	// maximum max_query_size is 16M . This to avoid queries split over multiple packages.
-			glovars.mysql_max_query_size=r;
-		} else {
-			glovars.mysql_max_query_size=MAX_PKT_SIZE;
-		}
-	}
-
-	// set mysql_poll_timeout
-	glovars.mysql_poll_timeout=10000;	// default mysql poll timeout is milliseconds ( 10 seconds )
-	if (g_key_file_has_key(gkf, "mysql", "mysql_poll_timeout", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_poll_timeout", &error);
-		if (r >= 100 ) { 	// minimum mysql poll timeout
-			glovars.mysql_poll_timeout=r;
-		}
-	}
-
-	// set mysql_wait_timeout
-	glovars.mysql_wait_timeout=(unsigned long long) 8*3600*1000000;	// default mysql wait timeout is microseconds ( 8 hours )
-	if (g_key_file_has_key(gkf, "mysql", "mysql_wait_timeout", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_wait_timeout", &error);
-		if (r >= 1 ) { 	// minimum mysql connection pool timeout
-			glovars.mysql_wait_timeout=r*1000000;
-		}
-	}
-
-	// set mysql_server_version
-	glovars.server_version="5.1.30"; // 5.1 GA
-	if (g_key_file_has_key(gkf, "mysql", "mysql_server_version", NULL)) {
-			glovars.server_version=g_key_file_get_string(gkf, "mysql", "mysql_server_version", &error);
-	}
-
-
-	// set mysql_usage_user
-	glovars.mysql_usage_user="proxy";	// default
-	if (g_key_file_has_key(gkf, "mysql", "mysql_usage_user", NULL)) {
-			glovars.mysql_usage_user=g_key_file_get_string(gkf, "mysql", "mysql_usage_user", &error);
-	}
-
-	// set mysql_usage_password
-	glovars.mysql_usage_password="proxy";	// default
-	if (g_key_file_has_key(gkf, "mysql", "mysql_usage_password", NULL)) {
-			glovars.mysql_usage_password=g_key_file_get_string(gkf, "mysql", "mysql_usage_password", &error);
-	}
-
-	// set proxy_admin_user
-	glovars.proxy_admin_user="admin";	// default
-	if (g_key_file_has_key(gkf, "mysql", "proxy_admin_user", NULL)) {
-			glovars.mysql_usage_user=g_key_file_get_string(gkf, "mysql", "proxy_admin_user", &error);
-	}
-
-	// set proxy_admin_password
-	glovars.proxy_admin_password="admin";	// default
-	if (g_key_file_has_key(gkf, "global", "proxy_admin_password", NULL)) {
-			glovars.proxy_admin_password=g_key_file_get_string(gkf, "global", "proxy_admin_password", &error);
-	}
 
 	glomysrvs.mysql_use_masters_for_reads=1;
 	if (g_key_file_has_key(gkf, "mysql", "mysql_use_masters_for_reads", NULL)) {
@@ -466,33 +290,9 @@ int init_global_variables(GKeyFile *gkf) {
 
 
 	// create the connection pool
-	gloconnpool=mysql_connpool_init();
+	//mysql_connpool_init();
 
 
-	// enable connection pool
-	gloconnpool->enabled=TRUE;
-	if (g_key_file_has_key(gkf, "mysql", "mysql_connection_pool_enabled", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_connection_pool_enabled", &error);
-		if (r == 0 ) {
-			gloconnpool->enabled=FALSE;
-		}
-	}
-
-
-
-/*
-	glomysrvs.count_masters=3; // hardcoded for now
-	// initialize masters
-	for (i=0;i<glomysrvs.count_masters;i++) {
-		mysql_server *ms;
-		if ((ms=malloc(sizeof(mysql_server)))==NULL) { exit(1); }
-		ms->address="127.0.0.1";
-		ms->port=3306;
-		ms->connections=0;
-		ms->alive=1;
-		g_ptr_array_add(glomysrvs.servers_masters, (gpointer) ms);
-	}
-*/
 	// load all servers
 	glomysrvs.count_masters=0;
 	glomysrvs.count_slaves=0;
@@ -580,26 +380,10 @@ int init_global_variables(GKeyFile *gkf) {
 	pthread_rwlock_unlock(&glovars.rwlock_usernames);
 }
 
-	pthread_mutex_lock(&conn_queue_pool.mutex);
-	conn_queue_pool.blocks=g_ptr_array_new();
-
-	for (i=0;i<1;i++) { // create a memory block for queues
-		mem_block_t *mb=create_mem_block(&conn_queue_pool);
-		g_ptr_array_add(conn_queue_pool.blocks,mb);	
-	}
-	pthread_mutex_unlock(&conn_queue_pool.mutex);
 
 
-/*
-	for (i=0;i<glovars.count_slaves;i++) {
-		if ((glovars.servers_slaves[i]=malloc(sizeof(mysql_server)))==NULL) { exit(1); }
-			glovars.servers_slaves[i]->address="127.0.0.1";
-			glovars.servers_slaves[i]->port=3306;
-			glovars.servers_slaves[i]->connections=0;
-			glovars.servers_slaves[i]->valid=1;
-	}
-*/
 	pthread_rwlock_unlock(&glovars.rwlock_global);
+	process_global_variables_from_file(gkf);
 	return 0;
 }
 
@@ -621,4 +405,32 @@ mysql_server * new_server_slave() {
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;
+}
+
+void pre_variable_mysql_threads(global_variable_entry_t *gve) {
+	int rc=sysconf(_SC_NPROCESSORS_ONLN)*2;
+	assert(rc>0);
+	*(int *)gve->arg_data=rc;
+}
+
+void post_variable_core_dump_file_size(global_variable_entry_t *gve) {
+	int r=*(int *)gve->arg_data;
+	struct rlimit rlim;
+	rlim.rlim_cur=r;
+	rlim.rlim_max=r;
+	int rc;
+	rc=setrlimit(RLIMIT_CORE,&rlim);
+	assert(rc==0);
+}
+
+void post_variable_net_buffer_size(global_variable_entry_t *gve) {
+	pthread_mutex_init(&conn_queue_pool.mutex, NULL);
+	conn_queue_pool.incremental=128; // default queue allocator blocks size
+	pthread_mutex_lock(&conn_queue_pool.mutex);
+	conn_queue_pool.blocks=g_ptr_array_new();
+	{ // create a memory block for queues
+		mem_block_t *mb=create_mem_block(&conn_queue_pool);
+		g_ptr_array_add(conn_queue_pool.blocks,mb);	
+	}
+	pthread_mutex_unlock(&conn_queue_pool.mutex);
 }

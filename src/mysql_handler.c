@@ -48,7 +48,7 @@ void mysql_session_close(mysql_session_t *sess) {
 	if (sess->master_myds) {
 		if (sess->master_mycpe) {
 			if (sess->master_mycpe->conn) {
-				mysql_connpool_detach_connection(gloconnpool, sess->master_mycpe);
+				mysql_connpool_detach_connection(&gloconnpool, sess->master_mycpe);
 			}
 		}
 		mysql_data_stream_close(sess->master_myds);
@@ -56,7 +56,7 @@ void mysql_session_close(mysql_session_t *sess) {
 	if (sess->slave_myds) {
 		if (sess->slave_mycpe) {
 			if (sess->slave_mycpe->conn) {
-				mysql_connpool_detach_connection(gloconnpool, sess->slave_mycpe);
+				mysql_connpool_detach_connection(&gloconnpool, sess->slave_mycpe);
 			}
 		}
 		mysql_data_stream_close(sess->slave_myds);
@@ -131,7 +131,7 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		if (sess->slave_myds) {
 			if (sess->slave_mycpe) {
 				if (sess->slave_mycpe->conn) {
-					mysql_connpool_detach_connection(gloconnpool, sess->slave_mycpe);
+					mysql_connpool_detach_connection(&gloconnpool, sess->slave_mycpe);
 				}
 			}
 			mysql_data_stream_close(sess->slave_myds);
@@ -307,7 +307,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 		process_query_rules(sess);
 		if (
 			(sess->client_command==COM_QUERY) &&
-			( sess->query_info.caching_ttl > 0 )
+			( sess->query_info.cache_ttl > 0 )
 		) {
 			sess->query_to_cache=TRUE;	  // cache the query
 			compute_query_checksum(sess);
@@ -331,7 +331,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 						sess->healthy=0;
 						return ;
 					}
-					sess->slave_mycpe=mysql_connpool_get_connection(gloconnpool, sess->slave_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->slave_ptr->port);
+					sess->slave_mycpe=mysql_connpool_get_connection(&gloconnpool, sess->slave_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->slave_ptr->port);
 					if (sess->slave_mycpe==NULL) {
 						// handle error!!
 						sess->healthy=0;
@@ -489,7 +489,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 							}
 							// insert in the query cache
 							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
-							fdb_set(&QC, kp, strlen(kp), vp, sess->resultset_size, sess->query_info.caching_ttl, FALSE);
+							fdb_set(&QC, kp, strlen(kp), vp, sess->resultset_size, sess->query_info.cache_ttl, FALSE);
 							//g_free(kp);
 							//g_free(vp);
 						}
@@ -617,7 +617,7 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
 						return -1;
 					}
-					sess->master_mycpe=mysql_connpool_get_connection(gloconnpool, sess->master_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->master_ptr->port);
+					sess->master_mycpe=mysql_connpool_get_connection(&gloconnpool, sess->master_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->master_ptr->port);
 					if (sess->master_mycpe==NULL) {
 						// handle error!!
 						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
@@ -693,7 +693,7 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	}
 	sess->query_info.flagOUT=0;
 	sess->query_info.rewritten=0;
-	sess->query_info.caching_ttl=0;
+	sess->query_info.cache_ttl=0;
 	sess->query_info.destination_hostgroup=0;
 	sess->query_info.audit_log=0;
 	sess->query_info.performance_log=0;
@@ -770,9 +770,9 @@ void process_query_rules(mysql_session_t *sess) {
 			flagIN=qr->flagOUT;
 			sess->query_info.flagOUT=flagIN;
 		}
-		if (qr->caching_ttl) {
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has non-zero caching_ttl: %d. Query will%s hit the cache\n", qr->rule_id, qr->caching_ttl, (qr->caching_ttl < 0 ? " NOT" : "" ));
-			sess->query_info.caching_ttl=qr->caching_ttl;
+		if (qr->cache_ttl) {
+			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has non-zero cache_ttl: %d. Query will%s hit the cache\n", qr->rule_id, qr->cache_ttl, (qr->cache_ttl < 0 ? " NOT" : "" ));
+			sess->query_info.cache_ttl=qr->cache_ttl;
 		}
 		g_match_info_free(match_info);
 		if (qr->destination_hostgroup>0) {
@@ -787,26 +787,26 @@ void process_query_rules(mysql_session_t *sess) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has set performance_log\n", qr->rule_id);
 			sess->query_info.performance_log=qr->performance_log;
 		}
-		if (sess->query_info.caching_ttl) {
+		if (sess->query_info.cache_ttl) {
 			goto exit_process_query_rules;
 		}
 	}
 	exit_process_query_rules:
 	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "End processing query rules\n");
 	pthread_rwlock_unlock(&gloQR.rwlock);
-	// if the query reached this point with caching_ttl==0 , we set it to the default
-	if (sess->query_info.caching_ttl==0) {
+	// if the query reached this point with cache_ttl==0 , we set it to the default
+	if (sess->query_info.cache_ttl==0) {
 		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Query has no caching TTL, setting the default\n");
-		sess->query_info.caching_ttl=glovars.mysql_query_cache_default_timeout;
+		sess->query_info.cache_ttl=glovars.mysql_query_cache_default_timeout;
 	}
-	// if the query reached this point with caching_ttl==-1 , we set it to 0
-	if (sess->query_info.caching_ttl==-1) {
+	// if the query reached this point with cache_ttl==-1 , we set it to 0
+	if (sess->query_info.cache_ttl==-1) {
 		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 6, "Query won't be cached\n");
-		sess->query_info.caching_ttl=0;
+		sess->query_info.cache_ttl=0;
 	}
 	// if the query is flagged to be cached but mysql_query_cache_enabled=0 , the query needs to be flagged to NOT be cached
 	if (glovars.mysql_query_cache_enabled==FALSE) {
-		sess->query_info.caching_ttl=0;
+		sess->query_info.cache_ttl=0;
 	}
 }
 

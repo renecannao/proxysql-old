@@ -53,7 +53,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 				}
 				sess->server_mycpe=NULL;
 			}
-			mycpe=mysql_connpool_get_connection(gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
+			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
 			// try it
 			if (mycpe) {
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
@@ -107,6 +107,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 }
 
 
+/*
 myConnPools *mysql_connpool_init() {
 	myConnPools *cp;
 	if ((cp=malloc(sizeof(myConnPools)))==NULL) { exit(EXIT_FAILURE); }
@@ -115,6 +116,12 @@ myConnPools *mysql_connpool_init() {
 	cp->enabled=TRUE;	// enabled by default
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Main connection pool struct created\n");
 	return cp;
+}
+*/
+void mysql_connpool_init(global_variable_entry_t *gve) {
+	pthread_mutex_init(&gloconnpool.mutex, NULL);
+	gloconnpool.connpools=g_ptr_array_new();
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Main connection pool struct created\n");
 }
 
 
@@ -266,16 +273,16 @@ void * mysql_connpool_purge_thread() {
 	GPtrArray *conns=g_ptr_array_new();
 	while(1) {
 		usleep(1000000);
-		if (gloconnpool->enabled==FALSE) {
+		if (gloconnpool.enabled==0) {
 			continue;
 		}
 		unsigned int i;
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 		unsigned long long curr_time=(tv.tv_sec) * 1000000 + (tv.tv_usec);
-		pthread_mutex_lock(&gloconnpool->mutex);
-		for (i=0; i<gloconnpool->connpools->len; i++) {
-			mysql_connpool *mcp=g_ptr_array_index(gloconnpool->connpools,i);
+		pthread_mutex_lock(&gloconnpool.mutex);
+		for (i=0; i<gloconnpool.connpools->len; i++) {
+			mysql_connpool *mcp=g_ptr_array_index(gloconnpool.connpools,i);
 			int l=mcp->free_conns->len;
 			while (l>0) {
 				l--;
@@ -287,7 +294,7 @@ void * mysql_connpool_purge_thread() {
 				}
 			}
 		}
-		pthread_mutex_unlock(&gloconnpool->mutex);
+		pthread_mutex_unlock(&gloconnpool.mutex);
 		for (i=0; i<conns->len; i++) {
 			mysql_cp_entry_t *mc=g_ptr_array_index(conns,0);
 			g_ptr_array_remove_index_fast(conns,0);

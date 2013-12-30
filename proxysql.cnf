@@ -13,13 +13,13 @@ mysql_max_query_size=1048576
 mysql_query_cache_enabled=1
 mysql_query_cache_partitions=16
 mysql_query_cache_default_timeout=30
-mysql_threads=3
+#mysql_threads=4
 mysql_socket=/tmp/proxysql.sock
 [mysql users]
 vegaicm=password
 root=
 [debug]
-#debug_generic=6
+debug_generic=6
 #debug_net=6
 #debug_pkt_array=3
 #debug_memory=3

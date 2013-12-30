@@ -16,3 +16,11 @@
 *.exe
 *.out
 *.app
+
+# SQLITE files
+proxysql.db*
+
+#binary
+proxysql
+
+notes.txt
