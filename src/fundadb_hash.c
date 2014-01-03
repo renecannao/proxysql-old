@@ -120,7 +120,7 @@ void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expir
 
 
 void *purgeHash_thread(void *arg) {
-	unsigned long long min_idx=0;
+	long long min_idx=0;
 	fdb_hashes_group_t *hg=arg;
 	while(glovars.shutdown==0) {
 		usleep(fdb_system_var.hash_purge_loop);
@@ -132,6 +132,7 @@ void *purgeHash_thread(void *arg) {
 				if (hg->fdb_hashes[i]->ptrArray->len) {
 					hg->fdb_hashes[i]->purgeIdx=hg->fdb_hashes[i]->ptrArray->len;
 					hg->fdb_hashes[i]->purgeChunkSize=hg->fdb_hashes[i]->ptrArray->len*fdb_system_var.hash_purge_loop/fdb_system_var.hash_purge_time;
+					if (hg->fdb_hashes[i]->purgeChunkSize < 10) { hg->fdb_hashes[i]->purgeChunkSize=hg->fdb_hashes[i]->ptrArray->len; } // this should prevent a bug with few entries left in the cache
 				}
 			}
 			time_t t=hg->now;

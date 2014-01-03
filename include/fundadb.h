@@ -36,9 +36,9 @@ struct __fdb_hash_t {
     pthread_rwlock_t lock;
     GHashTable *hash;
     GPtrArray *ptrArray;
-    unsigned long long dataSize;
-    unsigned long long purgeChunkSize;
-    unsigned long long purgeIdx;
+    long long dataSize;
+    long long purgeChunkSize;
+    long long purgeIdx;
 };
 
 struct __fdb_hashes_group_t {
