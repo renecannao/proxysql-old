@@ -153,6 +153,7 @@ typedef struct _query_rule_t { // use g_slice_alloc
 	int invalidate_cache_tag;
 	char *invalidate_cache_pattern; // use g_malloc/g_free
 	int cache_ttl;
+	unsigned int hits;
 } query_rule_t;
 
 

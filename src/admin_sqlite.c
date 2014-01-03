@@ -392,8 +392,8 @@ int sqlite3_dump_runtime_query_rules() {
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_query_rules\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_query_rules");
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_hostgroups\n");
-	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_query_rules (rule_id INT NOT NULL PRIMARY KEY, active INT NOT NULL DEFAULT 0, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)");
-	char *query="INSERT INTO runtime_query_rules(rule_id, active, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES (?1 , ?2, ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10 , ?11 , ?12 , ?13 , ?14 , ?15 , ?16 )";
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_query_rules (rule_id INT NOT NULL PRIMARY KEY, hits INT NOT NULL DEFAULT 0, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)");
+	char *query="INSERT INTO runtime_query_rules(rule_id, hits, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES (?1 , ?2, ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10 , ?11 , ?12 , ?13 , ?14 , ?15 , ?16 )";
 	//char *query="INSERT INTO runtime_query_rules(rule_id, active, flagIN) VALUES (? , ?, ?)";
 	rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
 	assert(rc==SQLITE_OK);
@@ -401,7 +401,7 @@ int sqlite3_dump_runtime_query_rules() {
 	for(i=0;i<gloQR.query_rules->len;i++) {
         query_rule_t *qr = g_ptr_array_index(gloQR.query_rules,i);
 		rc=sqlite3_bind_int(statement, 1, qr->rule_id); 	assert(rc==SQLITE_OK);
-		rc=sqlite3_bind_int(statement, 2, 1); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 2, qr->hits); assert(rc==SQLITE_OK);
 		rc=sqlite3_bind_int(statement, 3, qr->flagIN); assert(rc==SQLITE_OK);
 		rc=sqlite3_bind_text(statement, 4, qr->username, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
 		rc=sqlite3_bind_text(statement, 5, qr->schemaname, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
@@ -510,6 +510,7 @@ int sqlite3_flush_query_rules_db_to_mem() {
 			proxy_error("Out of range value for cache_ttl (%d) on rule_id %d\n", qr->cache_ttl, qr->rule_id);
 			qr->cache_ttl=-1;
 		}
+		qr->hits=0;
 		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Adding query rules with id %d : flagIN %d ; username \"%s\" ; schema \"%s\" ; match_pattern \"%s\" ; negate_match_pattern %d ; flagOUT %d ; replace_pattern \"%s\" ; destination_hostgroup %d ; audit_log %d ; performance_log %d ; cache_tag %d ; invalidate_cache_tag %d ; invalidate_cache_pattern \"%s\" ; cache_ttl %d\n", qr->rule_id, qr->flagIN , qr->username , qr->schemaname , qr->match_pattern , qr->negate_match_pattern , qr->flagOUT , qr->replace_pattern , qr->destination_hostgroup , qr->audit_log , qr->performance_log , qr->cache_tag, qr->invalidate_cache_tag , qr->invalidate_cache_pattern , qr->cache_ttl);
 		qr->regex=g_regex_new(qr->match_pattern, G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
 		if (qr->destination_hostgroup < glovars.mysql_hostgroups) {

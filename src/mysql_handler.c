@@ -837,6 +837,8 @@ void process_query_rules(mysql_session_t *sess) {
 			g_match_info_free(match_info);
 			continue;
 		}
+		// if we arrived here, we have a match
+		__sync_fetch_and_add(&qr->hits,1);
 		if (qr->replace_pattern) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d on match_pattern \"%s\" has a replace_pattern \"%s\" to apply\n", qr->rule_id, qr->match_pattern, qr->replace_pattern);
 			GError *error=NULL;
