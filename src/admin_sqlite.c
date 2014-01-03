@@ -481,3 +481,28 @@ int sqlite3_flush_query_rules_db_to_mem() {
 	sqlite3_finalize(statement);
 	return rownum;
 };
+
+int sqlite3_dump_runtime_hostgroups() {
+	int i;
+	int j;
+	int numrow=0;
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_hostgroups");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_hostgroups ( hostgroup_id INT NOT NULL DEFAULT 0, hostname VARCHAR NOT NULL , port INT NOT NULL DEFAULT 3306, PRIMARY KEY (hostgroup_id, hostname, port) )");
+	char *query="INSERT INTO runtime_hostgroups VALUES (%d ,\"%s\", %d)";
+	int l;
+	pthread_rwlock_rdlock(&glomysrvs.rwlock);
+	for(i=0;i<glovars.mysql_hostgroups;i++) {
+		GPtrArray *sl=g_ptr_array_index(glomysrvs.mysql_hostgroups,i);
+		for(j=0;j<sl->len;j++) {
+			mysql_server *ms=g_ptr_array_index(sl,j);
+			l=strlen(query)+strlen(ms->address)+14;
+			char *buff=g_malloc0(l);
+			sprintf(buff,query,i,ms->address,ms->port);
+			sqlite3_exec_exit_on_failure(sqlite3configdb,buff);
+			g_free(buff);
+			numrow++;
+		}
+	}
+	pthread_rwlock_rdlock(&glomysrvs.rwlock);
+	return numrow;
+}
