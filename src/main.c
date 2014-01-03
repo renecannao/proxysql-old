@@ -386,7 +386,7 @@ int main(int argc, char **argv) {
 	int *args=g_malloc0(sizeof(int)*(glovars.mysql_threads+1));
 
 	// while all other threads are detachable, the mysql connections handlers are not
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+//	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	for (i=0; i< glovars.mysql_threads+1; i++) {
 		args[i]=i;
 		int rc;
@@ -399,5 +399,8 @@ int main(int argc, char **argv) {
 	}
 	g_free(thi);
 	g_free(args);
+	pthread_join(thread_dt, NULL);
+	pthread_join(thread_cppt, NULL);
+	pthread_join(thread_qct, NULL);
 	return 0;
 }

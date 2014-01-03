@@ -251,7 +251,7 @@ typedef struct _global_variables {
 	pthread_rwlock_t rwlock_global;
 	pthread_rwlock_t rwlock_usernames;
 
-	gboolean shutdown;
+	int shutdown;
 
 	unsigned char protocol_version;
 	char *mysql_server_version;

@@ -122,7 +122,7 @@ void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expir
 void *purgeHash_thread(void *arg) {
 	unsigned long long min_idx=0;
 	fdb_hashes_group_t *hg=arg;
-	while(1) {
+	while(glovars.shutdown==0) {
 		usleep(fdb_system_var.hash_purge_loop);
 		hg->now=time(NULL);
 		unsigned char i;
@@ -157,4 +157,6 @@ void *purgeHash_thread(void *arg) {
 			pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
 		}
 	}
+	proxy_error("Shutdown purgeHash_thread\n");
+	return;
 }

@@ -274,7 +274,7 @@ void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc) {
 
 void * mysql_connpool_purge_thread() {
 	GPtrArray *conns=g_ptr_array_new();
-	while(1) {
+	while(glovars.shutdown==0) {
 		usleep(1000000);
 		if (gloconnpool.enabled==0) {
 			continue;
@@ -305,4 +305,6 @@ void * mysql_connpool_purge_thread() {
 			free(mc);
 		}
 	}
+	proxy_error("Shutdown mysql_connpool_purge_thread\n");
+	return;
 }

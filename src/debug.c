@@ -33,7 +33,7 @@ void * dump_timers() {
 	timers_name[4]="processdata  ";
 	timers_name[5]="find_queue   ";
 	timers_name[6]="find_queue   ";
-	while (1) {
+	while (glovars.shutdown==0) {
 		sleep(glovars.print_statistics_interval);
 		if (glovars.verbose < 10 || glovars.enable_timers==0) continue;
 		for (i=0;i<TOTAL_TIMERS;i++)
@@ -46,6 +46,9 @@ void * dump_timers() {
 			fprintf(stderr,"QC entries: %d , SET: %llu , GET: %llu(OK)/%llu(Total) , Purged: %llu\n", QC_entries, QC.cntSet, QC.cntGetOK, QC.cntGet, QC.cntPurge);
 		}
 	}
+	free(timers_name);
+	proxy_error("Shutdown dump_timers\n");
+	return;
 }
 
 
