@@ -384,6 +384,48 @@ void admin_init_sqlite3() {
 	}
 }
 
+int sqlite3_dump_runtime_query_rules() {
+	int i;
+	int rc;
+	int numrow=0;
+	sqlite3_stmt *statement;
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_query_rules\n");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_query_rules");
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_hostgroups\n");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_query_rules (rule_id INT NOT NULL PRIMARY KEY, active INT NOT NULL DEFAULT 0, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)");
+	char *query="INSERT INTO runtime_query_rules(rule_id, active, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES (?1 , ?2, ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10 , ?11 , ?12 , ?13 , ?14 , ?15 , ?16 )";
+	//char *query="INSERT INTO runtime_query_rules(rule_id, active, flagIN) VALUES (? , ?, ?)";
+	rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
+	assert(rc==SQLITE_OK);
+	pthread_rwlock_wrlock(&gloQR.rwlock);
+	for(i=0;i<gloQR.query_rules->len;i++) {
+        query_rule_t *qr = g_ptr_array_index(gloQR.query_rules,i);
+		rc=sqlite3_bind_int(statement, 1, qr->rule_id); 	assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 2, 1); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 3, qr->flagIN); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_text(statement, 4, qr->username, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_text(statement, 5, qr->schemaname, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_text(statement, 6, qr->match_pattern, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 7, qr->negate_match_pattern); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 8, qr->flagOUT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_text(statement, 9, qr->replace_pattern, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 10, qr->destination_hostgroup); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 11, qr->audit_log); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 12, qr->performance_log); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 13, qr->cache_tag); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 14, qr->invalidate_cache_tag); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_text(statement, 15, qr->invalidate_cache_pattern, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 16, qr->cache_ttl); assert(rc==SQLITE_OK);
+		rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+		rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+		rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+		numrow++;
+	}
+	sqlite3_finalize(statement);
+	pthread_rwlock_unlock(&gloQR.rwlock);
+	return numrow;
+}
+
 int sqlite3_flush_query_rules_db_to_mem() {
 	// before calling this function we should so some input data validation to verify the content of the table
 	int i;

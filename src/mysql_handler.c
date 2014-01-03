@@ -318,6 +318,13 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		g_ptr_array_add(sess->client_myds->output.pkts, ok);
 		return;
 	}
+	if (strncasecmp("DUMP RUNTIME QUERY RULES",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		int affected_rows=sqlite3_dump_runtime_query_rules();
+	    pkt *ok=mypkt_alloc(sess);
+		myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+		g_ptr_array_add(sess->client_myds->output.pkts, ok);
+		return;
+	}
 	rc=mysql_pkt_to_sqlite_exec(p, sess);
 	mypkt_free(p,sess,1);
 

@@ -27,3 +27,4 @@ int sqlite3_flush_servers_db_to_mem();
 void sqlite3_flush_servers_mem_to_db(int);
 int sqlite3_flush_query_rules_db_to_mem();
 int sqlite3_dump_runtime_hostgroups();
+int sqlite3_dump_runtime_query_rules();
