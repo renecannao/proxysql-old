@@ -394,7 +394,6 @@ int sqlite3_dump_runtime_query_rules() {
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_hostgroups\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_query_rules (rule_id INT NOT NULL PRIMARY KEY, hits INT NOT NULL DEFAULT 0, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)");
 	char *query="INSERT INTO runtime_query_rules(rule_id, hits, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES (?1 , ?2, ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10 , ?11 , ?12 , ?13 , ?14 , ?15 , ?16 )";
-	//char *query="INSERT INTO runtime_query_rules(rule_id, active, flagIN) VALUES (? , ?, ?)";
 	rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
 	assert(rc==SQLITE_OK);
 	pthread_rwlock_wrlock(&gloQR.rwlock);
@@ -550,5 +549,32 @@ int sqlite3_dump_runtime_hostgroups() {
 		}
 	}
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return numrow;
+}
+
+int sqlite3_dump_runtime_query_cache() {
+	int i;
+	int rc;
+	int numrow=0;
+	sqlite3_stmt *statement;
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_query_cache\n");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_query_cache");
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_query_cache\n");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_query_cache ( current_entries INT NOT NULL, count_SET INT NOT NULL, count_GET INT NOT NULL, count_GET_OK INT NOT NULL, count_purged INT NOT NULL)");
+	char *query="INSERT INTO runtime_query_cache VALUES (?1 , ?2 , ?3 , ?4 , ?5)";
+	rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
+	assert(rc==SQLITE_OK);
+	int QC_entries=0;
+	for (i=0; i<QC.size; i++) QC_entries+=QC.fdb_hashes[i]->ptrArray->len;
+	rc=sqlite3_bind_int(statement, 1, QC_entries); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int64(statement, 2, QC.cntSet); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int64(statement, 3, QC.cntGet); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int64(statement, 4, QC.cntGetOK); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int64(statement, 5, QC.cntPurge); assert(rc==SQLITE_OK);
+	rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+	rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+	rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+	numrow++;
+	sqlite3_finalize(statement);
 	return numrow;
 }
