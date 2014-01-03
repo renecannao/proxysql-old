@@ -17,6 +17,8 @@
 *.out
 *.app
 
+*.swp
+
 # SQLITE files
 proxysql.db*
 

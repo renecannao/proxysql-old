@@ -486,12 +486,15 @@ int sqlite3_dump_runtime_hostgroups() {
 	int i;
 	int j;
 	int numrow=0;
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_hostgroups\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_hostgroups");
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_hostgroups\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_hostgroups ( hostgroup_id INT NOT NULL DEFAULT 0, hostname VARCHAR NOT NULL , port INT NOT NULL DEFAULT 3306, PRIMARY KEY (hostgroup_id, hostname, port) )");
 	char *query="INSERT INTO runtime_hostgroups VALUES (%d ,\"%s\", %d)";
 	int l;
 	pthread_rwlock_rdlock(&glomysrvs.rwlock);
 	for(i=0;i<glovars.mysql_hostgroups;i++) {
+		proxy_debug(PROXY_DEBUG_SQLITE, 5, "Populating runtime_hostgroups with hosts from hostgroup %d", i);
 		GPtrArray *sl=g_ptr_array_index(glomysrvs.mysql_hostgroups,i);
 		for(j=0;j<sl->len;j++) {
 			mysql_server *ms=g_ptr_array_index(sl,j);
@@ -503,6 +506,6 @@ int sqlite3_dump_runtime_hostgroups() {
 			numrow++;
 		}
 	}
-	pthread_rwlock_rdlock(&glomysrvs.rwlock);
+	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return numrow;
 }
