@@ -41,6 +41,9 @@ mysql_server * new_server_slave();
 void process_global_variables_from_file(GKeyFile *);
 void main_opts(const GOptionEntry *, gint *, gchar ***, gchar *);
 
+void init_glomysrvs(global_variable_entry_t *);
+void load_mysql_users_from_file(GKeyFile *);
+void load_mysql_servers_list_from_file(GKeyFile *);
 void pre_variable_mysql_threads(global_variable_entry_t *);
 void post_variable_core_dump_file_size(global_variable_entry_t *);
 void post_variable_net_buffer_size(global_variable_entry_t *);

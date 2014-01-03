@@ -39,6 +39,12 @@ enum enum_resultset_progress {
 	RESULTSET_COMPLETED
 };
 
+enum mysql_server_status {
+	MYSQL_SERVER_STATUS_OFFLINE = 0,
+	MYSQL_SERVER_STATUS_SHUNNED = 1,
+	MYSQL_SERVER_STATUS_ONLINE = 2,
+};
+
 typedef struct _queue_t {
 	void *buffer;
 	int size;
@@ -58,8 +64,11 @@ typedef struct _pkt {
 } pkt;
 
 typedef struct _mysql_server {
+//	char *name;
 	char *address;
 	uint16_t port;
+	int read_only;
+	int status;
 	uint16_t flags;
 	unsigned int connections;
 	unsigned char alive;
@@ -176,6 +185,15 @@ typedef struct _mysql_query_metadata_t {
 	int query_len;
 } mysql_query_metadata_t ;
 
+
+typedef struct _mysql_backend_t {
+	int fd;
+	mysql_server *server_ptr;
+	mysql_data_stream_t *server_myds;
+	mysql_cp_entry_t *server_mycpe;
+	bytes_stats server_bytes_at_cmd;
+} mysql_backend_t;
+
 struct _mysql_session_t {
 	proxy_mysql_thread_t *handler_thread;
 	int healthy;
@@ -197,16 +215,24 @@ struct _mysql_session_t {
 	gboolean query_to_cache; // must go into query_info
 	GPtrArray *resultset; 
 	mysql_server *server_ptr;
+/* obsoleted by hostgroup : BEGIN
 	mysql_server *master_ptr;
 	mysql_server *slave_ptr;
+obsoleted by hostgroup : END */
 	mysql_data_stream_t *client_myds;
 	mysql_data_stream_t *server_myds;
+/* obsoleted by hostgroup : BEGIN
 	mysql_data_stream_t *master_myds;
 	mysql_data_stream_t *slave_myds;
+obsoleted by hostgroup : END */
 //	mysql_data_stream_t *idle_server_myds;
 	mysql_cp_entry_t *server_mycpe;
+/* obsoleted by hostgroup : BEGIN
 	mysql_cp_entry_t *master_mycpe;
 	mysql_cp_entry_t *slave_mycpe;
+obsoleted by hostgroup : END */
+	GPtrArray *mybes;
+
 //	mysql_cp_entry_t *idle_server_mycpe;
 	char *mysql_username;
 	char *mysql_password;
@@ -236,6 +262,8 @@ typedef struct _global_variables {
 	uint32_t	thread_id;
 
 
+	int merge_configfile_db;
+
 	gint core_dump_file_size;
 	int stack_size;
 	gint proxy_mysql_port;
@@ -257,6 +285,8 @@ typedef struct _global_variables {
 	unsigned long long mysql_wait_timeout;
 	int mysql_max_resultset_size;
 	int mysql_max_query_size;
+
+	int mysql_hostgroups;
 
 	// this user needs only USAGE grants
 	// and it is use only to create a connection
@@ -294,14 +324,16 @@ typedef struct _global_mysql_servers {
 	pthread_rwlock_t rwlock;
 	unsigned int mysql_connections_max;
 	unsigned int mysql_connections_cur;
+	unsigned int servers_count;
 	unsigned int count_masters;
 	unsigned int count_slaves;
 	gchar **mysql_servers_name;	// used to parse config file
-	//GPtrArray *servers;
+	GPtrArray *servers;
 	GPtrArray *servers_masters;
 	GPtrArray *servers_slaves;	
 	GPtrArray *mysql_connections;
 	gboolean mysql_use_masters_for_reads;	
+	GPtrArray *mysql_hostgroups;
 } global_mysql_servers;
 
 
@@ -386,3 +418,5 @@ struct _global_variable_entry_t {
 	void (*func_post)(global_variable_entry_t *);
 };
 
+
+//#define MYSQL_SERVER_STATUS_OFFLINE	0

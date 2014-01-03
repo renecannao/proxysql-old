@@ -2,6 +2,7 @@
 
 
 void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thread) {
+	int i;
 	// register the connection
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	g_ptr_array_add(glomysrvs.mysql_connections, sess);
@@ -9,14 +10,20 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	// generic initalization
 	sess->server_ptr=NULL;
+/* obsoleted by hostgroup : BEGIN
 	sess->master_ptr=NULL;
 	sess->slave_ptr=NULL;
+obsoleted by hostgroup : END */
 	sess->server_myds=NULL;
+/* obsoleted by hostgroup : BEGIN
 	sess->master_myds=NULL;
 	sess->slave_myds=NULL;
+obsoleted by hostgroup : END */
 	sess->server_mycpe=NULL;
+/* obsoleted by hostgroup : BEGIN
 	sess->master_mycpe=NULL;
 	sess->slave_mycpe=NULL;
+obsoleted by hostgroup : END */
 	sess->mysql_username=NULL;
 	sess->mysql_password=NULL;
 	sess->mysql_schema_cur=NULL;
@@ -38,13 +45,32 @@ void mysql_session_init(mysql_session_t *sess, proxy_mysql_thread_t *handler_thr
 	sess->client_command=COM_END;   // always reset this
 	sess->send_to_slave=FALSE;
 	memset(&sess->query_info,0,sizeof(mysql_query_metadata_t));
+	
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Initializing mysql backends for session %p\n", sess);
+	sess->mybes=g_ptr_array_sized_new(glovars.mysql_hostgroups);
+	for (i=0;i<glovars.mysql_hostgroups;i++) {
+		mysql_backend_t *mybe=g_slice_alloc0(sizeof(mysql_backend_t));
+		g_ptr_array_add(sess->mybes, mybe);
+	}
 }
 
 
+void reset_mysql_backend(mysql_backend_t *mybe) {
+	if (mybe->server_myds) {
+		mysql_data_stream_close(mybe->server_myds);
+	}
+	if (mybe->server_mycpe) {
+		mysql_connpool_detach_connection(&gloconnpool, mybe->server_mycpe);
+	}
+	memset(mybe,0,sizeof(mysql_backend_t));
+}
+
 void mysql_session_close(mysql_session_t *sess) {
+	int i;
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Closing connection on client fd %d (myds %d , sess %p)\n", sess->client_fd, sess->client_myds->fd, sess);
 	mysql_data_stream_close(sess->client_myds);
 	if (sess->client_myds->fd) { mysql_data_stream_shut_hard(sess->client_myds); }
+/* obsoleted by hostgroup : BEGIN
 	if (sess->master_myds) {
 		if (sess->master_mycpe) {
 			if (sess->master_mycpe->conn) {
@@ -61,6 +87,7 @@ void mysql_session_close(mysql_session_t *sess) {
 		}
 		mysql_data_stream_close(sess->slave_myds);
 	}
+obsoleted by hostgroup : END */
 	while (sess->resultset->len) {
 		pkt *p;
 		p=g_ptr_array_remove_index(sess->resultset, 0);
@@ -73,6 +100,19 @@ void mysql_session_close(mysql_session_t *sess) {
 	if (sess->mysql_password) { free(sess->mysql_password); sess->mysql_password=NULL; }
 	if (sess->mysql_schema_cur) { free(sess->mysql_schema_cur); sess->mysql_schema_cur=NULL; }
 	if (sess->mysql_schema_new) { free(sess->mysql_schema_new); sess->mysql_schema_new=NULL; }
+
+
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Freeing mysql backends for session %p\n", sess);
+	for (i=0; i<glovars.mysql_hostgroups; i++) {
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Freeing mysql backend %d for session %p\n", i, sess);
+		mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,i);
+		reset_mysql_backend(mybe);
+	}
+	while (sess->mybes->len) {
+		mysql_backend_t *mybe=g_ptr_array_remove_index_fast(sess->mybes,0);
+		g_slice_free1(sizeof(mysql_backend_t),mybe);
+	}
+	g_ptr_array_free(sess->mybes,TRUE);
 
 	sess->healthy=0;
 	init_query_metadata(sess, NULL);
@@ -128,6 +168,7 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		sess->mysql_schema_new=NULL;
 	} else {
 		// disconnect the slave
+/* obsoleted by hostgroup : BEGIN
 		if (sess->slave_myds) {
 			if (sess->slave_mycpe) {
 				if (sess->slave_mycpe->conn) {
@@ -140,6 +181,7 @@ inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 			sess->slave_myds=NULL;
 			sess->slave_mycpe=NULL;
 		}
+obsoleted by hostgroup : END */
 	}
 }
 
@@ -209,6 +251,17 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		g_ptr_array_add(sess->client_myds->output.pkts, ok);
 		return;
 	}
+	if (strncasecmp("FLUSH HOSTGROUPS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+		int affected_rows=sqlite3_flush_servers_db_to_mem();
+		if ( affected_rows>=0 ) {
+		    pkt *ok=mypkt_alloc(sess);
+			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+			g_ptr_array_add(sess->client_myds->output.pkts, ok);
+		} else {
+			// TODO: send some error
+		}
+		return;
+	}
 	if (strncasecmp("REMOVE SERVER",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 		mysql_server *ms=new_server_master();
 		// TESTING : BEGIN
@@ -272,8 +325,25 @@ inline void compute_query_checksum(mysql_session_t *sess) {
 	}
 }
 
-inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
 
+
+int get_result_from_mysql_query_cache(mysql_session_t *sess, pkt *p) {
+	compute_query_checksum(sess);
+	pkt *QCresult=NULL;
+	QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_info.query_checksum), sess);
+	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Called GET on QC for checksum %s in precheck\n", g_checksum_get_string(sess->query_info.query_checksum));
+	if (QCresult) {
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Found QC entry for checksum %s in precheck\n", g_checksum_get_string(sess->query_info.query_checksum));
+		g_ptr_array_add(sess->client_myds->output.pkts, QCresult);
+		sess->mysql_query_cache_hit=TRUE;
+		sess->query_to_cache=FALSE;	 // query already in cache
+		mypkt_free(p,sess,1);
+		return 0;
+	}
+	return -1;
+}
+
+inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
 	if (mysql_pkt_get_size(p) > glovars.mysql_max_query_size) {
 		// the packet is too big. Ignore any processing
 		sess->client_command=COM_END;
@@ -286,23 +356,11 @@ inline void client_COM_QUERY(mysql_session_t *sess, pkt *p) {
 if the query is cached:
 	destroy the pkg
 	get the packets from the cache and send it to the client
-
 if the query is not cached, mark it as to be cached and modify the code on result set
 
 */
 		if (glovars.mysql_query_cache_enabled && glovars.mysql_query_cache_precheck) {
-			compute_query_checksum(sess);
-			pkt *QCresult=NULL;
-			QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_info.query_checksum), sess);
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Called GET on QC for checksum %s in precheck\n", g_checksum_get_string(sess->query_info.query_checksum));
-			if (QCresult) {
-				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Found QC entry for checksum %s in precheck\n", g_checksum_get_string(sess->query_info.query_checksum));
-				g_ptr_array_add(sess->client_myds->output.pkts, QCresult);
-				sess->mysql_query_cache_hit=TRUE;
-				sess->query_to_cache=FALSE;	 // query already in cache
-				mypkt_free(p,sess,1);
-				return;
-			}			
+			if (get_result_from_mysql_query_cache(sess,p)==0) return;
 		}
 		process_query_rules(sess);
 		if (
@@ -310,22 +368,16 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 			( sess->query_info.cache_ttl > 0 )
 		) {
 			sess->query_to_cache=TRUE;	  // cache the query
-			compute_query_checksum(sess);
-			pkt *QCresult=NULL;
-			QCresult=fdb_get(&QC, g_checksum_get_string(sess->query_info.query_checksum), sess);
-			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Called GET on QC for checksum %s after query preprocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
-			if (QCresult) {
-				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Found QC entry for checksum %s after query preprocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
-				g_ptr_array_add(sess->client_myds->output.pkts, QCresult);
-				sess->mysql_query_cache_hit=TRUE;
-				sess->query_to_cache=FALSE;	 // query already in cache
-				mypkt_free(p,sess,1);
+			if (get_result_from_mysql_query_cache(sess,p)==0) {
 			} else {
 				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Not found QC entry for checksum %s after query prepocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
+		
+/*
 				sess->send_to_slave=TRUE;
 				if (sess->slave_ptr==NULL) {
 					// no slave assigned yet, find one!
-					sess->slave_ptr=new_server_slave();
+					//sess->slave_ptr=new_server_slave();
+					sess->slave_ptr=mysql_server_random_entry_from_hostgroup__lock(1);
 					if (sess->slave_ptr==NULL) {
 						// handle error!!
 						sess->healthy=0;
@@ -347,6 +399,7 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 				sess->server_ptr=sess->slave_ptr;
 				sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
 				sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
+*/
 			}
 		}
 //				  conn->status &= ~CONNECTION_READING_CLIENT; // NOTE: this is not true for packets >= 16MB , be careful
@@ -463,6 +516,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 						proxy_debug(PROXY_DEBUG_MYSQL_RW_SPLIT, 5, "Returning control to master. FDs: current: %d master: %d slave: %d\n", sess->server_fd , sess->master_fd , sess->slave_fd);
 						if (sess->send_to_slave==TRUE) {
 							sess->send_to_slave=FALSE;
+/* obsoleted by hostgroup : BEGIN
 							if (sess->master_myds) {
 								sess->server_myds=sess->master_myds;
 								sess->server_fd=sess->master_fd;
@@ -471,12 +525,13 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 								sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
 								sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
 							}
+obsoleted by hostgroup : END */
 						}
 
 //					  conn->status &= ~CONNECTION_READING_SERVER;
 						if (sess->query_to_cache==TRUE) {
-							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s needs to be cached\n", g_checksum_get_string(sess->query_info.query_checksum));
-							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Resultset size = %d\n", sess->resultset_size);
+							proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Query %s needs to be cached\n", g_checksum_get_string(sess->query_info.query_checksum));
+							proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Resultset size = %d\n", sess->resultset_size);
 							// prepare the entry to enter in the query cache
 							void *kp=g_strdup(g_checksum_get_string(sess->query_info.query_checksum));
 							void *vp=g_malloc(sess->resultset_size);
@@ -488,7 +543,7 @@ inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_response_
 								copied+=p->length;
 							}
 							// insert in the query cache
-							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
+							proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
 							fdb_set(&QC, kp, strlen(kp), vp, sess->resultset_size, sess->query_info.cache_ttl, FALSE);
 							//g_free(kp);
 							//g_free(vp);
@@ -551,6 +606,7 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 		c=*((unsigned char *)p->data+sizeof(mysql_hdr));
 		sess->client_command=c;	 // a new packet is read from client, set the COM_
 		sess->mysql_query_cache_hit=FALSE;
+		sess->query_to_cache=FALSE;
 		sess->send_to_slave=FALSE;
 		if ( (sess->admin==0) && ( p->length < glovars.mysql_max_query_size ) ) {
 			switch (sess->client_command) {
@@ -603,15 +659,27 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 			return -1;
 		}
 		if(sess->mysql_query_cache_hit==FALSE) {
+			if ( sess->client_command != COM_QUERY ) { // if it is not a QUERY , always send to hostgroup 0
+				sess->query_info.destination_hostgroup=0;
+			}
+			if (mysql_session_has_active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
+				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
+			}
+			mysql_backend_t *mybe=g_ptr_array_index(sess->mybes, sess->query_info.destination_hostgroup);
+			sess->server_myds=mybe->server_myds;
+			sess->server_fd=mybe->fd;
+			sess->server_mycpe=mybe->server_mycpe;
+			sess->server_ptr=mybe->server_ptr;
+			g_ptr_array_add(sess->server_myds->output.pkts, p);
+			
+/*
 			if (
 				(sess->send_to_slave==FALSE) && 
 				(sess->master_ptr==NULL) ) { // we don't have a connection to a master
-/*
-				if (sess->send_to_slave==FALSE)
-				if (sess->slave_ptr==NULL) {
-*/
+
 					// no master assigned yet, find one!
-					sess->master_ptr=new_server_master();
+					//sess->master_ptr=new_server_master();
+					sess->master_ptr=mysql_server_random_entry_from_hostgroup__lock(0);
 					if (sess->master_ptr==NULL) {
 						// handle error!!
 						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
@@ -643,11 +711,34 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 				sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
 			}
 		//debug_print("Moving pkts from %s to %s\n", "client", "server");
+*/
 		}
 	}
 	return 0;
 }
 
+
+void reset_query_rule(query_rule_t *qr) {
+	if (qr->regex) {
+		g_regex_unref(qr->regex);
+	}
+	if (qr->username) {
+		g_free(qr->username);
+	}
+	if (qr->schemaname) {
+		g_free(qr->schemaname);
+	}
+	if (qr->match_pattern) {
+		g_free(qr->match_pattern);
+	}
+	if (qr->replace_pattern) {
+		g_free(qr->replace_pattern);
+	}
+	if (qr->invalidate_cache_pattern) {
+		g_free(qr->invalidate_cache_pattern);
+	}
+	g_slice_free1(sizeof(query_rule_t), qr);
+}
 
 void reset_query_rules() {
 	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "Resetting query rules\n");
@@ -659,22 +750,7 @@ void reset_query_rules() {
 	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "%d query rules to reset\n", gloQR.query_rules->len);
 	while ( gloQR.query_rules->len ) {
 		query_rule_t *qr = g_ptr_array_remove_index_fast(gloQR.query_rules,0);
-		if (qr->regex) {
-			g_regex_unref(qr->regex);
-		}
-		if (qr->username) {
-			g_free(qr->username);
-		}
-		if (qr->schemaname) {
-			g_free(qr->schemaname);
-		}
-		if (qr->match_pattern) {
-			g_free(qr->match_pattern);
-		}
-		if (qr->replace_pattern) {
-			g_free(qr->replace_pattern);
-		}
-		g_slice_free1(sizeof(query_rule_t), qr);
+		reset_query_rule(qr);
 	}
 }
 
@@ -775,6 +851,7 @@ void process_query_rules(mysql_session_t *sess) {
 			sess->query_info.cache_ttl=qr->cache_ttl;
 		}
 		g_match_info_free(match_info);
+		sess->query_info.destination_hostgroup=0; // default
 		if (qr->destination_hostgroup>0) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has changed destination_hostgroup %d\n", qr->rule_id, qr->destination_hostgroup);
 			sess->query_info.destination_hostgroup=qr->destination_hostgroup;
@@ -810,3 +887,101 @@ void process_query_rules(mysql_session_t *sess) {
 	}
 }
 
+
+mysql_server * find_server_ptr(const char *address, const uint16_t port) {
+	mysql_server *ms=NULL;
+	int i;
+//	if (lock) pthread_rwlock_wrlock(&glomysrvs.rwlock);
+	for (i=0;i<glomysrvs.servers->len;i++) {
+		mysql_server *mst=g_ptr_array_index(glomysrvs.servers,i);
+		if (mst->port==port && (strcmp(mst->address,address)==0)) {
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 6, "MySQL server %s:%d found in servers list\n", address, port);
+			i=glomysrvs.servers->len;
+			ms=mst;
+		}
+	}
+//	if (lock) pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return ms;
+}
+
+
+mysql_server * mysql_server_entry_create(const char *address, const uint16_t port, int read_only, enum mysql_server_status status) {
+	mysql_server *ms=g_slice_alloc0(sizeof(mysql_server));
+	ms->address=g_strdup(address);
+	ms->port=port;
+	ms->read_only=read_only;
+	ms->status=status;
+	return ms;
+}
+
+inline void mysql_server_entry_add(mysql_server *ms) {
+	g_ptr_array_add(glomysrvs.servers,ms);
+}
+
+void mysql_server_entry_add_hostgroup(mysql_server *ms, int hostgroup_id) {
+	if (hostgroup_id >= glovars.mysql_hostgroups) {
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Server %s:%d not inserted in hostgroup %d as this is an invalid hostgroup\n", ms->address, ms->port, hostgroup_id);
+		return;
+	}
+	GPtrArray *hg=g_ptr_array_index(glomysrvs.mysql_hostgroups, hostgroup_id);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Adding server %s:%d in hostgroup %d\n", ms->address, ms->port, hostgroup_id);
+	g_ptr_array_add(hg,ms);	
+}
+
+mysql_server * mysql_server_random_entry_from_hostgroup__lock(int hostgroup_id) {
+	mysql_server *ms;
+	pthread_rwlock_wrlock(&glomysrvs.rwlock);
+	ms=mysql_server_random_entry_from_hostgroup__nolock(hostgroup_id);
+	pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return ms;
+}
+
+mysql_server * mysql_server_random_entry_from_hostgroup__nolock(int hostgroup_id) {
+	assert(hostgroup_id < glovars.mysql_hostgroups);
+	GPtrArray *hg=g_ptr_array_index(glomysrvs.mysql_hostgroups, hostgroup_id);
+	if (hg->len==0) {
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 3, "Server not found from hostgroup %d\n", hostgroup_id);
+		return NULL;
+	}
+	int i=rand()%hg->len;
+	mysql_server *ms;
+	ms=g_ptr_array_index(hg,i);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Returning server %s:%d from hostgroup %d\n", ms->address, ms->port, hostgroup_id);
+	return ms;
+}
+
+
+int mysql_session_has_active_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id) {
+	assert(hostgroup_id < glovars.mysql_hostgroups);
+	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
+	if (mybe->server_ptr) {
+		// backend is active
+		return 1;
+	} else {
+		// backend is NOT active
+		return 0;
+	}
+}
+
+int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id) {
+	assert(hostgroup_id < glovars.mysql_hostgroups);
+	mysql_server *ms=NULL;
+	ms=mysql_server_random_entry_from_hostgroup__lock(hostgroup_id);
+	if (ms==NULL) {
+		// this is a severe condition, needs to be handled
+		return 0;
+	}
+	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
+	mybe->server_ptr=ms;
+	mybe->server_mycpe=mysql_connpool_get_connection(&gloconnpool, mybe->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->server_ptr->port);
+	if (mybe->server_mycpe==NULL) {
+		// handle error!!
+		authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+		// this is a severe condition, needs to be handled
+		return -1;
+	}
+	mybe->fd=mybe->server_mycpe->conn->net.fd;
+	mybe->server_myds=mysql_data_stream_init(mybe->fd, sess);
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new connection for sess %p , hostgroup %d , fd %d\n", sess , hostgroup_id , mybe->fd);
+	return 1;
+}

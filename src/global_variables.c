@@ -6,6 +6,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"global", "net_buffer_size", G_OPTION_ARG_INT, &conn_queue_pool.size, "net buffer size", 1024, 16*1024*1024 , 1024, 0, 8*1024, NULL, NULL, post_variable_net_buffer_size},
 	{"global", "backlog", G_OPTION_ARG_INT, &glovars.backlog, "backlog for listen()", 50, 10000 , 0, 0, 2000, NULL, NULL, NULL},
 	{"global", "proxy_admin_port", G_OPTION_ARG_INT, &glovars.proxy_admin_port, "administrative port", 0, 65535, 0, 0, 6032, NULL, NULL, NULL},
+	{"global", "merge_configfile_db", G_OPTION_ARG_INT, &glovars.merge_configfile_db, "merge users, hosts and debugs from config file to DB, without replacing DB content", 0, 1, 0, 0, 1, NULL, NULL, NULL},
 	{"mysql", "proxy_mysql_port", G_OPTION_ARG_INT, &glovars.proxy_mysql_port, "mysql port", 0, 65535, 0, 0, 6033, NULL, NULL, NULL},
 	{"mysql", "mysql_server_version", G_OPTION_ARG_STRING, &glovars.mysql_server_version, "mysql server version", 0, 0, 0, 0, 0, "5.1.30", NULL, NULL},
 	{"mysql", "mysql_socket", G_OPTION_ARG_STRING, &glovars.mysql_socket, "mysql socket", 0, 0, 0, 0, 0, "/tmp/proxysql.sock", NULL, NULL},
@@ -25,6 +26,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"mysql", "mysql_max_resultset_size", G_OPTION_ARG_INT, &glovars.mysql_max_resultset_size, "mysql max resultset size", 0, INT_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
 	{"mysql", "mysql_poll_timeout", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout, "poll() timeout", 100, INT_MAX, 0, 0, 10000, NULL, NULL, NULL},
 	{"mysql", "mysql_wait_timeout", G_OPTION_ARG_INT64, &glovars.mysql_wait_timeout, "timeout to drop unused connection", 1, 3600*24*7, 0, 1000000, 3600*8, NULL, NULL, NULL},
+	{"mysql", "mysql_hostgroups", G_OPTION_ARG_INT, &glovars.mysql_hostgroups, "total number of hostgroups", 2, 64, 0, 0, 2, NULL, NULL, init_glomysrvs},
 };
 
 
@@ -165,7 +167,6 @@ int init_global_variables(GKeyFile *gkf) {
 	
 
 	pthread_rwlock_init(&glovars.rwlock_global, NULL);
-	pthread_rwlock_init(&glomysrvs.rwlock, NULL);
 	pthread_rwlock_init(&glovars.rwlock_usernames, NULL);
 
 	pthread_rwlock_wrlock(&glovars.rwlock_global);
@@ -268,24 +269,7 @@ int init_global_variables(GKeyFile *gkf) {
 	// init gloQR
 	init_gloQR();
 
-	glomysrvs.mysql_use_masters_for_reads=1;
-	if (g_key_file_has_key(gkf, "mysql", "mysql_use_masters_for_reads", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_use_masters_for_reads", &error);
-		if (r == 0 ) {
-			glomysrvs.mysql_use_masters_for_reads=0;
-		}
-	}
 	
-
-	glomysrvs.mysql_connections_max=10000; // hardcoded for now , theorically no limit : NOT USED YET
-//	if ((glovars.connections=malloc(sizeof(connection *)*glovars.max_connections))==NULL) { exit(1); }
-	glomysrvs.mysql_connections_cur=0; // hardcoded for now
-
-
-	glomysrvs.mysql_connections=g_ptr_array_sized_new(glomysrvs.mysql_connections_max/10+4);
-
-	pthread_rwlock_wrlock(&glomysrvs.rwlock);
-	glomysrvs.servers_masters=g_ptr_array_new();
 
 
 
@@ -293,61 +277,60 @@ int init_global_variables(GKeyFile *gkf) {
 	//mysql_connpool_init();
 
 
-	// load all servers
+	
+
+
+	pthread_rwlock_unlock(&glovars.rwlock_global);
+	process_global_variables_from_file(gkf);
+	load_mysql_servers_list_from_file(gkf);
+	load_mysql_users_from_file(gkf);
+	return 0;
+}
+
+mysql_server * new_server_master() {
+	pthread_rwlock_wrlock(&glomysrvs.rwlock);
+	if ( glomysrvs.count_masters==0 ) return NULL;
+	int i=rand()%glomysrvs.count_masters;
+	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_masters,i);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using master %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_masters);
+	pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return ms;
+}
+
+mysql_server * new_server_slave() {
+	pthread_rwlock_wrlock(&glomysrvs.rwlock);
+	if ( glomysrvs.count_slaves==0 ) return NULL;
+	int i=rand()%glomysrvs.count_slaves;
+	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_slaves,i);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
+	pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return ms;
+}
+
+
+void init_glomysrvs(global_variable_entry_t *gve) {
+	pthread_rwlock_init(&glomysrvs.rwlock, NULL);
+	glomysrvs.mysql_connections_max=10000; // hardcoded for now , theorically no limit : NOT USED YET
+	glomysrvs.mysql_connections_cur=0; // hardcoded for now
+	glomysrvs.mysql_connections=g_ptr_array_sized_new(glomysrvs.mysql_connections_max/10+4);
+	glomysrvs.servers=g_ptr_array_new();
+	glomysrvs.servers_masters=g_ptr_array_new();
+	glomysrvs.servers_slaves=g_ptr_array_new();	
+	glomysrvs.servers_count=0;
 	glomysrvs.count_masters=0;
 	glomysrvs.count_slaves=0;
-	glomysrvs.servers_slaves=g_ptr_array_new();
-	if (g_key_file_has_key(gkf, "mysql", "mysql_servers", NULL)) {
-		gsize l=0;
-		glomysrvs.mysql_servers_name=g_key_file_get_string_list(gkf, "mysql", "mysql_servers", &l, &error);
-		int i;
-		for (i=0; i<l; i++) {
-			char *c;
-			c=index(glomysrvs.mysql_servers_name[i],':');
-			mysql_server *ms=g_slice_alloc0(sizeof(mysql_server));
-			if (ms==NULL) { exit(EXIT_FAILURE); }
-			if (c) {
-				int sl=strlen(glomysrvs.mysql_servers_name[i]);
-				char *s;
-				if ((s=malloc(sl))==NULL) { exit(EXIT_FAILURE); }
-				char *p;
-				if ((p=malloc(sl))==NULL) { exit(EXIT_FAILURE); }
-				*c=' ';
-				sscanf(glomysrvs.mysql_servers_name[i],"%s %s",s,p);
-				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Configuring server %s port %s\n", s, p);
-				ms->address=g_strdup(s);
-				ms->port=atoi(p);
-				free(s);
-				free(p);
-			} else {
-				ms->address=g_strdup(glomysrvs.mysql_servers_name[i]);
-				ms->port=3306;
-			}
-			int ro=mysql_check_alive_and_read_only(ms->address,  ms->port);
-			if (ro==-1) {
-				ms->alive=0;
-			} else {
-				ms->alive=1;
-			}
-			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Adding slave %s:%d , %s\n", ms->address, ms->port , (ms->alive ? "ACTIVE" : "DEAD"));
-			if ((ro==1) || (glomysrvs.mysql_use_masters_for_reads==1)) {
-				g_ptr_array_add(glomysrvs.servers_slaves, (gpointer) ms);
-				glomysrvs.count_slaves++;
-			}
-			if (ro==0) {
-				g_ptr_array_add(glomysrvs.servers_masters, (gpointer) ms);
-				glomysrvs.count_masters++;
-				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Adding master %s:%d\n", ms->address, ms->port);
-			}
-		}
-	} else {
-		// This needs to go away. Servers can be configured in sqlite, or added alter on
-		g_print("mysql_servers not defined in [mysql]\n"); exit(EXIT_FAILURE);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Creating %d hostgroups for MySQL\n", glovars.mysql_hostgroups);
+	glomysrvs.mysql_hostgroups=g_ptr_array_sized_new(glovars.mysql_hostgroups);
+	int i;
+	for(i=0;i<glovars.mysql_hostgroups;i++) {
+		GPtrArray *sl=g_ptr_array_new();
+		g_ptr_array_add(glomysrvs.mysql_hostgroups,sl);
 	}
+}
 
-	pthread_rwlock_unlock(&glomysrvs.rwlock);
-	
-{ // load usernames and password
+void load_mysql_users_from_file(GKeyFile *gkf) {
+	GError *error;
+	// load usernames and password
 	pthread_rwlock_wrlock(&glovars.rwlock_usernames);
 	glovars.mysql_users_name=g_ptr_array_new();
 	glovars.mysql_users_pass=g_ptr_array_new();
@@ -380,31 +363,84 @@ int init_global_variables(GKeyFile *gkf) {
 	pthread_rwlock_unlock(&glovars.rwlock_usernames);
 }
 
+void load_mysql_servers_list_from_file(GKeyFile *gkf) {
+	GError *error;
+	/* this needs to be deprecated */
+	glomysrvs.mysql_use_masters_for_reads=1;
+	if (g_key_file_has_key(gkf, "mysql", "mysql_use_masters_for_reads", NULL)) {
+		gint r=g_key_file_get_integer(gkf, "mysql", "mysql_use_masters_for_reads", &error);
+		if (r == 0 ) {
+			glomysrvs.mysql_use_masters_for_reads=0;
+		}
+	}
 
-
-	pthread_rwlock_unlock(&glovars.rwlock_global);
-	process_global_variables_from_file(gkf);
-	return 0;
-}
-
-mysql_server * new_server_master() {
+	
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
-	if ( glomysrvs.count_masters==0 ) return NULL;
-	int i=rand()%glomysrvs.count_masters;
-	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_masters,i);
-	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using master %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_masters);
+	// load all servers
+	if (g_key_file_has_key(gkf, "mysql", "mysql_servers", NULL)) {
+		gsize l=0;
+		glomysrvs.mysql_servers_name=g_key_file_get_string_list(gkf, "mysql", "mysql_servers", &l, &error);
+		int i;
+		for (i=0; i<l; i++) {
+			char *c;
+			c=index(glomysrvs.mysql_servers_name[i],':');
+			mysql_server *ms=g_slice_alloc0(sizeof(mysql_server));
+			if (ms==NULL) { exit(EXIT_FAILURE); }
+			if (c) {
+				int sl=strlen(glomysrvs.mysql_servers_name[i]);
+				char *s=g_malloc0(sl);
+//				if ((s=malloc(sl))==NULL) { exit(EXIT_FAILURE); }
+				char *p=g_malloc0(sl);
+//				if ((p=malloc(sl))==NULL) { exit(EXIT_FAILURE); }
+				*c=' ';
+				sscanf(glomysrvs.mysql_servers_name[i],"%s %s",s,p);
+				ms->address=g_strdup(s);
+				ms->port=atoi(p);
+				g_free(s);
+				g_free(p);
+			} else {
+				ms->address=g_strdup(glomysrvs.mysql_servers_name[i]);
+				ms->port=3306;
+			}
+			//char *buff=g_malloc0(strlen(ms->address)+10);
+			//sprintf(buff,"%s_%d",ms->address,ms->port);
+			//ms->name=g_strdup(buff);
+			//g_free(buff);
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 3, "Configuring server %s:%d from config file\n", ms->address, ms->port);
+			mysql_server *mst=find_server_ptr(ms->address,ms->port);
+			if (mst==NULL) {
+				ms->read_only=1;
+				ms->status=MYSQL_SERVER_STATUS_OFFLINE;
+				mysql_server_entry_add(ms);
+			} else {
+				g_free(ms->address);
+				g_slice_free1(sizeof(mysql_server),ms);
+			}
+			/*
+			// commented for now, needs to be moved
+			int ro=mysql_check_alive_and_read_only(ms->address,  ms->port);
+			if (ro==-1) {
+				ms->alive=0;
+			} else {
+				ms->alive=1;
+			}
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Adding slave %s:%d , %s\n", ms->address, ms->port , (ms->alive ? "ACTIVE" : "DEAD"));
+			if ((ro==1) || (glomysrvs.mysql_use_masters_for_reads==1)) {
+				g_ptr_array_add(glomysrvs.servers_slaves, (gpointer) ms);
+				glomysrvs.count_slaves++;
+			}
+			if (ro==0) {
+				g_ptr_array_add(glomysrvs.servers_masters, (gpointer) ms);
+				glomysrvs.count_masters++;
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 1, "Adding master %s:%d\n", ms->address, ms->port);
+			}
+			*/
+		}
+	} else {
+		// This needs to go away. Servers can be configured in sqlite, or added alter on
+		g_print("mysql_servers not defined in [mysql]\n"); exit(EXIT_FAILURE);
+	}
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
-	return ms;
-}
-
-mysql_server * new_server_slave() {
-	pthread_rwlock_wrlock(&glomysrvs.rwlock);
-	if ( glomysrvs.count_slaves==0 ) return NULL;
-	int i=rand()%glomysrvs.count_slaves;
-	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_slaves,i);
-	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
-	pthread_rwlock_unlock(&glomysrvs.rwlock);
-	return ms;
 }
 
 void pre_variable_mysql_threads(global_variable_entry_t *gve) {

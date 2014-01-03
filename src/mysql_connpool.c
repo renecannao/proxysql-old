@@ -44,6 +44,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 					sess->server_mycpe->conn->net.vio=0;
 				}
 				mysql_close(sess->server_mycpe->conn);  // drop the connection
+/* obsoleted by hostgroup : BEGIN 
 				if (sess->send_to_slave==FALSE) {
 					free(sess->master_mycpe);
 					sess->master_mycpe=NULL;
@@ -51,6 +52,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 					free(sess->slave_mycpe);
 					sess->slave_mycpe=NULL;
 				}
+obsoleted by hostgroup : END */
 				sess->server_mycpe=NULL;
 			}
 			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
@@ -81,7 +83,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 			write_one_pkt_to_net(sess->client_myds,hs);
 			return FALSE;
 		} else {
-			//*myc=mycpe;
+/* obsoleted by hostgroup : BEGIN
 			if (sess->send_to_slave==FALSE) {
 				if (sess->master_myds) {
 					sess->master_fd=mycpe->conn->net.fd;
@@ -99,6 +101,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 				sess->server_myds=sess->slave_myds;
 				sess->server_mycpe=sess->slave_mycpe;
 			}
+obsoleted by hostgroup : END */
 			sess->fds[1].fd=sess->server_myds->fd;
 			sess->server_myds->active=TRUE;
 		}

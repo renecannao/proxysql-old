@@ -123,6 +123,7 @@ void *mysql_thread(void *arg) {
 				int i;
 				for (i=0; i < thr.sessions->len; i++) {
 					sess=g_ptr_array_index(thr.sessions, i);
+/* obsoleted by hostgroup : BEGIN
 					if(sess->master_ptr==ms) {
 						proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "Disconnecting session %p from master server %s:%d\n", sess, ms->address, ms->port);
 						mysql_session_close(sess); // in future, this needs to be treated more gracefully
@@ -130,7 +131,9 @@ void *mysql_thread(void *arg) {
 					if(sess->slave_ptr==ms) {
 						proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "Disconnecting session %p from slave server %s:%d\n", sess, ms->address, ms->port);
 						mysql_session_close(sess); // in future, this needs to be treated more gracefully
-					}	
+					}
+obsoleted by hostgroup : END */
+					// TODO : scan the ms and drop them
 				}
 
 			}
@@ -312,12 +315,18 @@ int main(int argc, char **argv) {
 
 	admin_init_sqlite3();
 
-	sqlite3_flush_users_mem_to_db(0,1);
-	sqlite3_flush_debug_levels_mem_to_db(0);
+	if (glovars.merge_configfile_db==1) {
+		sqlite3_flush_users_mem_to_db(0,1);
+		sqlite3_flush_debug_levels_mem_to_db(0);
+	}
 	// copying back and forth should merge the data
 	sqlite3_flush_debug_levels_db_to_mem();
 	sqlite3_flush_users_db_to_mem();
 	sqlite3_flush_query_rules_db_to_mem();
+
+
+	sqlite3_flush_servers_mem_to_db(0);
+	sqlite3_flush_servers_db_to_mem();
 
 	pthread_mutex_init(&conn_mutex, NULL);
 

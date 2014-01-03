@@ -142,6 +142,64 @@ void sqlite3_exec_exit_on_failure(sqlite3 *db, const char *str) {
 	}
 }
 
+
+void sqlite3_flush_servers_mem_to_db(int replace) {
+	sqlite3_stmt *statement;
+	int i;
+	int rc;	
+	char *a=NULL;
+	a="SELECT COUNT(*) FROM servers";
+	rc=sqlite3_prepare_v2(sqlite3configdb, a, -1, &statement, 0);
+	assert(rc==SQLITE_OK);
+	rc=sqlite3_step(statement);
+	assert(rc==SQLITE_ROW);
+	rc=sqlite3_column_int(statement,0);
+	sqlite3_finalize(statement);	
+	if (rc) {
+		proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: table servers is already populated, ignoring whatever is in memory\n"); 
+		return;
+	}
+}
+
+
+int sqlite3_flush_servers_db_to_mem() {
+	int i;
+	int rc;
+	int rownum=0;
+	sqlite3_stmt *statement;
+	pthread_rwlock_wrlock(&glomysrvs.rwlock);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Resetting %d hostgroups for MySQL\n", glovars.mysql_hostgroups);
+	for(i=0;i<glovars.mysql_hostgroups;i++) {
+		GPtrArray *sl=g_ptr_array_index(glomysrvs.mysql_hostgroups,i);
+		while (sl->len) {
+			g_ptr_array_remove_index_fast(sl,0);
+		}
+		g_ptr_array_add(glomysrvs.mysql_hostgroups,sl);
+	}
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Loading MySQL servers\n");
+	rc=sqlite3_prepare_v2(sqlite3configdb, "SELECT h.hostgroup_id , h.hostname , h.port , sr.read_only , sr.status FROM hostgroups h JOIN servers sr ON h.hostname=sr.hostname AND h.port=sr.port JOIN server_status ss ON ss.status=sr.status WHERE ss.status_desc LIKE 'ONLINE%'", -1, &statement, 0); assert(rc==SQLITE_OK);
+	while ((rc=sqlite3_step(statement))==SQLITE_ROW) {
+		int hostgroup_id=sqlite3_column_int(statement,0);
+		char *address=g_strdup(sqlite3_column_text(statement,1));
+		uint16_t port=sqlite3_column_int(statement,2);
+		int read_only=sqlite3_column_int(statement,3);
+		enum mysql_server_status status=sqlite3_column_int(statement,4);
+		mysql_server *ms=NULL;
+		ms=find_server_ptr(address,port);
+		if (ms==NULL) {
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Loading MySQL server %s:%d\n", address, port);
+			ms=mysql_server_entry_create(address, port, 1, status);
+			mysql_server_entry_add(ms);
+		}
+		mysql_server_entry_add_hostgroup(ms,hostgroup_id);
+		rownum++;
+		g_free(address);
+	}
+	sqlite3_finalize(statement);	
+	pthread_rwlock_unlock(&glomysrvs.rwlock);
+	return rownum;
+}
+
 void sqlite3_flush_debug_levels_mem_to_db(int replace) {
 	int i;
 	char *a=NULL;
@@ -253,10 +311,10 @@ int sqlite3_flush_users_db_to_mem() {
 
 
 static admin_sqlite_table_def_t table_defs[] = 
-//static table_defs[] =
 {
 	{ "server_status" , ADMIN_SQLITE_TABLE_SERVER_STATUS },
 	{ "servers" , ADMIN_SQLITE_TABLE_SERVERS },
+	{ "hostgroups" , ADMIN_SQLITE_TABLE_HOSTGROUPS }, 
 	{ "users" , ADMIN_SQLITE_TABLE_USERS },
 	{ "global_variables" , ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES },
 	{ "debug_levels" , ADMIN_SQLITE_TABLE_DEBUG_LEVELS },
@@ -327,8 +385,9 @@ void admin_init_sqlite3() {
 }
 
 int sqlite3_flush_query_rules_db_to_mem() {
+	// before calling this function we should so some input data validation to verify the content of the table
 	int i;
-	proxy_debug(PROXY_DEBUG_SQLITE, 1, "Loading query rules from db");
+	proxy_debug(PROXY_DEBUG_SQLITE, 1, "Loading query rules from db\n");
 	sqlite3_stmt *statement;
 	//char *query="SELECT rule_id, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, caching_ttl FROM query_rules ORDER BY rule_id";
 	char *query="SELECT rule_id, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl FROM query_rules ORDER BY rule_id";
@@ -411,8 +470,12 @@ int sqlite3_flush_query_rules_db_to_mem() {
 		}
 		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Adding query rules with id %d : flagIN %d ; username \"%s\" ; schema \"%s\" ; match_pattern \"%s\" ; negate_match_pattern %d ; flagOUT %d ; replace_pattern \"%s\" ; destination_hostgroup %d ; audit_log %d ; performance_log %d ; cache_tag %d ; invalidate_cache_tag %d ; invalidate_cache_pattern \"%s\" ; cache_ttl %d\n", qr->rule_id, qr->flagIN , qr->username , qr->schemaname , qr->match_pattern , qr->negate_match_pattern , qr->flagOUT , qr->replace_pattern , qr->destination_hostgroup , qr->audit_log , qr->performance_log , qr->cache_tag, qr->invalidate_cache_tag , qr->invalidate_cache_pattern , qr->cache_ttl);
 		qr->regex=g_regex_new(qr->match_pattern, G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, NULL);
-		g_ptr_array_add(gloQR.query_rules, qr);
-		rownum++;
+		if (qr->destination_hostgroup < glovars.mysql_hostgroups) {
+			g_ptr_array_add(gloQR.query_rules, qr);
+			rownum++;
+		} else {
+			reset_query_rule(qr);
+		}
 	}
 	pthread_rwlock_unlock(&gloQR.rwlock);
 	sqlite3_finalize(statement);
