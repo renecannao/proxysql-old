@@ -561,20 +561,27 @@ obsoleted by hostgroup : END */
 							proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Query %s needs to be cached\n", g_checksum_get_string(sess->query_info.query_checksum));
 							proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Resultset size = %d\n", sess->resultset_size);
 							// prepare the entry to enter in the query cache
-							void *kp=g_strdup(g_checksum_get_string(sess->query_info.query_checksum));
-							void *vp=g_malloc(sess->resultset_size);
-							//void *vp=g_slice_alloc(conn->resultset_size);
-							size_t copied=0;
-							for (i=0; i<sess->resultset->len; i++) {
-								p=g_ptr_array_index(sess->resultset,i);
-								memcpy(vp+copied,p->data,p->length);
-								copied+=p->length;
+							int kl=strlen(g_checksum_get_string(sess->query_info.query_checksum));
+							if ((kl+sess->resultset_size+sizeof(fdb_hash_entry)+sizeof(fdb_hash_entry *)) > fdb_hashes_group_free_mem(&QC)) {
+								// there is no free memory
+        						__sync_fetch_and_add(&QC.cntSetERR,1);
+								proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Query %s not cached because the QC is full\n", g_checksum_get_string(sess->query_info.query_checksum));
+							} else {
+								void *kp=g_strdup(g_checksum_get_string(sess->query_info.query_checksum));
+								void *vp=g_malloc(sess->resultset_size);
+								//void *vp=g_slice_alloc(conn->resultset_size);
+								size_t copied=0;
+								for (i=0; i<sess->resultset->len; i++) {
+									p=g_ptr_array_index(sess->resultset,i);
+									memcpy(vp+copied,p->data,p->length);
+									copied+=p->length;
+								}
+								// insert in the query cache
+								proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, kl, sess->resultset_size);
+								fdb_set(&QC, kp, kl, vp, sess->resultset_size, sess->query_info.cache_ttl, FALSE);
+								//g_free(kp);
+								//g_free(vp);
 							}
-							// insert in the query cache
-							proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Calling SET on QC , checksum %s, kl %d, vl %d\n", (char *)kp, strlen(kp), sess->resultset_size);
-							fdb_set(&QC, kp, strlen(kp), vp, sess->resultset_size, sess->query_info.cache_ttl, FALSE);
-							//g_free(kp);
-							//g_free(vp);
 						}
 
 						if (sess->resultset_size < glovars.mysql_max_resultset_size ) {

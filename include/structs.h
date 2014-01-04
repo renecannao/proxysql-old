@@ -284,6 +284,7 @@ typedef struct _global_variables {
 	int mysql_query_cache_partitions;
 	unsigned int mysql_query_cache_default_timeout;
 	unsigned long long mysql_wait_timeout;
+	unsigned long long mysql_query_cache_size;
 	int mysql_max_resultset_size;
 	int mysql_max_query_size;
 
@@ -409,11 +410,11 @@ struct _global_variable_entry_t {
 	GOptionArg arg;
 	void *arg_data;
 	const char *description;
-	int value_min;
-	int value_max;
-	int value_round;
+	long long value_min;
+	long long value_max;
+	long long value_round;
 	int value_multiplier;
-	int int_default;
+	long long int_default;
 	const char *char_default;
 	void (*func_pre)(global_variable_entry_t *);
 	void (*func_post)(global_variable_entry_t *);

@@ -14,6 +14,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"mysql", "mysql_connection_pool_enabled", G_OPTION_ARG_INT, &gloconnpool.enabled, "enable/disable connection pool", 0, 1, 0, 0, 1, NULL, NULL, mysql_connpool_init},
 	{"mysql", "mysql_query_cache_enabled", G_OPTION_ARG_INT, &glovars.mysql_query_cache_enabled, "enable/disable query cache", 0, 1, 0, 0, 1, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_partitions", G_OPTION_ARG_INT, &glovars.mysql_query_cache_partitions, "number of mysql query cache", 1, 128, 0, 0, 16, NULL, NULL, NULL},
+	{"mysql", "mysql_query_cache_size", G_OPTION_ARG_INT64, &glovars.mysql_query_cache_size, "mysql query cache size", 1024*1024, LLONG_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_default_timeout", G_OPTION_ARG_INT, &glovars.mysql_query_cache_default_timeout, "default timeout for query cache", 0, 3600*24*365*10, 0, 0, 1, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_precheck", G_OPTION_ARG_INT, &glovars.mysql_query_cache_precheck, "enable/disable query cache precheck", 0, 1, 0, 0, 1, NULL, NULL, NULL},
 	{"mysql", "mysql_auto_reconnect_enabled", G_OPTION_ARG_INT, &glovars.mysql_auto_reconnect_enabled, "enable/disable auto-reconnect", 0, 1, 0, 0, 0, NULL, NULL, NULL},
@@ -53,8 +54,8 @@ void process_global_variables_from_file(GKeyFile *gkf) {
 				if (gve->arg == G_OPTION_ARG_INT) {
 					*(int *)gve->arg_data=r*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );
 				} else {
-					long long r=(long long) r*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );
-					memcpy(gve->arg_data,&r,sizeof(long long));
+					long long nr=(long long) r*(gve->value_multiplier > 0 ? gve->value_multiplier :  1 );
+					memcpy(gve->arg_data,&nr,sizeof(long long));
 				}
             }
 		} else {

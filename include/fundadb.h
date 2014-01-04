@@ -46,11 +46,18 @@ struct __fdb_hashes_group_t {
 	int size;
 	time_t now;
     unsigned int hash_expire_default;
+	long long max_memory_size;
     unsigned long long cntDel;
     unsigned long long cntGet;
     unsigned long long cntGetOK;
     unsigned long long cntSet;
+    unsigned long long cntSetERR;
 	unsigned long long cntPurge;
+	unsigned long long size_keys;
+	unsigned long long size_values;
+	unsigned long long size_metas;
+	unsigned long long dataIN;
+	unsigned long long dataOUT;
 };
 
 struct __fdb_hash_entry {
@@ -68,6 +75,7 @@ pkt * fdb_get(fdb_hashes_group_t *, const char *, mysql_session_t *);
 gboolean fdb_set(fdb_hashes_group_t * , void *, unsigned int , void *, unsigned int , time_t, gboolean);
 long long fdb_del(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 inline void hash_value_destroy_func(void *);
-void fdb_hashes_new(fdb_hashes_group_t *, size_t, unsigned int);
+void fdb_hashes_new(fdb_hashes_group_t *, size_t, unsigned int, unsigned long long);
 void *purgeHash_thread(void *);
 long long fdb_hash_init(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
+long long fdb_hashes_group_free_mem(fdb_hashes_group_t *);

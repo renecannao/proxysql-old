@@ -21,6 +21,8 @@ pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
     	    	memcpy(result->data,entry->value,entry->length);
 				result->length=entry->length;
     			__sync_fetch_and_add(&hg->cntGetOK,1);
+    			__sync_fetch_and_add(&hg->dataOUT,result->length);
+				entry->access=t;
 		} else {
 		// this was a bug. Altering an entry should not possible when the lock is rdlock
 		//	g_hash_table_remove (hg->fdb_hashes[i]->hash,kp);
@@ -32,7 +34,7 @@ pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
 }
 
 gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, unsigned int vl, time_t expire, gboolean copy) {
-    fdb_hash_entry *entry = g_malloc(sizeof(fdb_hash_entry));
+	fdb_hash_entry *entry = g_malloc(sizeof(fdb_hash_entry));
 	entry->klen=kl;
 	entry->length=vl;
     if (copy) {
@@ -61,9 +63,14 @@ gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, un
     pthread_rwlock_wrlock(&hg->fdb_hashes[i]->lock);
     g_ptr_array_add(hg->fdb_hashes[i]->ptrArray, entry);
     g_hash_table_replace(hg->fdb_hashes[i]->hash, entry->key, entry);
-    __sync_fetch_and_add(&hg->cntSet,1);
-//    __sync_fetch_and_add(&fdb_system_var.cntSet,1);
     pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
+	int s;
+    __sync_fetch_and_add(&hg->cntSet,1);
+	__sync_fetch_and_add(&hg->size_keys,kl);
+	__sync_fetch_and_add(&hg->size_values,vl);
+    __sync_fetch_and_add(&hg->dataIN,vl);
+	__sync_fetch_and_add(&hg->size_metas,sizeof(fdb_hash_entry)+sizeof(fdb_hash_entry *));
+//    __sync_fetch_and_add(&fdb_system_var.cntSet,1);
     return 0;
 }
 
@@ -97,11 +104,12 @@ inline void hash_value_destroy_func(void * hash_entry) {
 
 
 
-void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expire_default) {
+void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expire_default, unsigned long long max_memory_size) {
     unsigned int i;
 	hg->now=time(NULL);
 	hg->size=size;
 	hg->hash_expire_default=hash_expire_default;
+	hg->max_memory_size=max_memory_size;
 	hg->fdb_hashes=g_slice_alloc(sizeof(fdb_hash_t)*hg->size);
     for (i=0; i<hg->size; i++) {
         hg->fdb_hashes[i]=malloc(sizeof(fdb_hash_t));
@@ -114,7 +122,13 @@ void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expir
 	hg->cntDel = 0;
 	hg->cntGet = 0;
 	hg->cntGetOK = 0;
-	hg->cntSet = 0;	
+	hg->cntSet = 0;
+	hg->cntSetERR = 0;
+	hg->size_keys=0;
+	hg->size_values=0;
+	hg->size_metas=0;
+	hg->dataIN=0;
+	hg->dataOUT=0;
 }
 
 
@@ -145,6 +159,9 @@ void *purgeHash_thread(void *arg) {
 				}
 				if (entry->expire==EXPIRE_DROPIT) {
 
+					__sync_fetch_and_sub(&hg->size_keys,entry->klen);
+					__sync_fetch_and_sub(&hg->size_values,entry->length);
+					__sync_fetch_and_sub(&hg->size_metas,sizeof(fdb_hash_entry)+sizeof(fdb_hash_entry *));
 					g_free(entry->key);
 					g_free(entry->value);
 					entry->self=NULL;
@@ -160,4 +177,12 @@ void *purgeHash_thread(void *arg) {
 	}
 	proxy_error("Shutdown purgeHash_thread\n");
 	return;
+}
+
+long long fdb_hashes_group_free_mem(fdb_hashes_group_t *hg) {
+	// note: this check is not 100% accurate as it is performed before locking any structure
+	//       this lack of accuracy is by design and not a bug
+	long long cur_size=hg->size_keys+hg->size_values+hg->size_metas;
+	long long max_size=hg->max_memory_size;
+	return (cur_size > max_size ? 0 : max_size-cur_size);
 }

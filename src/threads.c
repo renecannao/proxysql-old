@@ -8,7 +8,7 @@ void set_thread_attr(pthread_attr_t *attr, size_t stacksize) {
 void start_background_threads(pthread_attr_t *attr) {
 	int r;
 	if (glovars.mysql_query_cache_enabled==TRUE) {
-		fdb_hashes_new(&QC,glovars.mysql_query_cache_partitions,glovars.mysql_query_cache_default_timeout);
+		fdb_hashes_new(&QC,glovars.mysql_query_cache_partitions, glovars.mysql_query_cache_default_timeout, glovars.mysql_query_cache_size);
 //		pthread_t qct;
 		pthread_create(&thread_qct, NULL, purgeHash_thread, &QC);
 	}
