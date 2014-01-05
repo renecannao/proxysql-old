@@ -19,6 +19,7 @@ mysql_hostgroups=3
 mysql_threads=4
 mysql_socket=/tmp/proxysql.sock
 mysql_query_cache_precheck=1
+mysql_maintenance_timeout=5000
 [fundadb]
 fundadb_hash_purge_time=10000
 fundadb_hash_purge_loop=1000

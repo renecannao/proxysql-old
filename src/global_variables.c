@@ -25,7 +25,9 @@ static global_variable_entry_t glo_entries[]= {
 	{"mysql", "mysql_threads", G_OPTION_ARG_INT, &glovars.mysql_threads, "number of threads to handle mysql connections", 1, 128, 0, 0, 2, NULL, pre_variable_mysql_threads, NULL},
 	{"mysql", "mysql_max_query_size", G_OPTION_ARG_INT, &glovars.mysql_max_query_size, "mysql max size of a COM_QUERY command", 0, 16777210, 0, 0, 1024*1024, NULL, NULL, NULL},
 	{"mysql", "mysql_max_resultset_size", G_OPTION_ARG_INT, &glovars.mysql_max_resultset_size, "mysql max resultset size", 0, INT_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
-	{"mysql", "mysql_poll_timeout", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout, "poll() timeout", 100, INT_MAX, 0, 0, 10000, NULL, NULL, NULL},
+	{"mysql", "mysql_poll_timeout", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout, "poll() timeout (in millisecond)", 100, INT_MAX, 0, 0, 10000, NULL, NULL, NULL},
+	{"mysql", "mysql_poll_timeout_maintenance", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout_maintenance, "poll() timeout (in millisecond) during maintenance", 100, 1000, 0, 0, 100, NULL, NULL, NULL},
+	{"mysql", "mysql_maintenance_timeout", G_OPTION_ARG_INT, &glovars.mysql_maintenance_timeout, "max time to remove mysql servers (in millisecond)", 1000, 60000, 0, 0, 10000, NULL, NULL, NULL},
 	{"mysql", "mysql_wait_timeout", G_OPTION_ARG_INT64, &glovars.mysql_wait_timeout, "timeout to drop unused connection", 1, 3600*24*7, 0, 1000000, 3600*8, NULL, NULL, NULL},
 	{"mysql", "mysql_hostgroups", G_OPTION_ARG_INT, &glovars.mysql_hostgroups, "total number of hostgroups", 2, 64, 0, 0, 2, NULL, NULL, init_glomysrvs},
 	{"fundadb", "fundadb_hash_purge_time", G_OPTION_ARG_INT64, &fdb_system_var.hash_purge_time, "fundadb hash purge time (in millisecond): total time to purge a hash", 100, 600000, 0, 1000, 10000, NULL, NULL, NULL},
@@ -422,7 +424,7 @@ void load_mysql_servers_list_from_file(GKeyFile *gkf) {
 			mysql_server *mst=find_server_ptr(ms->address,ms->port);
 			if (mst==NULL) {
 				ms->read_only=1;
-				ms->status=MYSQL_SERVER_STATUS_OFFLINE;
+				ms->status=MYSQL_SERVER_STATUS_OFFLINE_HARD;
 				mysql_server_entry_add(ms);
 			} else {
 				g_free(ms->address);

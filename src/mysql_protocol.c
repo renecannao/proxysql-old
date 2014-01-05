@@ -20,6 +20,7 @@ mysql_data_stream_t * mysql_data_stream_init(int fd, mysql_session_t *sess) {
 	my->input.partial=0;
 	my->output.partial=0;
 	my->fd=fd;
+	my->active_transaction=0;
 	my->active=TRUE;
 	my->sess=sess;
 	return my;

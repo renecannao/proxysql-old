@@ -177,7 +177,8 @@ int sqlite3_flush_servers_db_to_mem() {
 		g_ptr_array_add(glomysrvs.mysql_hostgroups,sl);
 	}
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Loading MySQL servers\n");
-	rc=sqlite3_prepare_v2(sqlite3configdb, "SELECT h.hostgroup_id , h.hostname , h.port , sr.read_only , sr.status FROM hostgroups h JOIN servers sr ON h.hostname=sr.hostname AND h.port=sr.port JOIN server_status ss ON ss.status=sr.status WHERE ss.status_desc LIKE 'ONLINE%'", -1, &statement, 0); assert(rc==SQLITE_OK);
+	//rc=sqlite3_prepare_v2(sqlite3configdb, "SELECT h.hostgroup_id , h.hostname , h.port , sr.read_only , sr.status FROM hostgroups h JOIN servers sr ON h.hostname=sr.hostname AND h.port=sr.port JOIN server_status ss ON ss.status=sr.status WHERE ss.status_desc LIKE 'ONLINE%'", -1, &statement, 0); assert(rc==SQLITE_OK);
+	rc=sqlite3_prepare_v2(sqlite3configdb, "SELECT h.hostgroup_id , h.hostname , h.port , sr.read_only , sr.status FROM hostgroups h JOIN servers sr ON h.hostname=sr.hostname AND h.port=sr.port JOIN server_status ss ON ss.status=sr.status", -1, &statement, 0); assert(rc==SQLITE_OK);
 	while ((rc=sqlite3_step(statement))==SQLITE_ROW) {
 		int hostgroup_id=sqlite3_column_int(statement,0);
 		char *address=g_strdup(sqlite3_column_text(statement,1));
@@ -187,11 +188,18 @@ int sqlite3_flush_servers_db_to_mem() {
 		mysql_server *ms=NULL;
 		ms=find_server_ptr(address,port);
 		if (ms==NULL) {
+			// add
 			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Loading MySQL server %s:%d\n", address, port);
-			ms=mysql_server_entry_create(address, port, 1, status);
+			ms=mysql_server_entry_create(address, port, read_only, status);
 			mysql_server_entry_add(ms);
+		} else {
+			// update
+			ms->read_only=read_only;
+			ms->status=status;
 		}
-		mysql_server_entry_add_hostgroup(ms,hostgroup_id);
+		if (status==MYSQL_SERVER_STATUS_ONLINE) {
+			mysql_server_entry_add_hostgroup(ms,hostgroup_id);
+		}
 		rownum++;
 		g_free(address);
 	}
@@ -532,7 +540,12 @@ int sqlite3_dump_runtime_hostgroups() {
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_hostgroups");
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_hostgroups\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_hostgroups ( hostgroup_id INT NOT NULL DEFAULT 0, hostname VARCHAR NOT NULL , port INT NOT NULL DEFAULT 3306, PRIMARY KEY (hostgroup_id, hostname, port) )");
-	char *query="INSERT INTO runtime_hostgroups VALUES (%d ,\"%s\", %d)";
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_servers\n");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_servers");
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_servers\n");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_servers ( hostname VARCHAR NOT NULL , port INT NOT NULL, read_only INT NOT NULL, status NOT NULL )");
+	char *query1="INSERT INTO runtime_hostgroups VALUES (%d ,\"%s\", %d)";
+	char *query2="INSERT INTO runtime_servers VALUES (\"%s\", %d, %d, %d)";
 	int l;
 	pthread_rwlock_rdlock(&glomysrvs.rwlock);
 	for(i=0;i<glovars.mysql_hostgroups;i++) {
@@ -540,13 +553,23 @@ int sqlite3_dump_runtime_hostgroups() {
 		GPtrArray *sl=g_ptr_array_index(glomysrvs.mysql_hostgroups,i);
 		for(j=0;j<sl->len;j++) {
 			mysql_server *ms=g_ptr_array_index(sl,j);
-			l=strlen(query)+strlen(ms->address)+14;
+			l=strlen(query1)+strlen(ms->address)+14;
 			char *buff=g_malloc0(l);
-			sprintf(buff,query,i,ms->address,ms->port);
+			sprintf(buff,query1,i,ms->address,ms->port);
 			sqlite3_exec_exit_on_failure(sqlite3configdb,buff);
 			g_free(buff);
 			numrow++;
 		}
+	}
+	for(i=0;i<glomysrvs.servers->len;i++) {
+		proxy_debug(PROXY_DEBUG_SQLITE, 5, "Populating runtime_hosts with host # %d", i);
+		mysql_server *ms=g_ptr_array_index(glomysrvs.servers, i);
+		l=strlen(query2)+strlen(ms->address)+24;
+		char *buff=g_malloc0(l);
+		sprintf(buff,query2,ms->address,ms->port,ms->read_only,ms->status);
+		sqlite3_exec_exit_on_failure(sqlite3configdb,buff);
+		g_free(buff);
+		numrow++;
 	}
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return numrow;

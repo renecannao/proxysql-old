@@ -42,6 +42,8 @@ void *mysql_thread(void *arg) {
 	int admin=0;
 	mysql_thread_init();
 
+	int removing_hosts=0;
+	gint64 maintenance_ends=0;
 	proxy_mysql_thread_t thr;
 	thr.thread_id=*(int *)arg;
 	thr.free_pkts.stack=NULL;
@@ -113,35 +115,94 @@ void *mysql_thread(void *arg) {
 		if (admin==0 && fds[2].revents==POLLIN) { // admin threads is calling
 			char c;
 			int r=read(fds[2].fd,&c,sizeof(char));
-			proxy_debug(PROXY_DEBUG_IPC, 6, "Got byte on thr %d from FD %d\n", thr.thread_id, fds[2].fd);
+			proxy_debug(PROXY_DEBUG_IPC, 4, "Got byte on thr %d from FD %d\n", thr.thread_id, fds[2].fd);
 			gchar *admincmd=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
-			proxy_debug(PROXY_DEBUG_IPC, 6, "Got command %s on thr %d\n", admincmd, thr.thread_id);
+			proxy_debug(PROXY_DEBUG_IPC, 4, "Got command %s on thr %d\n", admincmd, thr.thread_id);
 			if (strncmp(admincmd,"REMOVE SERVER",20)==0) {
-				mysql_server *ms=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
-				proxy_debug(PROXY_DEBUG_IPC, 6, "Got %p on thr %d\n", ms, thr.thread_id);
-				proxy_debug(PROXY_DEBUG_ADMIN, 1, "Received order REMOVE SERVER for server %s:%d\n", ms->address, ms->port);
-				int i;
-				for (i=0; i < thr.sessions->len; i++) {
-					sess=g_ptr_array_index(thr.sessions, i);
-/* obsoleted by hostgroup : BEGIN
-					if(sess->master_ptr==ms) {
-						proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "Disconnecting session %p from master server %s:%d\n", sess, ms->address, ms->port);
-						mysql_session_close(sess); // in future, this needs to be treated more gracefully
-					}
-					if(sess->slave_ptr==ms) {
-						proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "Disconnecting session %p from slave server %s:%d\n", sess, ms->address, ms->port);
-						mysql_session_close(sess); // in future, this needs to be treated more gracefully
-					}
-obsoleted by hostgroup : END */
-					// TODO : scan the ms and drop them
-				}
-
+				
+				removing_hosts=1;
+				maintenance_ends=g_get_monotonic_time()+glovars.mysql_maintenance_timeout*1000;
+//				mysql_server *ms=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
+//				proxy_debug(PROXY_DEBUG_IPC, 6, "Got %p on thr %d\n", ms, thr.thread_id);
 			}
 			g_free(admincmd);
-			gchar *ack=g_malloc0(20);
-			sprintf(ack,"ACK from %d",thr.thread_id);
-			proxy_debug(PROXY_DEBUG_IPC, 6, "Sending ACK from thr %d\n", thr.thread_id);
-			g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
+		}
+		if (admin==0 && removing_hosts==1) {
+//				proxy_debug(PROXY_DEBUG_ADMIN, 1, "Received order REMOVE SERVER for server %s:%d\n", ms->address, ms->port);
+			int i;
+			int j;
+			int cnt=0;
+			for (i=0; i < thr.sessions->len; i++) {
+				sess=g_ptr_array_index(thr.sessions, i);
+				for (j=0; j<glovars.mysql_hostgroups; j++) {
+					mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
+					// remove all the backends that are not active
+					if (mybe->server_ptr!=NULL) {
+						if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT) {
+							if (mybe->server_myds->active_transaction==0) {
+								if (mybe->server_myds!=sess->server_myds) {
+									reset_mysql_backend(mybe,0);
+								} else {
+									if (sess->server_bytes_at_cmd.bytes_sent==sess->server_myds->bytes_info.bytes_sent) {
+										if (sess->server_bytes_at_cmd.bytes_recv==sess->server_myds->bytes_info.bytes_recv) {
+											reset_mysql_backend(mybe,0);
+											sess->server_myds=NULL;
+											sess->server_mycpe=NULL;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			// count after cleanup
+			for (i=0; i < thr.sessions->len; i++) {
+				sess=g_ptr_array_index(thr.sessions, i);
+				for (j=0; j<glovars.mysql_hostgroups; j++) {
+					mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
+					if (mybe->server_ptr!=NULL)
+						if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT)
+							cnt++;
+				}
+			}
+			if (cnt==0) {
+				removing_hosts=0;
+				gchar *ack=g_malloc0(20);
+				sprintf(ack,"%d",cnt);
+				proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thr.thread_id);
+				g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
+			} else {
+				gint64 ct=g_get_monotonic_time();
+				if (ct > maintenance_ends) {
+					// drop all connections that aren't switched yet
+					int i;
+					int j;
+					int t=0;
+					for (i=0; i < thr.sessions->len; i++) {
+						int c=0;
+						sess=g_ptr_array_index(thr.sessions, i);
+						for (j=0; j<glovars.mysql_hostgroups; j++) {
+							mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
+							if (mybe->server_ptr!=NULL) {
+								if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT) {
+									c++;
+								}
+							}
+						}
+						if (c) {
+							t+=c;
+							sess->force_close_backends=1;
+							mysql_session_close(sess);
+						}
+					}
+					removing_hosts=0;
+					gchar *ack=g_malloc0(20);
+					sprintf(ack,"%d",t);
+					proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thr.thread_id);
+					g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
+				}
+			}
 		}
 		if (admin==0) {nfds=3;} else {nfds=1;}
 		for (i=0; i < thr.sessions->len; i++) {

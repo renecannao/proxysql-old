@@ -42,9 +42,10 @@ enum enum_resultset_progress {
 };
 
 enum mysql_server_status {
-	MYSQL_SERVER_STATUS_OFFLINE = 0,
-	MYSQL_SERVER_STATUS_SHUNNED = 1,
-	MYSQL_SERVER_STATUS_ONLINE = 2,
+	MYSQL_SERVER_STATUS_OFFLINE_HARD = 0,
+	MYSQL_SERVER_STATUS_OFFLINE_SOFT = 1,
+	MYSQL_SERVER_STATUS_SHUNNED = 2,
+	MYSQL_SERVER_STATUS_ONLINE = 3,
 };
 
 typedef struct _queue_t {
@@ -70,7 +71,7 @@ typedef struct _mysql_server {
 	char *address;
 	uint16_t port;
 	int read_only;
-	int status;
+	enum mysql_server_status status;
 	uint16_t flags;
 	unsigned int connections;
 	unsigned char alive;
@@ -118,6 +119,7 @@ struct _mysql_data_stream_t {
 	mysql_uni_ds_t input;
 	mysql_uni_ds_t output;
 	int fd;
+	int active_transaction;
 	gboolean active;
 //	mysql_server *server_ptr;
 //	mysql_cp_entry_t *mycpe;
@@ -206,6 +208,7 @@ struct _mysql_session_t {
 	int master_fd;
 	int slave_fd;
 	int status;
+	int force_close_backends;
 	int ret;	// generic return status
 	struct pollfd fds[3];
 	int nfds;
@@ -278,6 +281,9 @@ typedef struct _global_variables {
 	gboolean enable_timers;
 
 	int mysql_poll_timeout;
+	int mysql_poll_timeout_maintenance;
+
+	int mysql_maintenance_timeout;
 
 	int mysql_threads;	
 	gboolean mysql_auto_reconnect_enabled;

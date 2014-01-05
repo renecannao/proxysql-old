@@ -240,8 +240,17 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 	return mycpe;
 }
 
-void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc) {
+void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc, int force_close) {
 	if (cp->enabled==FALSE) {
+		mysql_close(mc->conn);
+		free(mc);
+		return;
+	}
+	if (force_close==1) {
+		// we assume the connection is not healthy, drop it immediately
+		MYSQL *mysql_con;
+		mysql_con=mc->conn;
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 3, "Detaching unhealthy(?) connection for %s %s %s %s %d\n", mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
 		mysql_close(mc->conn);
 		free(mc);
 		return;
@@ -265,8 +274,7 @@ void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc) {
 			free(mc);
 		} else {
 			g_ptr_array_add(mcp->free_conns,mc);
-		}
-		
+		}	
 	}
 	pthread_mutex_unlock(&cp->mutex);
 }

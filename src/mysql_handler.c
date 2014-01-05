@@ -32,6 +32,7 @@ obsoleted by hostgroup : END */
 	sess->server_bytes_at_cmd.bytes_recv=0;
 	sess->mysql_server_reconnect=TRUE;
 	sess->healthy=1;
+	sess->force_close_backends=0;
 	sess->admin=0;
 	sess->resultset=g_ptr_array_new();
 	sess->timers=calloc(sizeof(timer),TOTAL_TIMERS);
@@ -55,12 +56,16 @@ obsoleted by hostgroup : END */
 }
 
 
-void reset_mysql_backend(mysql_backend_t *mybe) {
+void reset_mysql_backend(mysql_backend_t *mybe, int force_close) {
+	if (mybe->server_ptr) {
+		// without the IF , this can cause SIGSEGV
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend, server %s:%d , fd %d\n", mybe->server_ptr->address, mybe->server_ptr->port, mybe->fd);
+	}
 	if (mybe->server_myds) {
 		mysql_data_stream_close(mybe->server_myds);
 	}
 	if (mybe->server_mycpe) {
-		mysql_connpool_detach_connection(&gloconnpool, mybe->server_mycpe);
+		mysql_connpool_detach_connection(&gloconnpool, mybe->server_mycpe, force_close);
 	}
 	memset(mybe,0,sizeof(mysql_backend_t));
 }
@@ -106,7 +111,7 @@ obsoleted by hostgroup : END */
 	for (i=0; i<glovars.mysql_hostgroups; i++) {
 		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Freeing mysql backend %d for session %p\n", i, sess);
 		mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,i);
-		reset_mysql_backend(mybe);
+		reset_mysql_backend(mybe, sess->force_close_backends);
 	}
 	while (sess->mybes->len) {
 		mysql_backend_t *mybe=g_ptr_array_remove_index_fast(sess->mybes,0);
@@ -253,45 +258,18 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 	}
 	if (strncasecmp("FLUSH HOSTGROUPS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 		int affected_rows=sqlite3_flush_servers_db_to_mem();
+		int warnings=force_remove_servers();
 		if ( affected_rows>=0 ) {
 		    pkt *ok=mypkt_alloc(sess);
-			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+			myproto_ok_pkt(ok,1,affected_rows,0,2,warnings);
 			g_ptr_array_add(sess->client_myds->output.pkts, ok);
 		} else {
 			// TODO: send some error
 		}
 		return;
 	}
-	if (strncasecmp("REMOVE SERVER",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
-		mysql_server *ms=new_server_master();
-		// TESTING : BEGIN
-		int i;
-		for (i=0; i<glovars.mysql_threads; i++) {
-			gpointer admincmd=g_malloc0(20);
-			sprintf(admincmd,"%s", "REMOVE SERVER");
-			fprintf(stderr,"Sending %s to %d\n", "REMOVE SERVER", i);
-			g_async_queue_push(proxyipc.queue[i],admincmd);
-			fprintf(stderr,"Sent %s to %d\n", "REMOVE SERVER", i);
-			g_async_queue_push(proxyipc.queue[i],ms);
-			fprintf(stderr,"Sent %p to %d\n", ms, i);
-		}
-		char c;
-		for (i=0; i<glovars.mysql_threads; i++) {
-			fprintf(stderr,"Writing 1 bytes to thread %d on fd %d\n", i, proxyipc.fdOut[i]);
-			int r=write(proxyipc.fdOut[i],&c,sizeof(char));
-		}
-		for (i=0; i<glovars.mysql_threads; i++) {
-			gpointer ack;
-			fprintf(stderr,"Waiting ACK # %d\n", i);
-			ack=g_async_queue_pop(proxyipc.queue[glovars.mysql_threads]);
-			g_free(ack);
-		}
-	    pkt *ok=mypkt_alloc(sess);
-		myproto_ok_pkt(ok,1,0,0,2,0);
-		g_ptr_array_add(sess->client_myds->output.pkts, ok);
-		// TESTING : END
-		return;
-	}
+//	if (strncasecmp("REMOVE SERVERS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+//	}
 	if (strncmp("select @@version_comment limit 1", p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 		// mysql client in interactive mode sends "select @@version_comment limit 1" : we treat this as a special case
 
@@ -342,6 +320,42 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 	return;
 }
 
+
+int force_remove_servers() { 
+	int i;
+	int warnings=0;
+	// temporary change poll_timeout
+	int default_mysql_poll_timeout=glovars.mysql_poll_timeout;
+	glovars.mysql_poll_timeout=glovars.mysql_poll_timeout_maintenance;
+	for (i=0; i<glovars.mysql_threads; i++) {
+		gpointer admincmd=g_malloc0(20);
+		sprintf(admincmd,"%s", "REMOVE SERVER");
+		proxy_debug(PROXY_DEBUG_IPC, 3, "Sending REMOVE SERVER to thread #%d\n", i);
+		g_async_queue_push(proxyipc.queue[i],admincmd);
+	}
+	char c;
+	for (i=0; i<glovars.mysql_threads; i++) {
+		proxy_debug(PROXY_DEBUG_IPC, 4, "Writing 1 bytes to thread #%d on fd %d\n", i, proxyipc.fdOut[i]);
+		int r=write(proxyipc.fdOut[i],&c,sizeof(char));
+	}
+	for (i=0; i<glovars.mysql_threads; i++) {
+		gpointer ack;
+		proxy_debug(PROXY_DEBUG_IPC, 4, "Waiting ACK on thread #%d\n", i);
+		ack=g_async_queue_pop(proxyipc.queue[glovars.mysql_threads]);
+		int w=atoi(ack);
+		warnings+=w;
+		g_free(ack);
+	}
+	// we are done, all threads disabled the removed hosts!
+
+	// reconfigure the correct poll() timeout
+	default_mysql_poll_timeout=glovars.mysql_poll_timeout=default_mysql_poll_timeout;
+//		// send OK pkt
+//		pkt *ok=mypkt_alloc(sess);
+//		myproto_ok_pkt(ok,1,0,0,2,0);
+//		g_ptr_array_add(sess->client_myds->output.pkts, ok);
+	return warnings;
+}
 
 
 inline void compute_query_checksum(mysql_session_t *sess) {
@@ -701,12 +715,49 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
 			}
 			mysql_backend_t *mybe=g_ptr_array_index(sess->mybes, sess->query_info.destination_hostgroup);
-			sess->server_myds=mybe->server_myds;
-			sess->server_fd=mybe->fd;
-			sess->server_mycpe=mybe->server_mycpe;
-			sess->server_ptr=mybe->server_ptr;
-			g_ptr_array_add(sess->server_myds->output.pkts, p);
-			
+			if (mybe->server_ptr==NULL) {
+				// we don't have a backend , probably because there is no host associated with the hostgroup, or because we have an error
+				// park the packet ?
+				// create a DataStream without FD ?
+				// push the packet back to client_myds ?
+				// FIXME
+				assert(0);
+				return 0;
+			}
+
+			// here, mybe is NOT NULL
+
+			if (mybe->server_myds) {
+				sess->server_bytes_at_cmd.bytes_sent=mybe->server_myds->bytes_info.bytes_sent;
+				sess->server_bytes_at_cmd.bytes_recv=mybe->server_myds->bytes_info.bytes_recv;
+			}
+			if ( mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_HARD ) {
+				// we didn't manage to gracefully shutdown the connection , disconnect the client
+				return -1;
+			}
+			if ( mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT && mybe->server_myds->active_transaction==0) {
+				// disconnect the backend and get a new one
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is OFFLINE_SOFT, disconnect\n", mybe->server_ptr->address, mybe->server_ptr->port);
+				reset_mysql_backend(mybe,0);
+				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
+				if (mybe->server_ptr==NULL) {
+					// FIXME
+					assert(0);
+					return 0;
+				}	
+				
+			}
+			if ( mybe->server_ptr->status==MYSQL_SERVER_STATUS_ONLINE ) {
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is ONLINE, forward data\n", mybe->server_ptr->address, mybe->server_ptr->port);
+				sess->server_myds=mybe->server_myds;
+				sess->server_fd=mybe->fd;
+				sess->server_mycpe=mybe->server_mycpe;
+				sess->server_ptr=mybe->server_ptr;
+				g_ptr_array_add(sess->server_myds->output.pkts, p);
+			} else {
+				// we should never reach here, sanity check
+				assert(0);	
+			}
 /*
 			if (
 				(sess->send_to_slave==FALSE) && 
@@ -1004,12 +1055,12 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 	assert(hostgroup_id < glovars.mysql_hostgroups);
 	mysql_server *ms=NULL;
 	ms=mysql_server_random_entry_from_hostgroup__lock(hostgroup_id);
+	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
+	mybe->server_ptr=ms;
 	if (ms==NULL) {
 		// this is a severe condition, needs to be handled
 		return 0;
 	}
-	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
-	mybe->server_ptr=ms;
 	mybe->server_mycpe=mysql_connpool_get_connection(&gloconnpool, mybe->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->server_ptr->port);
 	if (mybe->server_mycpe==NULL) {
 		// handle error!!
