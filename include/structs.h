@@ -8,6 +8,8 @@ typedef struct __fdb_system_var_t {
     long long hash_purge_loop;
     unsigned int hash_expire_max;
     unsigned int hash_expire_default;
+	int purge_threshold_pct_min;
+	int purge_threshold_pct_max;
 } fdb_system_var_t;
 
 

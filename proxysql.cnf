@@ -13,10 +13,16 @@ mysql_max_query_size=1048576
 mysql_query_cache_enabled=1
 mysql_query_cache_partitions=16
 mysql_query_cache_default_timeout=30
-mysql_query_cache_size=4194304
+#mysql_query_cache_size=4194304
+mysql_query_cache_size=10000000
 mysql_hostgroups=3
-#mysql_threads=4
+mysql_threads=4
 mysql_socket=/tmp/proxysql.sock
+mysql_query_cache_precheck=1
+[fundadb]
+fundadb_hash_purge_time=10000
+fundadb_hash_purge_loop=1000
+fundadb_hash_purge_threshold_pct_min=10
 [mysql users]
 vegaicm=password
 root=

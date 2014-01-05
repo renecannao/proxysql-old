@@ -22,7 +22,7 @@ pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
 				result->length=entry->length;
     			__sync_fetch_and_add(&hg->cntGetOK,1);
     			__sync_fetch_and_add(&hg->dataOUT,result->length);
-				entry->access=t;
+				if (t > entry->access) entry->access=t;
 		} else {
 		// this was a bug. Altering an entry should not possible when the lock is rdlock
 		//	g_hash_table_remove (hg->fdb_hashes[i]->hash,kp);
@@ -47,6 +47,7 @@ gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, un
 		entry->value=vp;
 	}
     entry->self=entry;
+	entry->access=hg->now;
 
 	if (expire>0) {
 		if (expire > fdb_system_var.hash_expire_max) {
@@ -139,6 +140,7 @@ void *purgeHash_thread(void *arg) {
 	while(glovars.shutdown==0) {
 		usleep(fdb_system_var.hash_purge_loop);
 		hg->now=time(NULL);
+		if ( fdb_hashes_group_used_mem_pct(hg) < fdb_system_var.purge_threshold_pct_min ) continue;
 		unsigned char i;
 		for (i=0; i<hg->size; i++) {
 			pthread_rwlock_wrlock(&hg->fdb_hashes[i]->lock);
@@ -185,4 +187,13 @@ long long fdb_hashes_group_free_mem(fdb_hashes_group_t *hg) {
 	long long cur_size=hg->size_keys+hg->size_values+hg->size_metas;
 	long long max_size=hg->max_memory_size;
 	return (cur_size > max_size ? 0 : max_size-cur_size);
+}
+
+int fdb_hashes_group_used_mem_pct(fdb_hashes_group_t *hg) {
+	long long cur_size=hg->size_keys+hg->size_values+hg->size_metas;
+	long long max_size=hg->max_memory_size;
+	float pctf = (float) cur_size*100/max_size;
+	if (pctf > 100) return 100;
+	int pct=pctf;
+	return pct;
 }

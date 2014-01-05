@@ -79,3 +79,4 @@ void fdb_hashes_new(fdb_hashes_group_t *, size_t, unsigned int, unsigned long lo
 void *purgeHash_thread(void *);
 long long fdb_hash_init(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 long long fdb_hashes_group_free_mem(fdb_hashes_group_t *);
+int fdb_hashes_group_used_mem_pct(fdb_hashes_group_t *);
