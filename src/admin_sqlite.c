@@ -525,9 +525,9 @@ int sqlite3_flush_query_rules_db_to_mem() {
 		rc=sqlite3_column_int(statement,0);
 		sqlite3_finalize(statement);
 		if (rc==0) {
-			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO query_rules VALUES(10,0,NULL,NULL,0,'^SELECT',1,0,NULL,0,0,0,0,0,NULL,-1)");
-			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO query_rules VALUES(20,0,NULL,NULL,0,'\\s+FOR\\s+UPDATE\\s*$',0,0,NULL,0,0,0,0,0,NULL,-1)");
-			char *query="INSERT INTO query_rules (rule_id, active, username, schemaname, flagIN, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES(10000,0,NULL,NULL,0,'.*',0,0,NULL,1,0,0,0,0,NULL, ?1)";
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO query_rules VALUES(10,1,NULL,NULL,0,'^SELECT',1,0,NULL,0,0,0,0,0,NULL,-1)");
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO query_rules VALUES(20,1,NULL,NULL,0,'\\s+FOR\\s+UPDATE\\s*$',0,0,NULL,0,0,0,0,0,NULL,-1)");
+			char *query="INSERT INTO query_rules (rule_id, active, username, schemaname, flagIN, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES(10000,1,NULL,NULL,0,'.*',0,0,NULL,1,0,0,0,0,NULL, ?1)";
 			rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
 			assert(rc==SQLITE_OK);
 			rc=sqlite3_bind_int(statement, 1, glovars.mysql_query_cache_default_timeout); assert(rc==SQLITE_OK);
