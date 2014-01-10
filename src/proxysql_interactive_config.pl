@@ -17,9 +17,9 @@ my %defaults = (
 	proxy_admin_user => "admin",
 	proxy_admin_password => "admin",
 	mysql_socket => "/tmp/proxysql.sock",
-	mysql_query_cache_enabled => 1,
 	mysql_query_cache_partitions => 16,
 	mysql_query_cache_default_timeout => 1,
+	mysql_query_cache_size => 67108864 ,
 	mysql_threads => 1,
 	mysql_poll_timeout => 10000,
 	mysql_max_query_size => 1048576,
@@ -68,9 +68,9 @@ backlog=$proxycfg{'backlog'}
 mysql_threads=$proxycfg{'mysql_threads'}
 proxy_mysql_port=$proxycfg{'proxy_mysql_port'}
 mysql_socket=$proxycfg{'mysql_socket'}
-mysql_query_cache_enabled=$proxycfg{'mysql_query_cache_enabled'}
 mysql_query_cache_partitions=$proxycfg{'mysql_query_cache_partitions'}
 mysql_query_cache_default_timeout=$proxycfg{'mysql_query_cache_default_timeout'}
+mysql_query_cache_size=$proxycfg{'mysql_query_cache_size'}
 mysql_poll_timeout=$proxycfg{'mysql_poll_timeout'}
 mysql_max_query_size=$proxycfg{'mysql_max_query_size'}
 mysql_max_resultset_size=$proxycfg{'mysql_max_resultset_size'}
@@ -87,9 +87,9 @@ debug_pkt_array=$dbglvl
 debug_memory=$dbglvl
 debug_mysql_com=$dbglvl
 debug_mysql_connection=$dbglvl
+debug_mysql_server=$dbglvl
 debug_admin=$dbglvl
 debug_mysql_auth=$dbglvl
-debug_sqlite=$dbglvl
 "
 };
 
@@ -100,7 +100,7 @@ print "
 Generic options:
 - core_dump_file_size : maximum size of core dump in case of crash
 - stack_size : stack size allocated for each thread
-- error_log : log file for error messages
+- error_log : log file for error messages (not implemented yet)
 
 ";
 do {
@@ -183,18 +183,11 @@ print "
 
 ProxySQL allows to cache SELECT statements executed by the application.
 Query cache is configured through:
-- mysql_query_cache_enabled : enables the query cache if set to 1
 - mysql_query_cache_partitions : defines the number of partitions, reducing contention
 - mysql_query_cache_default_timeout : defaults TTL for queries without explicit TTL
+- mysql_query_cache_size : total amount of memory allocable for query cache
 
 ";
-do {
-	print "\tmysql_query_cache_enabled (0-1) [$defaults{'mysql_query_cache_enabled'}]: ";
-	my $input = <STDIN>;
-	chomp $input;
-	if ( ( $input =~ /^\d+$/ ) && ( $input <= 1 ) ) { $proxycfg{'mysql_query_cache_enabled'}=$input }
-	if ( $input =~ /^$/ ) { $proxycfg{'mysql_query_cache_enabled'}=$defaults{'mysql_query_cache_enabled'} }
-} until (defined $proxycfg{'mysql_query_cache_enabled'});
 do {
 	print "\tmysql_query_cache_partitions (1-64) [$defaults{'mysql_query_cache_partitions'}]: ";
 	my $input = <STDIN>;
@@ -209,6 +202,13 @@ do {
 	if ( ( $input =~ /^\d+$/ ) && ( $input >= 0 ) && ( $input <= 315360000 ) ) { $proxycfg{'mysql_query_cache_default_timeout'}=$input }
 	if ( $input =~ /^$/ ) { $proxycfg{'mysql_query_cache_default_timeout'}=$defaults{'mysql_query_cache_default_timeout'} }
 } until (defined $proxycfg{'mysql_query_cache_default_timeout'});
+do {
+	print "\tmysql_query_cache_size (1048576-10737418240) [$defaults{'mysql_query_cache_size'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input >= 1048576 ) && ( $input <= 10737418240 ) ) { $proxycfg{'mysql_query_cache_size'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'mysql_query_cache_size'}=$defaults{'mysql_query_cache_size'} }
+} until (defined $proxycfg{'mysql_query_cache_size'});
 }
 
 
@@ -386,11 +386,9 @@ print "
 Few options specify how to connect to the backend:
 - mysql_usage_user : user used by ProxySQL to connect to the backend to verify its status
 - mysql_usage_password : password for user specified in mysql_usage_user
-- mysql_use_masters_for_reads : sends SELECT statements to both master(s) and slave(s) if set to 1, otherwise only to slave(s)
 
-Notes:
-a) The user specified in mysql_usage_user needs only USAGE privilege, and you can create the user with GRANT USAGE
-b) it is recommended to always use mysql_use_masters_for_reads=1
+Note:
+the user specified in mysql_usage_user needs only USAGE privilege, and you can create the user with GRANT USAGE
 
 ";
 {

@@ -423,8 +423,13 @@ void load_mysql_servers_list_from_file(GKeyFile *gkf) {
 			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 3, "Configuring server %s:%d from config file\n", ms->address, ms->port);
 			mysql_server *mst=find_server_ptr(ms->address,ms->port);
 			if (mst==NULL) {
-				ms->read_only=1;
-				ms->status=MYSQL_SERVER_STATUS_OFFLINE_HARD;
+				int ro=mysql_check_alive_and_read_only(ms->address,  ms->port);
+				if ( ro>=0 ) ms->read_only=ro;
+				if ( ro>=0 ) {
+					ms->status=MYSQL_SERVER_STATUS_ONLINE;
+				} else {
+					ms->status=MYSQL_SERVER_STATUS_OFFLINE_HARD;
+				}
 				mysql_server_entry_add(ms);
 			} else {
 				g_free(ms->address);

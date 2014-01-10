@@ -148,25 +148,103 @@ void sqlite3_flush_servers_mem_to_db(int replace) {
 	int i;
 	int rc;	
 	char *a=NULL;
-	a="SELECT COUNT(*) FROM servers";
-	rc=sqlite3_prepare_v2(sqlite3configdb, a, -1, &statement, 0);
-	assert(rc==SQLITE_OK);
-	rc=sqlite3_step(statement);
-	assert(rc==SQLITE_ROW);
-	rc=sqlite3_column_int(statement,0);
-	sqlite3_finalize(statement);	
-	if (rc) {
-		proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: table servers is already populated, ignoring whatever is in memory\n"); 
-		return;
+	{
+		a="SELECT COUNT(*) FROM server_status";
+		rc=sqlite3_prepare_v2(sqlite3configdb, a, -1, &statement, 0);
+		assert(rc==SQLITE_OK);
+		rc=sqlite3_step(statement);
+		assert(rc==SQLITE_ROW);
+		rc=sqlite3_column_int(statement,0);
+		sqlite3_finalize(statement);
+		if (rc==0) {
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO server_status VALUES (0, \"OFFLINE_HARD\")");
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO server_status VALUES (1, \"OFFLINE_SOFT\")");
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO server_status VALUES (2, \"SHUNNED\")");
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO server_status VALUES (3, \"ONLINE\")");
+		}
 	}
+	{
+		a="SELECT COUNT(*) FROM servers";
+		rc=sqlite3_prepare_v2(sqlite3configdb, a, -1, &statement, 0);
+		assert(rc==SQLITE_OK);
+		rc=sqlite3_step(statement);
+		assert(rc==SQLITE_ROW);
+		rc=sqlite3_column_int(statement,0);
+		sqlite3_finalize(statement);
+		if (rc==0) {
+			char *query="INSERT INTO servers VALUES (?1 , ?2 , ?3 , ?4)";
+			rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
+			assert(rc==SQLITE_OK);
+			for (i=0;i<glomysrvs.servers->len;i++) {
+				mysql_server *ms=g_ptr_array_index(glomysrvs.servers,i);
+				if (ms->status==MYSQL_SERVER_STATUS_ONLINE) {
+					if (ms->read_only==0 || ms->read_only==1) {
+						rc=sqlite3_bind_text(statement, 1, ms->address, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_int(statement, 2, ms->port); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_int(statement, 3, ms->read_only); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_int(statement, 4, ms->status); assert(rc==SQLITE_OK);
+						rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+						rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+						rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+					}
+				}
+			}
+			sqlite3_finalize(statement);
+		}
+		else {
+			proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: table servers is already populated, ignoring whatever is in memory\n"); 
+		}
+	}
+	{
+		char *a="SELECT COUNT(*) FROM hostgroups";
+		rc=sqlite3_prepare_v2(sqlite3configdb, a, -1, &statement, 0);
+		assert(rc==SQLITE_OK);
+		rc=sqlite3_step(statement);
+		assert(rc==SQLITE_ROW);
+		rc=sqlite3_column_int(statement,0);
+		sqlite3_finalize(statement);	
+		if (rc==0) {
+			char *query="INSERT INTO hostgroups VALUES (?1 , ?2 , ?3)";
+			rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
+			assert(rc==SQLITE_OK);
+			GPtrArray *sl0=g_ptr_array_index(glomysrvs.mysql_hostgroups,0);
+			GPtrArray *sl1=g_ptr_array_index(glomysrvs.mysql_hostgroups,1);
+			for (i=0;i<glomysrvs.servers->len;i++) {
+				mysql_server *ms=g_ptr_array_index(glomysrvs.servers,i);
+				if (ms->status==MYSQL_SERVER_STATUS_ONLINE) {
+					if (ms->read_only==0 || ms->read_only==1) {
+						rc=sqlite3_bind_int(statement, 1, 1); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_text(statement, 2, ms->address, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_int(statement, 3, ms->port); assert(rc==SQLITE_OK);
+						rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+						rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+						rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+					}
+					if (ms->read_only==0) {
+						rc=sqlite3_bind_int(statement, 1, 0); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_text(statement, 2, ms->address, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+						rc=sqlite3_bind_int(statement, 3, ms->port); assert(rc==SQLITE_OK);
+						rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+						rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+						rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+					}
+				}
+			}
+			sqlite3_finalize(statement);	
+		}
+	}
+	
 }
 
 
-int sqlite3_flush_servers_db_to_mem() {
+int sqlite3_flush_servers_db_to_mem(int populate_if_empty) {
 	int i;
 	int rc;
 	int rownum=0;
 	sqlite3_stmt *statement;
+
+
+
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Resetting %d hostgroups for MySQL\n", glovars.mysql_hostgroups);
 	for(i=0;i<glovars.mysql_hostgroups;i++) {
@@ -406,7 +484,7 @@ int sqlite3_dump_runtime_query_rules() {
 	assert(rc==SQLITE_OK);
 	pthread_rwlock_wrlock(&gloQR.rwlock);
 	for(i=0;i<gloQR.query_rules->len;i++) {
-        query_rule_t *qr = g_ptr_array_index(gloQR.query_rules,i);
+		query_rule_t *qr = g_ptr_array_index(gloQR.query_rules,i);
 		rc=sqlite3_bind_int(statement, 1, qr->rule_id); 	assert(rc==SQLITE_OK);
 		rc=sqlite3_bind_int(statement, 2, qr->hits); assert(rc==SQLITE_OK);
 		rc=sqlite3_bind_int(statement, 3, qr->flagIN); assert(rc==SQLITE_OK);
@@ -436,6 +514,29 @@ int sqlite3_dump_runtime_query_rules() {
 int sqlite3_flush_query_rules_db_to_mem() {
 	// before calling this function we should so some input data validation to verify the content of the table
 	int i;
+	{
+		int rc;
+		char *a="SELECT COUNT(*) FROM query_rules";
+		sqlite3_stmt *statement;
+		rc=sqlite3_prepare_v2(sqlite3configdb, a, -1, &statement, 0);
+		assert(rc==SQLITE_OK);
+		rc=sqlite3_step(statement);
+		assert(rc==SQLITE_ROW);
+		rc=sqlite3_column_int(statement,0);
+		sqlite3_finalize(statement);
+		if (rc==0) {
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO query_rules VALUES(10,0,NULL,NULL,0,'^SELECT',1,0,NULL,0,0,0,0,0,NULL,-1)");
+			sqlite3_exec_exit_on_failure(sqlite3configdb,"INSERT INTO query_rules VALUES(20,0,NULL,NULL,0,'\\s+FOR\\s+UPDATE\\s*$',0,0,NULL,0,0,0,0,0,NULL,-1)");
+			char *query="INSERT INTO query_rules (rule_id, active, username, schemaname, flagIN, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, cache_tag, invalidate_cache_tag, invalidate_cache_pattern, cache_ttl) VALUES(10000,0,NULL,NULL,0,'.*',0,0,NULL,1,0,0,0,0,NULL, ?1)";
+			rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
+			assert(rc==SQLITE_OK);
+			rc=sqlite3_bind_int(statement, 1, glovars.mysql_query_cache_default_timeout); assert(rc==SQLITE_OK);
+			rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+			rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+			rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+			sqlite3_finalize(statement);
+		}
+	}
 	proxy_debug(PROXY_DEBUG_SQLITE, 1, "Loading query rules from db\n");
 	sqlite3_stmt *statement;
 	//char *query="SELECT rule_id, flagIN, username, schemaname, match_pattern, negate_match_pattern, flagOUT, replace_pattern, destination_hostgroup, audit_log, performance_log, caching_ttl FROM query_rules ORDER BY rule_id";

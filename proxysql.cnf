@@ -3,9 +3,9 @@ core_dump_file_size=268435456
 debug=1
 verbose=10
 [mysql]
-mysql_usage_user=proxy
-mysql_usage_password=proxy
-mysql_servers=127.0.0.1:3306;127.0.0.2:3306;127.0.0.3:3306
+mysql_usage_user=msandbox
+mysql_usage_password=msandbox
+mysql_servers=127.0.0.1:23389;127.0.0.1:23390;127.0.0.1:23391
 mysql_use_masters_for_reads=1
 mysql_connection_pool_enabled=1
 mysql_max_resultset_size=1048576

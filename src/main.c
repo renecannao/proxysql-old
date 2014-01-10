@@ -387,7 +387,7 @@ int main(int argc, char **argv) {
 
 
 	sqlite3_flush_servers_mem_to_db(0);
-	sqlite3_flush_servers_db_to_mem();
+	sqlite3_flush_servers_db_to_mem(1);
 
 	pthread_mutex_init(&conn_mutex, NULL);
 

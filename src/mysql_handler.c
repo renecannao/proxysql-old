@@ -257,7 +257,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		return;
 	}
 	if (strncasecmp("FLUSH HOSTGROUPS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
-		int affected_rows=sqlite3_flush_servers_db_to_mem();
+		int affected_rows=sqlite3_flush_servers_db_to_mem(0);
 		int warnings=force_remove_servers();
 		if ( affected_rows>=0 ) {
 		    pkt *ok=mypkt_alloc(sess);
@@ -721,12 +721,28 @@ int process_mysql_client_pkts(mysql_session_t *sess) {
 				// create a DataStream without FD ?
 				// push the packet back to client_myds ?
 				// FIXME
-				assert(0);
+				// trying "put it back"
+				GPtrArray *new_input_pkts=g_ptr_array_sized_new(sess->client_myds->input.pkts->len);
+				g_ptr_array_add(new_input_pkts,p);
+				while(sess->client_myds->input.pkts->len) {
+					pkt *pn=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
+					g_ptr_array_add(new_input_pkts,pn);
+				}
+				while(new_input_pkts->len) {
+					pkt *pn=g_ptr_array_remove_index(new_input_pkts, 0);
+					g_ptr_array_add(sess->client_myds->input.pkts,pn);
+				}
+				g_ptr_array_free(new_input_pkts,TRUE);
 				return 0;
 			}
 
 			// here, mybe is NOT NULL
 
+			if (mybe->server_mycpe==NULL) {
+				// handle error!!
+				authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+				return -1;
+			}
 			if (mybe->server_myds) {
 				sess->server_bytes_at_cmd.bytes_sent=mybe->server_myds->bytes_info.bytes_sent;
 				sess->server_bytes_at_cmd.bytes_recv=mybe->server_myds->bytes_info.bytes_recv;
