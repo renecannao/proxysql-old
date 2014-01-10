@@ -324,7 +324,7 @@ while ($cont==0) {
 			if ( $input =~ /^$/ ) { $port=3306 }
 		} until ($port ne "");
 	}
-	$server=$server.":".$port;
+	if ($port ne "") { $server=$server.":".$port; }
 	if ($srvcnt>1) { $server=";".$server; }
 	$proxycfg{'mysql_servers'}.=$server;
 	$srvcnt+=1;
