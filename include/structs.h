@@ -123,6 +123,12 @@ struct _mysql_data_stream_t {
 	gboolean active;
 //	mysql_server *server_ptr;
 //	mysql_cp_entry_t *mycpe;
+	void (*shut_soft) (mysql_data_stream_t *);
+	void (*shut_hard) (mysql_data_stream_t *);
+	int (*array2buffer) (mysql_data_stream_t *);
+	int (*buffer2array) (mysql_data_stream_t *);
+	int (*read_from_net) (mysql_data_stream_t *);
+	int (*write_to_net) (mysql_data_stream_t *);
 };
 
 
@@ -191,13 +197,17 @@ typedef struct _mysql_query_metadata_t {
 } mysql_query_metadata_t ;
 
 
-typedef struct _mysql_backend_t {
+typedef struct _mysql_backend_t mysql_backend_t;
+struct _mysql_backend_t {
+	// attributes
 	int fd;
 	mysql_server *server_ptr;
 	mysql_data_stream_t *server_myds;
 	mysql_cp_entry_t *server_mycpe;
 	bytes_stats server_bytes_at_cmd;
-} mysql_backend_t;
+	// methods
+	void (*reset) (mysql_backend_t *, int);
+};
 
 struct _mysql_session_t {
 	proxy_mysql_thread_t *handler_thread;
@@ -249,6 +259,21 @@ obsoleted by hostgroup : END */
 	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
 	gboolean send_to_slave; // must go into query_info
+
+//	public methods
+	int (*conn_poll) (mysql_session_t *);
+	gboolean (*sync_net) (mysql_session_t *, int);
+	void (*buffer2array_2) (mysql_session_t *);
+	void (*array2buffer_2) (mysql_session_t *);
+	void (*check_fds_errors) (mysql_session_t *);
+	int (*process_client_pkts) (mysql_session_t *);
+	void (*process_server_pkts) (mysql_session_t *);
+	int (*remove_all_backends_offline_soft) (mysql_session_t *);
+	void (*close) (mysql_session_t *);
+//	private methods
+//	void (*read_from_net_2) (mysql_session_t *);
+//	void (*write_to_net_2) (mysql_session_t *, int);
+
 };
 
 

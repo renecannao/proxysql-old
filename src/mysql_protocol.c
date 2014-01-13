@@ -1,68 +1,6 @@
 #include "proxysql.h"
 
 
-
-mysql_data_stream_t * mysql_data_stream_init(int fd, mysql_session_t *sess) {
-	mysql_data_stream_t *my=g_slice_new(mysql_data_stream_t);
-//	mysql_data_stream_t *my=stack_alloc(&myds_pool);
-	my->bytes_info.bytes_recv=0;
-	my->bytes_info.bytes_sent=0;
-	my->pkts_recv=0;
-	my->pkts_sent=0;
-	pthread_mutex_lock(&conn_queue_pool.mutex);
-	queue_init(&my->input.queue);
-	queue_init(&my->output.queue);
-	pthread_mutex_unlock(&conn_queue_pool.mutex);
-	my->input.pkts=g_ptr_array_new();
-	my->output.pkts=g_ptr_array_new();
-	my->input.mypkt=NULL;
-	my->output.mypkt=NULL;
-	my->input.partial=0;
-	my->output.partial=0;
-	my->fd=fd;
-	my->active_transaction=0;
-	my->active=TRUE;
-	my->sess=sess;
-	return my;
-}
-
-void mysql_data_stream_close(mysql_data_stream_t *my) {
-	pthread_mutex_lock(&conn_queue_pool.mutex);
-	queue_destroy(&my->input.queue);
-	queue_destroy(&my->output.queue);
-	pthread_mutex_unlock(&conn_queue_pool.mutex);
-
-	pkt *p;
-/*
-	if(my->input.mypkt) {
-		if(my->input.mypkt->data)
-		g_slice_free1(my->input.mypkt->length, my->input.mypkt->data);
-		mypkt_free(my->input.mypkt,my->sess);
-	}
-
-	if(my->output.mypkt) {
-		if(my->output.mypkt->data)
-		g_slice_free1(my->output.mypkt->length, my->output.mypkt->data);
-//		g_slice_free1(sizeof(pkt), my->output.mypkt);
-	}
-*/
-	while (my->input.pkts->len) {
-		p=g_ptr_array_remove_index(my->input.pkts, 0);
-		mypkt_free(p,my->sess,1);
-	}
-	while (my->output.pkts->len) {
-		p=g_ptr_array_remove_index(my->output.pkts, 0);
-		mypkt_free(p,my->sess,1);
-	}
-
-
-	g_ptr_array_free(my->input.pkts,TRUE);
-	g_ptr_array_free(my->output.pkts,TRUE);
-	g_slice_free1(sizeof(mysql_data_stream_t),my);
-	//stack_free(my,&myds_pool);
-}
-
-
 char *user_password(char *username, int admin) {
 	char *ret=NULL; char *pass=NULL;
 	if (admin==1) {

@@ -1,6 +1,6 @@
 
-mysql_data_stream_t * mysql_data_stream_init(int, mysql_session_t *);
-void mysql_data_stream_close(mysql_data_stream_t *);
+//mysql_data_stream_t * mysql_data_stream_init(int, mysql_session_t *);
+//void mysql_data_stream_close(mysql_data_stream_t *);
 
 char *user_password(char *, int);
 

@@ -94,7 +94,7 @@ void *mysql_thread(void *arg) {
 				}
 			
 				sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
-				conn_poll(sess);
+				sess->conn_poll(sess);
 				int j;
 				for (j=0; j<sess->nfds; j++) {
 					if (sess->fds[j].events) {
@@ -134,37 +134,7 @@ void *mysql_thread(void *arg) {
 			int cnt=0;
 			for (i=0; i < thr.sessions->len; i++) {
 				sess=g_ptr_array_index(thr.sessions, i);
-				for (j=0; j<glovars.mysql_hostgroups; j++) {
-					mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
-					// remove all the backends that are not active
-					if (mybe->server_ptr!=NULL) {
-						if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT) {
-							if (mybe->server_myds->active_transaction==0) {
-								if (mybe->server_myds!=sess->server_myds) {
-									reset_mysql_backend(mybe,0);
-								} else {
-									if (sess->server_bytes_at_cmd.bytes_sent==sess->server_myds->bytes_info.bytes_sent) {
-										if (sess->server_bytes_at_cmd.bytes_recv==sess->server_myds->bytes_info.bytes_recv) {
-											reset_mysql_backend(mybe,0);
-											sess->server_myds=NULL;
-											sess->server_mycpe=NULL;
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			// count after cleanup
-			for (i=0; i < thr.sessions->len; i++) {
-				sess=g_ptr_array_index(thr.sessions, i);
-				for (j=0; j<glovars.mysql_hostgroups; j++) {
-					mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
-					if (mybe->server_ptr!=NULL)
-						if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT)
-							cnt++;
-				}
+				cnt+=sess->remove_all_backends_offline_soft(sess);
 			}
 			if (cnt==0) {
 				removing_hosts=0;
@@ -182,6 +152,8 @@ void *mysql_thread(void *arg) {
 					for (i=0; i < thr.sessions->len; i++) {
 						int c=0;
 						sess=g_ptr_array_index(thr.sessions, i);
+						c=sess->remove_all_backends_offline_soft(sess);
+						/*
 						for (j=0; j<glovars.mysql_hostgroups; j++) {
 							mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
 							if (mybe->server_ptr!=NULL) {
@@ -190,10 +162,11 @@ void *mysql_thread(void *arg) {
 								}
 							}
 						}
+						*/
 						if (c) {
 							t+=c;
 							sess->force_close_backends=1;
-							mysql_session_close(sess);
+							sess->close(sess);
 						}
 					}
 					removing_hosts=0;
@@ -215,7 +188,7 @@ void *mysql_thread(void *arg) {
 						nfds++;
 					}
 				}
-			check_fds_errors(sess);
+			sess->check_fds_errors(sess);
 			connection_handler_mysql(sess);
 			}
 		}
@@ -224,7 +197,7 @@ void *mysql_thread(void *arg) {
 			if (sess->healthy==0) {
 				g_ptr_array_remove_index_fast(thr.sessions,i);
 				i--;
-				g_free(sess);
+				mysql_session_delete(sess);
 			}
 		}
 		if (fds[0].revents==POLLIN) {
@@ -235,13 +208,9 @@ void *mysql_thread(void *arg) {
 				c=accept(listen_tcp_admin_fd, NULL, NULL);
 			}
 			if (c>0) {
-				mysql_session_t *ses=NULL;
-				ses=g_malloc0(sizeof(mysql_session_t));
-				//if (ses==NULL) { exit(EXIT_FAILURE); }
-				ses->client_fd = c; 
 				int arg_on=1;
-				setsockopt(ses->client_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
-				mysql_session_init(ses, &thr);
+				setsockopt(c, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
+				mysql_session_t *ses=mysql_session_new(&thr, c);
 				if (admin==1) {
 					ses->admin=1;
 				}
@@ -252,11 +221,7 @@ void *mysql_thread(void *arg) {
 		if (admin==0 && fds[1].revents==POLLIN) {
 			int c=accept(listen_unix_fd, NULL, NULL);
 			if (c>0) {
-				mysql_session_t *ses=NULL;
-				ses=g_malloc0(sizeof(mysql_session_t));
-				//if (ses==NULL) { exit(EXIT_FAILURE); }
-				ses->client_fd = c; 
-				mysql_session_init(ses, &thr);
+				mysql_session_t *ses=mysql_session_new(&thr, c);
 				send_auth_pkt(ses);			
 				g_ptr_array_add(thr.sessions,ses);
 			}
@@ -279,14 +244,14 @@ int connection_handler_mysql(mysql_session_t *sess) {
 	
 
 		if (sess->client_myds->active==FALSE) { // || sess->server_myds->active==FALSE) {
-			mysql_session_close(sess); return -1;
+			sess->close(sess); return -1;
 		}
 
-		if (sync_net(sess,0)==FALSE) {
-			mysql_session_close(sess); return -1;
+		if (sess->sync_net(sess,0)==FALSE) {
+			sess->close(sess); return -1;
 		}
 
-		buffer2array_2(sess);
+		sess->buffer2array_2(sess);
 
 		if (sess->client_myds->pkts_sent==1 && sess->client_myds->pkts_recv==1) {
 			pkt *hs=NULL;
@@ -310,33 +275,33 @@ int connection_handler_mysql(mysql_session_t *sess) {
 
 	
 		start_timer(sess->timers,TIMER_processdata);
-		if (process_mysql_client_pkts(sess)==-1) {
+		if (sess->process_client_pkts(sess)==-1) {
 			// we got a COM_QUIT
-			mysql_session_close(sess);
+			sess->close(sess);
 			return -1;
 		}
-		process_mysql_server_pkts(sess);
+		sess->process_server_pkts(sess);
 		stop_timer(sess->timers,TIMER_processdata);
 
-		array2buffer_2(sess);
+		sess->array2buffer_2(sess);
 
 
 		if ( (sess->server_myds==NULL) || (sess->last_server_poll_fd==sess->server_myds->fd)) {
 // this optimization is possible only if a connection to the backend didn't break in the meantime,
 // or a master/slave didn't occur,
 // or we never connected to a backend
-			if (sync_net(sess,1)==FALSE) {
-				mysql_session_close(sess); return -1;
+			if (sess->sync_net(sess,1)==FALSE) {
+				sess->close(sess); return -1;
 			}
 		}
 		if (sess->client_myds->pkts_sent==2 && sess->client_myds->pkts_recv==1) {
 			if (sess->mysql_schema_cur==NULL) {
-				mysql_session_close(sess); return -1;
+				sess->close(sess); return -1;
 			}
 		}
 		return 0;
 	} else {
-	mysql_session_close(sess);
+	sess->close(sess);
 	return -1;
 	}
 }
@@ -349,27 +314,6 @@ int main(int argc, char **argv) {
 	int i;
 	g_thread_init(NULL);
 
-/*
-    i = sqlite3_open_v2(SQLITE_ADMINDB, &sqlite3configdb, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX , NULL);
-    if(i){
-        fprintf(stderr, "SQLITE: Error on sqlite3_open(): %s\n", sqlite3_errmsg(sqlite3configdb));
-		exit(EXIT_FAILURE);
-    }
-
-	{
-		char *s[4];
-		s[0]="PRAGMA journal_mode = WAL";
-//	proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: 	
-	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA journal_mode = WAL");
-//	pragma_exit_on_failure(sqlite3configdb, "PRAGMA journal_mode = OFF");
-	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA synchronous = NORMAL");
-//	pragma_exit_on_failure(sqlite3configdb, "PRAGMA synchronous = 0");
-	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA locking_mode = EXCLUSIVE");
-	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA foreign_keys = ON");
-//	pragma_exit_on_failure(sqlite3configdb, "PRAGMA PRAGMA wal_autocheckpoint=10000");
-	}
-
-*/
 
 	// parse all the arguments and the config file
 	main_opts(entries, &argc, &argv, config_file);

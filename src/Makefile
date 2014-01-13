@@ -18,7 +18,7 @@ LIBS=-lm
 _DEPS = proxysql.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = main.o free_pkts.o mem.o debug.o sqlite3.o fundadb_hash.o global_variables.o mysql_connpool.o mysql_protocol.o mysql_handler.o network.o queue.o threads.o admin_sqlite.o
+_OBJ = mysql_session.o mysql_data_stream.o mysql_backend.o main.o free_pkts.o mem.o debug.o sqlite3.o fundadb_hash.o global_variables.o mysql_connpool.o mysql_protocol.o mysql_handler.o network.o queue.o threads.o admin_sqlite.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 
