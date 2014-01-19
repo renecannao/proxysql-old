@@ -33,7 +33,10 @@ $(ODIR):
 
 all: $(EXECUTABLE)
 
-.PHONY: clean
+.PHONY: clean resetdb
 
 clean:
-	rm -f $(ODIR)/*.o *~ core $(INCDIR)/*~ $(EXECUTABLE) 
+	rm -f $(ODIR)/*.o *~ core $(INCDIR)/*~ $(EXECUTABLE)
+
+resetdb:
+	rm -rf $(EXECUTABLE).db*

@@ -189,7 +189,7 @@ void *mysql_thread(void *arg) {
 					}
 				}
 			sess->check_fds_errors(sess);
-			connection_handler_mysql(sess);
+			sess->handler(sess);
 			}
 		}
 		for (i=0; i < thr.sessions->len; i++) {
@@ -234,76 +234,6 @@ void *mysql_thread(void *arg) {
     g_ptr_array_free(thr.free_pkts.blocks,TRUE);
 
 	return;
-}
-
-// thread that handles connection
-int connection_handler_mysql(mysql_session_t *sess) {
-
-	sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
-	if (sess->healthy) {
-	
-
-		if (sess->client_myds->active==FALSE) { // || sess->server_myds->active==FALSE) {
-			sess->close(sess); return -1;
-		}
-
-		if (sess->sync_net(sess,0)==FALSE) {
-			sess->close(sess); return -1;
-		}
-
-		sess->buffer2array_2(sess);
-
-		if (sess->client_myds->pkts_sent==1 && sess->client_myds->pkts_recv==1) {
-			pkt *hs=NULL;
-			hs=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
-			sess->ret=check_client_authentication_packet(hs,sess);
-			g_slice_free1(hs->length, hs->data);
-
-			if (sess->ret) {
-				create_err_packet(hs, 2, 1045, "#28000Access denied for user");
-//				authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
-			} else {
-				create_ok_packet(hs,2);
-				if (sess->mysql_schema_cur==NULL) {
-			 		sess->mysql_schema_cur=strdup(glovars.mysql_default_schema);
-				}
-			}
-			g_ptr_array_add(sess->client_myds->output.pkts, hs);
-		}
-		// set status to all possible . Remove options during processing
-//		sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
-
-	
-		start_timer(sess->timers,TIMER_processdata);
-		if (sess->process_client_pkts(sess)==-1) {
-			// we got a COM_QUIT
-			sess->close(sess);
-			return -1;
-		}
-		sess->process_server_pkts(sess);
-		stop_timer(sess->timers,TIMER_processdata);
-
-		sess->array2buffer_2(sess);
-
-
-		if ( (sess->server_myds==NULL) || (sess->last_server_poll_fd==sess->server_myds->fd)) {
-// this optimization is possible only if a connection to the backend didn't break in the meantime,
-// or a master/slave didn't occur,
-// or we never connected to a backend
-			if (sess->sync_net(sess,1)==FALSE) {
-				sess->close(sess); return -1;
-			}
-		}
-		if (sess->client_myds->pkts_sent==2 && sess->client_myds->pkts_recv==1) {
-			if (sess->mysql_schema_cur==NULL) {
-				sess->close(sess); return -1;
-			}
-		}
-		return 0;
-	} else {
-	sess->close(sess);
-	return -1;
-	}
 }
 
 

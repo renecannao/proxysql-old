@@ -746,6 +746,80 @@ static void sess_close(mysql_session_t *sess) {
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 }
 
+
+static void process_authentication_pkt(mysql_session_t *sess) {
+	pkt *hs=NULL;
+	hs=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
+	sess->ret=check_client_authentication_packet(hs,sess);
+	g_slice_free1(hs->length, hs->data);
+	if (sess->ret) {
+ 		create_err_packet(hs, 2, 1045, "#28000Access denied for user");
+//        authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+	} else {
+		create_ok_packet(hs,2);
+		if (sess->mysql_schema_cur==NULL) {
+			sess->mysql_schema_cur=strdup(glovars.mysql_default_schema);
+		}
+	}
+	g_ptr_array_add(sess->client_myds->output.pkts, hs);
+}
+
+
+// thread that handles connection
+static int session_handler(mysql_session_t *sess) {
+
+  sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
+  if (sess->healthy) {
+
+
+    if (sess->client_myds->active==FALSE) { // || sess->server_myds->active==FALSE) {
+      goto exit_session_handler;
+    }
+
+    if (sess->sync_net(sess,0)==FALSE) {
+      goto exit_session_handler;
+    }
+
+    buffer2array_2(sess);
+
+    if (sess->client_myds->pkts_sent==1 && sess->client_myds->pkts_recv==1) {
+      sess->process_authentication_pkt(sess);
+    }
+    // set status to all possible . Remove options during processing
+//    sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
+
+
+    if (process_client_pkts(sess)==-1) {
+      // we got a COM_QUIT
+      goto exit_session_handler;
+    }
+    process_server_pkts(sess);
+
+    array2buffer_2(sess);
+
+
+    if ( (sess->server_myds==NULL) || (sess->last_server_poll_fd==sess->server_myds->fd)) {
+      // this optimization is possible only if a connection to the backend didn't break in the meantime,
+      // or we never connected to a backend
+      if (sess->sync_net(sess,1)==FALSE) {
+        goto exit_session_handler;
+      }
+    }
+    if (sess->client_myds->pkts_sent==2 && sess->client_myds->pkts_recv==1) {
+      if (sess->mysql_schema_cur==NULL) {
+        goto exit_session_handler;
+        //sess->close(sess); return -1;
+      }
+    }
+    return 0;
+  } else {
+  exit_session_handler:
+  sess->close(sess);
+  return -1;
+  }
+}
+
+
 mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int client_fd) {
 	int i;
 	mysql_session_t *sess=g_malloc0(sizeof(mysql_session_t));
@@ -792,13 +866,15 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 
 	sess->conn_poll = conn_poll;
 	sess->sync_net = sync_net;
-	sess->array2buffer_2 = array2buffer_2;
-	sess->buffer2array_2 = buffer2array_2;
+//	sess->array2buffer_2 = array2buffer_2;
+//	sess->buffer2array_2 = buffer2array_2;
 	sess->check_fds_errors = check_fds_errors;
-	sess->process_client_pkts = process_client_pkts;
-	sess->process_server_pkts = process_server_pkts;
+	//sess->process_client_pkts = process_client_pkts;
+	//sess->process_server_pkts = process_server_pkts;
 	sess->remove_all_backends_offline_soft = remove_all_backends_offline_soft;
 	sess->close = sess_close;
+	sess->process_authentication_pkt = process_authentication_pkt;
+	sess->handler = session_handler;
 	return sess;
 }
 
