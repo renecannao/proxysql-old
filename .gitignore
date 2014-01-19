@@ -25,4 +25,7 @@ proxysql.db*
 #binary
 proxysql
 
+#config
+proxysql.cnf
+
 notes.txt

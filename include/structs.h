@@ -263,13 +263,15 @@ obsoleted by hostgroup : END */
 //	public methods
 	int (*conn_poll) (mysql_session_t *);
 	gboolean (*sync_net) (mysql_session_t *, int);
-	void (*buffer2array_2) (mysql_session_t *);
-	void (*array2buffer_2) (mysql_session_t *);
+	//void (*buffer2array_2) (mysql_session_t *);
+	//void (*array2buffer_2) (mysql_session_t *);
 	void (*check_fds_errors) (mysql_session_t *);
-	int (*process_client_pkts) (mysql_session_t *);
-	void (*process_server_pkts) (mysql_session_t *);
+//	int (*process_client_pkts) (mysql_session_t *);
+//	void (*process_server_pkts) (mysql_session_t *);
 	int (*remove_all_backends_offline_soft) (mysql_session_t *);
 	void (*close) (mysql_session_t *);
+	int (*handler) (mysql_session_t *);
+	void (*process_authentication_pkt) (mysql_session_t *);
 //	private methods
 //	void (*read_from_net_2) (mysql_session_t *);
 //	void (*write_to_net_2) (mysql_session_t *, int);
