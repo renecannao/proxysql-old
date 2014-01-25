@@ -17,6 +17,7 @@ Dependencies
 ~~~~~~~~~~~~
 Other than standard libraries, required libraries and header files are:
 
+* libssl and libssl-dev
 * libglib2 and libglib2-dev
 * libmysqlclient and libmysqlclient-dev
 * libpcre3 and libpcre3-dev
