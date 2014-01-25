@@ -1,3 +1,6 @@
+.. image:: https://travis-ci.org/guillaumelecerf/proxysql.png?branch=fix_build
+   :target: https://travis-ci.org/guillaumelecerf/proxysql
+
 ============
 Introduction
 ============
