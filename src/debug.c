@@ -64,22 +64,6 @@ void crash_handler(int sig) {
 	exit(EXIT_FAILURE);
 }
 
-inline void start_timer(timer *tim, enum enum_timer t) {
-	if (!glovars.enable_timers) return;
-	struct timeval  tv;
-	gettimeofday(&tv, NULL);
-	tim[t].begin=(tv.tv_sec) * 1000000 + (tv.tv_usec);
-};
-
-inline void stop_timer(timer *tim, enum enum_timer t) {
-	if (!glovars.enable_timers) return;
-	struct timeval  tv;
-	gettimeofday(&tv, NULL);
-	unsigned long long l=(tv.tv_sec) * 1000000 + (tv.tv_usec) - tim[t].begin;
-	tim[t].total+=l;
-	__sync_fetch_and_add(&glotimers[t],l);
-};
-
 void proxy_debug_func(enum debug_module module, int verbosity, const char *fmt, ...) {
 	assert(module<PROXY_DEBUG_UNKNOWN);
 	if (gdbg_lvl[module].verbosity < verbosity) return;

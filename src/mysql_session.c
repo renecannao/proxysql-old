@@ -240,7 +240,6 @@ static int conn_poll(mysql_session_t *sess) {
 	int r;
 	struct pollfd *fds=sess->fds;
 	fds[0].events=0;
-	start_timer(sess->timers,TIMER_poll);
 	if ((sess->status & CONNECTION_READING_CLIENT) == CONNECTION_READING_CLIENT) {
 		if (sess->client_myds->fd > 0 && queue_available(&sess->client_myds->input.queue)) fds[0].events|=POLLIN;
 	}
@@ -258,13 +257,11 @@ static int conn_poll(mysql_session_t *sess) {
 	}
 	proxy_debug(PROXY_DEBUG_POLL, 4, "calling poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
 //	r=poll(fds,sess->nfds,glovars.mysql_poll_timeout);
-	stop_timer(sess->timers,TIMER_poll);
 	return r;
 }
 
 static void read_from_net_2(mysql_session_t *sess) {
 	// read_from_net for both sockets
-	start_timer(sess->timers,TIMER_read_from_net);
 	if ((sess->client_myds->fd > 0) && ((sess->fds[0].revents & POLLIN) == POLLIN)) {
 		proxy_debug(PROXY_DEBUG_NET, 4, "Calling read_from_net for client\n");
 		sess->client_myds->read_from_net(sess->client_myds);
@@ -276,12 +273,10 @@ static void read_from_net_2(mysql_session_t *sess) {
 		proxy_debug(PROXY_DEBUG_NET, 4, "Calling read_from_net for server\n");
 		sess->server_myds->read_from_net(sess->server_myds);
 	}
-	stop_timer(sess->timers,TIMER_read_from_net);
 }
 
 static void write_to_net_2(mysql_session_t *sess, int ignore_revents) {
 	// write_to_net for both sockets
-	start_timer(sess->timers,TIMER_write_to_net);
 	if ((sess->client_myds->fd > 0) && ( ignore_revents || ((sess->fds[0].revents & POLLOUT) == POLLOUT) ) ) {
 		proxy_debug(PROXY_DEBUG_NET, 4, "Calling write_to_net for client\n");
 		sess->client_myds->write_to_net(sess->client_myds);
@@ -302,24 +297,20 @@ static void write_to_net_2(mysql_session_t *sess, int ignore_revents) {
 //				conn->status |= CONNECTION_READING_SERVER;	
 //			}
 	}
-	stop_timer(sess->timers,TIMER_write_to_net);
 }
 
 
 static void buffer2array_2(mysql_session_t *sess) {
 // buffer2array for both connections
-	start_timer(sess->timers,TIMER_buffer2array);
 	while(sess->client_myds->buffer2array(sess->client_myds) && (sess->client_myds->fd > 0) ) {}
 
 	if (sess->server_myds!=NULL) { // the backend is initialized
 		while(sess->server_myds->buffer2array(sess->server_myds) && (sess->server_myds->fd > 0)) {}
 	}
-	stop_timer(sess->timers,TIMER_buffer2array);
 }
 
 
 static void array2buffer_2(mysql_session_t *sess) {
-	start_timer(sess->timers,TIMER_array2buffer);
 	proxy_debug(PROXY_DEBUG_PKT_ARRAY, 4, "Calling array2buffer for client\n");
 	while(sess->client_myds->array2buffer(sess->client_myds)) {}
 
@@ -327,7 +318,6 @@ static void array2buffer_2(mysql_session_t *sess) {
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 4, "Calling array2buffer for server\n");
 		while(sess->server_myds->array2buffer(sess->server_myds)) {}
 	}
-	stop_timer(sess->timers,TIMER_array2buffer);
 }
 
 
