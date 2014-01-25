@@ -143,7 +143,7 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 #ifdef MARIADB_BASE_VERSION
 	proxy_create_random_string(scramble_buf+0,8,(struct my_rnd_struct *)&rand_st);
 #else
-	proxy_create_random_string(scramble_buf+0,8,(struct rand_struct *)&rand_st);
+	proxy_create_random_string(scramble_buf+0,8,&rand_st);
 #endif
 	
 	int i;
@@ -164,7 +164,7 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 #ifdef MARIADB_BASE_VERSION
 	proxy_create_random_string(scramble_buf+8,12,(struct my_rnd_struct *)&rand_st);
 #else
-	proxy_create_random_string(scramble_buf+8,12,(struct rand_struct *)&rand_st);
+	proxy_create_random_string(scramble_buf+8,12,&rand_st);
 #endif
 //	create_random_string(scramble_buf+8,12,&rand_st);
 
@@ -270,7 +270,7 @@ int mysql_check_alive_and_read_only(const char *hostname, uint16_t port) {
 
 
 
-void proxy_create_random_string(char *to, uint length, struct rand_struct *rand_st) {
+void proxy_create_random_string(char *to, uint length, rand_struct_t *rand_st) {
 	int i;
 	for (i=0; i<length ; i++) {
 		*to= (char) (proxy_my_rnd(rand_st) * 94 + 33);
@@ -279,7 +279,7 @@ void proxy_create_random_string(char *to, uint length, struct rand_struct *rand_
 	*to= '\0';
 }
 
-inline double proxy_my_rnd(struct rand_struct *rand_st) {
+inline double proxy_my_rnd(rand_struct_t *rand_st) {
 	rand_st->seed1= (rand_st->seed1*3+rand_st->seed2) % rand_st->max_value;
 	rand_st->seed2= (rand_st->seed1+rand_st->seed2+33) % rand_st->max_value;
 	return (((double) rand_st->seed1) / rand_st->max_value_dbl);
