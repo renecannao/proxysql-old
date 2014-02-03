@@ -51,6 +51,5 @@ struct _debug_level {
 
 void proxy_debug_func(enum debug_module, int, const char *, ...);
 void proxy_error_func(const char *, ...);
-void * dump_timers();
 void crash_handler(int);
 void init_debug_struct();
