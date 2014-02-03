@@ -16,7 +16,6 @@ void mysql_pkt_err_from_sqlite(pkt *p, const char *s) {
 int mysql_pkt_to_sqlite_exec(pkt *p, mysql_session_t *sess) {
 //	sqlite3 *db;
 	sqlite3 *db=sqlite3configdb;
-	int rc;
 	sqlite3_stmt *statement;
 	void *query=p->data+sizeof(mysql_hdr)+1;
 	int length=p->length-sizeof(mysql_hdr)-1;
@@ -101,7 +100,7 @@ int mysql_pkt_to_sqlite_exec(pkt *p, mysql_session_t *sess) {
 		int i=sizeof(mysql_hdr);
 		for(col = 0; col < cols; col++) {
 			row[col]=(char *)sqlite3_column_text(statement, col);
-			int l=sqlite3_column_bytes(statement, col);
+			//int l=sqlite3_column_bytes(statement, col);
 			i+=writeencstrnull(p->data+i,row[col]);
 		}
 		proxy_debug(PROXY_DEBUG_SQLITE, 6, ". %d cols , %d bytes\n", cols, rowlen);
@@ -207,8 +206,8 @@ void sqlite3_flush_servers_mem_to_db(int replace) {
 			char *query="INSERT INTO hostgroups VALUES (?1 , ?2 , ?3)";
 			rc=sqlite3_prepare_v2(sqlite3configdb, query, -1, &statement, 0);
 			assert(rc==SQLITE_OK);
-			GPtrArray *sl0=g_ptr_array_index(glomysrvs.mysql_hostgroups,0);
-			GPtrArray *sl1=g_ptr_array_index(glomysrvs.mysql_hostgroups,1);
+			//GPtrArray *sl0=g_ptr_array_index(glomysrvs.mysql_hostgroups,0);
+			//GPtrArray *sl1=g_ptr_array_index(glomysrvs.mysql_hostgroups,1);
 			for (i=0;i<glomysrvs.servers->len;i++) {
 				mysql_server *ms=g_ptr_array_index(glomysrvs.servers,i);
 				if (ms->status==MYSQL_SERVER_STATUS_ONLINE) {
@@ -259,7 +258,7 @@ int sqlite3_flush_servers_db_to_mem(int populate_if_empty) {
 	rc=sqlite3_prepare_v2(sqlite3configdb, "SELECT h.hostgroup_id , h.hostname , h.port , sr.read_only , sr.status FROM hostgroups h JOIN servers sr ON h.hostname=sr.hostname AND h.port=sr.port JOIN server_status ss ON ss.status=sr.status", -1, &statement, 0); assert(rc==SQLITE_OK);
 	while ((rc=sqlite3_step(statement))==SQLITE_ROW) {
 		int hostgroup_id=sqlite3_column_int(statement,0);
-		char *address=g_strdup(sqlite3_column_text(statement,1));
+		char *address=g_strdup((char *)sqlite3_column_text(statement,1));
 		uint16_t port=sqlite3_column_int(statement,2);
 		int read_only=sqlite3_column_int(statement,3);
 		enum mysql_server_status status=sqlite3_column_int(statement,4);
@@ -382,8 +381,8 @@ int sqlite3_flush_users_db_to_mem() {
 	int rownum = 0;
 	int result = 0;
 	while ((result=sqlite3_step(statement))==SQLITE_ROW) {
-		gpointer user=g_strdup(sqlite3_column_text(statement,0));
-		gpointer pass=g_strdup(sqlite3_column_text(statement,1));
+		gpointer user=g_strdup((char *)sqlite3_column_text(statement,0));
+		gpointer pass=g_strdup((char *)sqlite3_column_text(statement,1));
 		g_ptr_array_add(glovars.mysql_users_name,user);
 		g_ptr_array_add(glovars.mysql_users_pass,pass);
 		g_hash_table_insert(glovars.usernames, user, pass);
@@ -454,7 +453,6 @@ void admin_init_sqlite3() {
 			count+=sqlite3_column_int(statement,0);
 		}
 		sqlite3_finalize(statement);
-		char *q2=g_malloc0(l);
 		if (count==0) {
 			proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Table %s does not exist or is corrupted. Creating!\n", table_def->table_name);
 			char *q2="DROP TABLE IF EXISTS %s";
@@ -513,7 +511,6 @@ int sqlite3_dump_runtime_query_rules() {
 
 int sqlite3_flush_query_rules_db_to_mem() {
 	// before calling this function we should so some input data validation to verify the content of the table
-	int i;
 	{
 		int rc;
 		char *a="SELECT COUNT(*) FROM query_rules";
@@ -561,9 +558,9 @@ int sqlite3_flush_query_rules_db_to_mem() {
 			proxy_error("Out of range value for flagIN (%d) on rule_id %d\n", qr->flagIN, qr->rule_id);
 			qr->flagIN=0;
 		}
-		qr->username=g_strdup(sqlite3_column_text(statement,2));
-		qr->schemaname=g_strdup(sqlite3_column_text(statement,3));
-		qr->match_pattern=g_strdup(sqlite3_column_text(statement,4));
+		qr->username=g_strdup((const char *)sqlite3_column_text(statement,2));
+		qr->schemaname=g_strdup((const char *)sqlite3_column_text(statement,3));
+		qr->match_pattern=g_strdup((const char *)sqlite3_column_text(statement,4));
 		qr->negate_match_pattern=sqlite3_column_int(statement,5);
 		//some sanity check
 		if (qr->negate_match_pattern > 1) {
@@ -580,7 +577,7 @@ int sqlite3_flush_query_rules_db_to_mem() {
 			proxy_error("Out of range value for flagOUT (%d) on rule_id %d\n", qr->flagOUT, qr->rule_id);
 			qr->flagOUT=0;
 		}
-		qr->replace_pattern=g_strdup(sqlite3_column_text(statement,7));
+		qr->replace_pattern=g_strdup((const char *)sqlite3_column_text(statement,7));
 		qr->destination_hostgroup=sqlite3_column_int(statement,8);
 		//some sanity check
 		if (qr->destination_hostgroup < 0) {
@@ -611,7 +608,7 @@ int sqlite3_flush_query_rules_db_to_mem() {
 			proxy_error("Out of range value for invalidate_cache_tag (%d) on rule_id %d\n", qr->invalidate_cache_tag, qr->rule_id);
 			qr->invalidate_cache_tag=0;
 		}
-		qr->invalidate_cache_pattern=g_strdup(sqlite3_column_text(statement,13));
+		qr->invalidate_cache_pattern=g_strdup((const char *)sqlite3_column_text(statement,13));
 		qr->cache_ttl=sqlite3_column_int(statement,14);
 		//some sanity check
 		if (qr->cache_ttl < -1) {

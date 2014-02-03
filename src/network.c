@@ -1,7 +1,7 @@
 #include "proxysql.h"
 
 int listen_on_port(uint16_t port) {
-    int rc, arg_on=1, arg_off=0;
+    int rc, arg_on=1;
 	struct sockaddr_in addr;
 	int sd;
 	if ( (sd = socket(PF_INET, SOCK_STREAM, 0)) < 0 )
@@ -73,6 +73,8 @@ int connect_socket(char *address, int connect_port)
 	return s;
 }
 
+
+// FIXME: deprecate this function!! FIXME
 gboolean write_one_pkt_to_net(mysql_data_stream_t *myds, pkt *p) {// this should be used ONLY when sure that only 1 packet is expected, for example during authentication
 	g_ptr_array_add(myds->output.pkts, p);
 	myds->array2buffer(myds);
@@ -82,4 +84,5 @@ gboolean write_one_pkt_to_net(mysql_data_stream_t *myds, pkt *p) {// this should
 	if (myds->active==FALSE) {
 		return FALSE;
 	}
+	return TRUE;
 }

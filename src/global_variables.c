@@ -141,7 +141,6 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *co
 
 
 int init_global_variables(GKeyFile *gkf) {
-	int i;
 	GError *error=NULL;
 
 	// open the file and verify it has [global] section

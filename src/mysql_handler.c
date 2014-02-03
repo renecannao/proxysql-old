@@ -146,7 +146,8 @@ int force_remove_servers() {
 	char c;
 	for (i=0; i<glovars.mysql_threads; i++) {
 		proxy_debug(PROXY_DEBUG_IPC, 4, "Writing 1 bytes to thread #%d on fd %d\n", i, proxyipc.fdOut[i]);
-		int r=write(proxyipc.fdOut[i],&c,sizeof(char));
+		//int r;
+		write(proxyipc.fdOut[i],&c,sizeof(char));
 	}
 	for (i=0; i<glovars.mysql_threads; i++) {
 		gpointer ack;
