@@ -139,9 +139,6 @@ static int read_from_net(mysql_data_stream_t *myds) {
 	else {
 		queue_w(q,r);
 		myds->bytes_info.bytes_recv+=r;
-		if (myds->mybe) {
-			__sync_fetch_and_add(&myds->mybe->ms->server_bytes.bytes_recv,r);
-		}
 	}
 	return r;	
 }
@@ -160,21 +157,13 @@ static int write_to_net(mysql_data_stream_t *myds) {
 	else {
 		queue_r(q,r);
 		myds->bytes_info.bytes_sent+=r;
-		if (myds->mybe) {
-			__sync_fetch_and_add(&myds->mybe->ms->server_bytes.bytes_sent,r);
-		}
 	}
 	return r;
 }
 
-mysql_data_stream_t * mysql_data_stream_new(int fd, mysql_session_t *sess, mysql_backend_t *mybe) {
+mysql_data_stream_t * mysql_data_stream_new(int fd, mysql_session_t *sess) {
 	mysql_data_stream_t *my=g_slice_new(mysql_data_stream_t);
 //	mysql_data_stream_t *my=stack_alloc(&myds_pool);
-	my->mybe=mybe;
-	if (mybe) {
-		__sync_fetch_and_add(&mybe->ms->connections_created,1);
-		__sync_fetch_and_add(&mybe->ms->connections_active,1);
-	}
 	my->bytes_info.bytes_recv=0;
 	my->bytes_info.bytes_sent=0;
 	my->pkts_recv=0;

@@ -3,9 +3,9 @@
 
 
 pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
-	//void *value=NULL;
+	void *value=NULL;
 	pkt * result=NULL;
-	//unsigned int vl=0;
+	unsigned int vl=0;
 	int kl=strlen(kp);
 	unsigned char i;
 	i=*((unsigned char *)kp);
@@ -59,19 +59,20 @@ gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, un
 
 	unsigned char i;
 	i=*((unsigned char *)kp);
-	if((kl)>2) i=i+(*((unsigned char *)kp+1))+(*((unsigned char *)kp+2));
-	i=i%hg->size;
-	pthread_rwlock_wrlock(&hg->fdb_hashes[i]->lock);
-	g_ptr_array_add(hg->fdb_hashes[i]->ptrArray, entry);
-	g_hash_table_replace(hg->fdb_hashes[i]->hash, entry->key, entry);
-	pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
-	__sync_fetch_and_add(&hg->cntSet,1);
+    if((kl)>2) i=i+(*((unsigned char *)kp+1))+(*((unsigned char *)kp+2));
+    i=i%hg->size;
+    pthread_rwlock_wrlock(&hg->fdb_hashes[i]->lock);
+    g_ptr_array_add(hg->fdb_hashes[i]->ptrArray, entry);
+    g_hash_table_replace(hg->fdb_hashes[i]->hash, entry->key, entry);
+    pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
+	int s;
+    __sync_fetch_and_add(&hg->cntSet,1);
 	__sync_fetch_and_add(&hg->size_keys,kl);
 	__sync_fetch_and_add(&hg->size_values,vl);
-	__sync_fetch_and_add(&hg->dataIN,vl);
+    __sync_fetch_and_add(&hg->dataIN,vl);
 	__sync_fetch_and_add(&hg->size_metas,sizeof(fdb_hash_entry)+sizeof(fdb_hash_entry *));
 //    __sync_fetch_and_add(&fdb_system_var.cntSet,1);
-	return 0;
+    return 0;
 }
 
 my_bool fdb_del_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
@@ -177,7 +178,7 @@ void *purgeHash_thread(void *arg) {
 		}
 	}
 	proxy_error("Shutdown purgeHash_thread\n");
-	return NULL;
+	return;
 }
 
 long long fdb_hashes_group_free_mem(fdb_hashes_group_t *hg) {

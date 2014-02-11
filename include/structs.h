@@ -1,5 +1,3 @@
-#define MAX_FDS_PER_SESSION	2
-#define MIN_FDS_PER_THREAD	1024
 
 typedef struct __fdb_hash_t fdb_hash_t;
 typedef struct __fdb_hashes_group_t fdb_hashes_group_t;
@@ -56,9 +54,6 @@ typedef struct _queue_t {
 	int head;
 	int tail;
 } queue_t;
-
-
-typedef struct _mysql_backend_t mysql_backend_t;
 
 
 // structure that defines mysql protocol header
@@ -118,7 +113,6 @@ typedef struct _shared_trash_stack_t shared_trash_stack_t;
 
 struct _mysql_data_stream_t {
 	mysql_session_t *sess;	// this MUST always the first, because will be overwritten when pushed in a trash stack
-	mysql_backend_t *mybe;
 	uint64_t pkts_recv;
 	uint64_t pkts_sent;
 	bytes_stats bytes_info;
@@ -203,23 +197,11 @@ typedef struct _mysql_query_metadata_t {
 } mysql_query_metadata_t ;
 
 
-
-typedef struct _mysql_server_hostgroup_entry_t MSHGE;
-struct _mysql_server_hostgroup_entry_t {
-	mysql_server *server_ptr;
-	unsigned long weight;
-	long long connections_created;	
-	long long connections_active;	
-	bytes_stats server_bytes;
-//	long long bytes_sent;	
-//	long long bytes_recv;	
-};
-
+typedef struct _mysql_backend_t mysql_backend_t;
 struct _mysql_backend_t {
 	// attributes
 	int fd;
-//	mysql_server *server_ptr; // FIXME : deprec
-	MSHGE *ms;
+	mysql_server *server_ptr;
 	mysql_data_stream_t *server_myds;
 	mysql_cp_entry_t *server_mycpe;
 	bytes_stats server_bytes_at_cmd;
@@ -233,10 +215,12 @@ struct _mysql_session_t {
 	int admin;
 	int client_fd;
 	int server_fd;
+	int master_fd;
+	int slave_fd;
 	int status;
 	int force_close_backends;
 	int ret;	// generic return status
-	struct pollfd fds[MAX_FDS_PER_SESSION];
+	struct pollfd fds[3];
 	int nfds;
 	int last_server_poll_fd;
 	bytes_stats server_bytes_at_cmd;
@@ -246,13 +230,26 @@ struct _mysql_session_t {
 	mysql_query_metadata_t query_info;
 	gboolean query_to_cache; // must go into query_info
 	GPtrArray *resultset; 
-	//mysql_server *server_ptr;
-	MSHGE *ms;
+	mysql_server *server_ptr;
+/* obsoleted by hostgroup : BEGIN
+	mysql_server *master_ptr;
+	mysql_server *slave_ptr;
+obsoleted by hostgroup : END */
 	mysql_data_stream_t *client_myds;
 	mysql_data_stream_t *server_myds;
+/* obsoleted by hostgroup : BEGIN
+	mysql_data_stream_t *master_myds;
+	mysql_data_stream_t *slave_myds;
+obsoleted by hostgroup : END */
+//	mysql_data_stream_t *idle_server_myds;
 	mysql_cp_entry_t *server_mycpe;
+/* obsoleted by hostgroup : BEGIN
+	mysql_cp_entry_t *master_mycpe;
+	mysql_cp_entry_t *slave_mycpe;
+obsoleted by hostgroup : END */
 	GPtrArray *mybes;
 
+//	mysql_cp_entry_t *idle_server_mycpe;
 	char *mysql_username;
 	char *mysql_password;
 	char *mysql_schema_cur;
@@ -264,8 +261,8 @@ struct _mysql_session_t {
 	gboolean send_to_slave; // must go into query_info
 
 //	public methods
-	void (*conn_poll) (mysql_session_t *);
-//	gboolean (*sync_net) (mysql_session_t *, int);
+	int (*conn_poll) (mysql_session_t *);
+	gboolean (*sync_net) (mysql_session_t *, int);
 	//void (*buffer2array_2) (mysql_session_t *);
 	//void (*array2buffer_2) (mysql_session_t *);
 	void (*check_fds_errors) (mysql_session_t *);
@@ -330,14 +327,14 @@ typedef struct _global_variables {
 
 	// this user needs only USAGE grants
 	// and it is use only to create a connection
-	char *mysql_usage_user;
-	char *mysql_usage_password;
+	unsigned char *mysql_usage_user;
+	unsigned char *mysql_usage_password;
 	
-	char *proxy_admin_user;
-	char *proxy_admin_password;
+	unsigned char *proxy_admin_user;
+	unsigned char *proxy_admin_password;
 
-	char *mysql_default_schema;
-	char *mysql_socket;
+	unsigned char *mysql_default_schema;
+	unsigned char *mysql_socket;
 
 //	unsigned int count_masters;
 //	unsigned int count_slaves;
@@ -459,3 +456,4 @@ struct _global_variable_entry_t {
 };
 
 
+//#define MYSQL_SERVER_STATUS_OFFLINE	0

@@ -31,8 +31,6 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 		&& ( sess->server_bytes_at_cmd.bytes_sent==sess->server_myds->bytes_info.bytes_sent) // no bytes sent so far
 		&& ( sess->server_bytes_at_cmd.bytes_recv==sess->server_myds->bytes_info.bytes_recv) // no bytes recv so far
 	) {
-
-		mysql_backend_t *mybe=g_ptr_array_index(sess->mybes, sess->query_info.destination_hostgroup);
 		int tries=10;
 		while (tries--) {
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Trying to reconnect...\n");
@@ -45,15 +43,22 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 					// for some unknown reason, conn->net.fd may be 0. This seems a bug!
 					sess->server_mycpe->conn->net.vio=0;
 				}
-				//mysql_close(sess->server_mycpe->conn);  // drop the connection
-				mybe->reset(mybe,1);
+				mysql_close(sess->server_mycpe->conn);  // drop the connection
+/* obsoleted by hostgroup : BEGIN 
+				if (sess->send_to_slave==FALSE) {
+					free(sess->master_mycpe);
+					sess->master_mycpe=NULL;
+				} else {
+					free(sess->slave_mycpe);
+					sess->slave_mycpe=NULL;
+				}
+obsoleted by hostgroup : END */
 				sess->server_mycpe=NULL;
 			}
-			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->ms->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->ms->server_ptr->port);   // re-establish a new connection	
+			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
 			// try it
 			if (mycpe) {
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
-				ioctl_FIONBIO(mycpe->conn->net.fd, 0);
 				if (mysql_query(mycpe->conn,"SELECT 1")) {
 					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 3, "SELECT 1 failed on fd %d\n", mycpe->conn->net.fd);
 					//shutdown(mycpe->conn->net.fd, SHUT_RDWR);
@@ -66,29 +71,42 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 				MYSQL_RES *result = mysql_store_result(mycpe->conn);
 				mysql_free_result(result);
 				tries=0;
-				ioctl_FIONBIO(mycpe->conn->net.fd, 1);
 				continue;
 			}
 		}
 		if (mycpe==NULL) {
 			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 3, "Unable to return a connection. Reconnection FAILED\n");
 			// maybe is better if the calling function sends the error to the client. The follow 3 lines should be moved out of here
-//			pkt *hs;
-//			hs=mypkt_alloc(sess);
-//			create_err_packet(hs, 2, 1045, "#28000Access denied for user");
-//			write_one_pkt_to_net(sess->client_myds,hs);
-			authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+			pkt *hs;
+			hs=mypkt_alloc(sess);
+			create_err_packet(hs, 2, 1045, "#28000Access denied for user");
+			write_one_pkt_to_net(sess->client_myds,hs);
 			return FALSE;
 		} else {
-			mybe->server_mycpe=mycpe;
-			mybe->fd=mybe->server_mycpe->conn->net.fd;
-			mybe->server_myds=mysql_data_stream_new(mybe->fd, sess, mybe);
-			mybe->ms=sess->ms;
+/* obsoleted by hostgroup : BEGIN
+			if (sess->send_to_slave==FALSE) {
+				if (sess->master_myds) {
+					sess->master_fd=mycpe->conn->net.fd;
+					sess->master_myds->fd=sess->master_fd;
+					sess->master_mycpe=mycpe;
+					sess->server_fd=sess->master_fd;
+					sess->server_myds=sess->master_myds;
+					sess->server_mycpe=sess->master_mycpe;
+				}
+			} else {
+				sess->slave_fd=mycpe->conn->net.fd;
+				sess->slave_myds->fd=sess->slave_fd;
+				sess->slave_mycpe=mycpe;
+				sess->server_fd=sess->slave_fd;
+				sess->server_myds=sess->slave_myds;
+				sess->server_mycpe=sess->slave_mycpe;
+			}
+obsoleted by hostgroup : END */
+			sess->fds[1].fd=sess->server_myds->fd;
 			sess->server_myds->active=TRUE;
-			return TRUE;
 		}
 	}
-	return FALSE;
+	return TRUE;
 }
 
 
@@ -151,6 +169,7 @@ mysql_connpool *mysql_connpool_create(myConnPools *cp, const char *hostname, con
 mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hostname, const char *username, const char *password, const char *db, unsigned int port) {
 //	NOTE: this function locks the mutex
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Getting a connection for %s %s %s %s %d\n", hostname, username, password, db, port);
+	guint l;
 	mysql_cp_entry_t *mycpe=NULL;
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -210,7 +229,8 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 */
 			int tcp_keepalive_time=600;
 			setsockopt(mysql_con->net.fd, SOL_TCP,  TCP_KEEPIDLE, (char *)&tcp_keepalive_time, sizeof(tcp_keepalive_time));
-			ioctl_FIONBIO(mysql_con->net.fd, 1);
+			int arg_on=1;
+			ioctl(mysql_con->net.fd, FIONBIO, (char *)&arg_on);
 //			pthread_mutex_lock(&cp->mutex);	// acquire the lock only to add the new created connection
 //			mcp=mysql_cp_entry_tpool_find(cp, hostname, username, password, db, port);
 //			g_ptr_array_add(mcp->used_conns,mycpe);
@@ -294,5 +314,5 @@ void * mysql_connpool_purge_thread() {
 		}
 	}
 	proxy_error("Shutdown mysql_connpool_purge_thread\n");
-	return NULL;
+	return;
 }

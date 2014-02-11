@@ -33,6 +33,7 @@ EXTERN ProxyIPC proxyipc;
 EXTERN int gdbg;	// global debug
 EXTERN debug_level *gdbg_lvl;	// global debug levels
 
+EXTERN pthread_t thread_dt;
 EXTERN pthread_t thread_qct;
 EXTERN pthread_t thread_cppt;
 

@@ -1,18 +1,6 @@
 #include "proxysql.h"
 
-static void queue_back_client_pkt(mysql_session_t *sess, pkt *p) {
-	GPtrArray *new_input_pkts=g_ptr_array_sized_new(sess->client_myds->input.pkts->len);
-	g_ptr_array_add(new_input_pkts,p);
-	while(sess->client_myds->input.pkts->len) {
-		pkt *pn=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
-		g_ptr_array_add(new_input_pkts,pn);
-	}
-	while(new_input_pkts->len) {
-		pkt *pn=g_ptr_array_remove_index(new_input_pkts, 0);
-		g_ptr_array_add(sess->client_myds->input.pkts,pn);
-	}
-	g_ptr_array_free(new_input_pkts,TRUE);
-}
+
 
 static void sync_server_bytes_at_cmd(mysql_session_t *sess) {
 	if (sess->server_myds) {
@@ -27,9 +15,9 @@ static void sync_server_bytes_at_cmd(mysql_session_t *sess) {
 static inline void compute_query_checksum(mysql_session_t *sess) {
 	if (sess->query_info.query_checksum==NULL) {
 		sess->query_info.query_checksum=g_checksum_new(G_CHECKSUM_MD5);
-		g_checksum_update(sess->query_info.query_checksum, (const unsigned char *)sess->query_info.query, sess->query_info.query_len);
-		g_checksum_update(sess->query_info.query_checksum, (const unsigned char *)sess->mysql_username, strlen(sess->mysql_username));
-		g_checksum_update(sess->query_info.query_checksum, (const unsigned char *)sess->mysql_schema_cur, strlen(sess->mysql_schema_cur));
+		g_checksum_update(sess->query_info.query_checksum, sess->query_info.query, sess->query_info.query_len);
+		g_checksum_update(sess->query_info.query_checksum, sess->mysql_username, strlen(sess->mysql_username));
+		g_checksum_update(sess->query_info.query_checksum, sess->mysql_schema_cur, strlen(sess->mysql_schema_cur));
 	}
 }
 
@@ -156,8 +144,20 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 						sync_server_bytes_at_cmd(sess);
 
 
+						// return control to master if we were using a slave
+						proxy_debug(PROXY_DEBUG_MYSQL_RW_SPLIT, 5, "Returning control to master. FDs: current: %d master: %d slave: %d\n", sess->server_fd , sess->master_fd , sess->slave_fd);
 						if (sess->send_to_slave==TRUE) {
 							sess->send_to_slave=FALSE;
+/* obsoleted by hostgroup : BEGIN
+							if (sess->master_myds) {
+								sess->server_myds=sess->master_myds;
+								sess->server_fd=sess->master_fd;
+								sess->server_mycpe=sess->master_mycpe;
+								sess->server_ptr=sess->master_ptr;
+								sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
+								sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
+							}
+obsoleted by hostgroup : END */
 						}
 
 //						conn->status &= ~CONNECTION_READING_SERVER;
@@ -207,7 +207,7 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 
 static void process_server_pkts(mysql_session_t *sess) {
 	pkt *p;
-	//int i;
+	int i;
 	if (sess->server_myds==NULL) { // the backend is not initialized, return
 		return;
 		}
@@ -236,7 +236,8 @@ static void process_server_pkts(mysql_session_t *sess) {
 
 
 
-static void conn_poll(mysql_session_t *sess) {
+static int conn_poll(mysql_session_t *sess) {
+	int r;
 	struct pollfd *fds=sess->fds;
 	fds[0].events=0;
 	if ((sess->status & CONNECTION_READING_CLIENT) == CONNECTION_READING_CLIENT) {
@@ -254,8 +255,9 @@ static void conn_poll(mysql_session_t *sess) {
 			if (sess->server_myds->fd > 0 && ( queue_data(&sess->server_myds->output.queue) || sess->server_myds->output.partial || sess->server_myds->output.pkts->len ) ) fds[1].events|=POLLOUT;
 		}
 	}
-	proxy_debug(PROXY_DEBUG_POLL, 4, "setting poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
+	proxy_debug(PROXY_DEBUG_POLL, 4, "calling poll: fd %d events %d , fd %d events %d\n" , sess->fds[0].fd , sess->fds[0].events, sess->fds[1].fd , sess->fds[1].events);
 //	r=poll(fds,sess->nfds,glovars.mysql_poll_timeout);
+	return r;
 }
 
 static void read_from_net_2(mysql_session_t *sess) {
@@ -334,11 +336,13 @@ static void check_fds_errors(mysql_session_t *sess) {
 static gboolean sync_net(mysql_session_t *sess, int write_only) {
 	if (write_only==0) {
 		read_from_net_2(sess);
+		//if (reconnect_server_on_shut_fd(sess, &sess->server_mycpe)==FALSE) {
 		if (reconnect_server_on_shut_fd(sess)==FALSE) {
 			return FALSE;
 		}
 	}
 	write_to_net_2(sess, write_only);
+	//if (reconnect_server_on_shut_fd(sess, &sess->server_mycpe)==FALSE) {
 	if (reconnect_server_on_shut_fd(sess)==FALSE) {
 		return FALSE;
 	}
@@ -420,95 +424,40 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 			} else {
 				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Not found QC entry for checksum %s after query prepocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
 
+/*
+				sess->send_to_slave=TRUE;
+				if (sess->slave_ptr==NULL) {
+					// no slave assigned yet, find one!
+					//sess->slave_ptr=new_server_slave();
+					sess->slave_ptr=mysql_server_random_entry_from_hostgroup__lock(1);
+					if (sess->slave_ptr==NULL) {
+						// handle error!!
+						sess->healthy=0;
+						return ;
+					}
+					sess->slave_mycpe=mysql_connpool_get_connection(&gloconnpool, sess->slave_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->slave_ptr->port);
+					if (sess->slave_mycpe==NULL) {
+						// handle error!!
+						sess->healthy=0;
+						return ;
+					}
+					sess->slave_fd=sess->slave_mycpe->conn->net.fd;
+					sess->slave_myds=mysql_data_stream_init(sess->slave_fd , sess);
+					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new slave_connection fd: %d\n", sess->slave_fd);
+				} 
+				sess->server_myds=sess->slave_myds;
+				sess->server_fd=sess->slave_fd;
+				sess->server_mycpe=sess->slave_mycpe;
+				sess->server_ptr=sess->slave_ptr;
+				sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
+				sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
+*/
 			}
 		}
 //					conn->status &= ~CONNECTION_READING_CLIENT; // NOTE: this is not true for packets >= 16MB , be careful
 	}
 }
 
-
-/*
-	verify if a backend exists
-	if a backend doesn't exist, create a new one
-		if connection to a backend fails because of wrong username/pass, return -1 (ERROR)
-		if connection to a backend fails because there are no available backend, return 0 and mybe_ret is NULL
-		if connection to a backend is successful return 0 and mybe_ret is set to the right mybe;
-		
-	if a backedn exist, check its status:
-		if status==MYSQL_SERVER_STATUS_OFFLINE_HARD return -1
-		if status==MYSQL_SERVER_STATUS_OFFLINE_SOFT and transaction is not active, reset the backend and go back to activate_backend_begin:
-		otherwise return 0 and mybe_ret is set to the right mybe
-
-*/
-
-static int activate_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id, mysql_backend_t **mybe_ret) {
-	assert(hostgroup_id < glovars.mysql_hostgroups);
-	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
-	//int rc;
-	activate_backend_begin:
-	mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
-	if (mybe->ms==NULL) {
-
-		//rc=mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
-
-		//mysql_server *ms=NULL;
-		MSHGE *mshge;
-		//ms=mysql_server_random_entry_from_hostgroup__lock(hostgroup_id);
-		mshge=mysql_server_random_entry_from_hostgroup__lock(hostgroup_id);
-		mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
-		//mybe->server_ptr=ms;
-		mybe->ms=mshge;
-		//if (ms==NULL) {
-		if (mshge==NULL) {
-			*mybe_ret=NULL;
-			return 0;
-		}	
-		mybe->server_mycpe=mysql_connpool_get_connection(&gloconnpool, mybe->ms->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->ms->server_ptr->port);
-		if (mybe->server_mycpe==NULL) {
-    // handle error!!
-			return -1;
-		}
-
-		mybe->fd=mybe->server_mycpe->conn->net.fd;
-  //mybe->server_myds=mysql_data_stream_init(mybe->fd, sess);
-		mybe->server_myds=mysql_data_stream_new(mybe->fd, sess, mybe);
-		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new connection for sess %p , hostgroup %d , fd %d\n", sess , hostgroup_id , mybe->fd);
-/*
-	  return 1;
-
-
-
-		if (rc==-1) { return -1; }
-		if (rc==0) {
-			*mybe_ret=NULL;
-			return 0;
-		}
-		if (rc==1) { // all went ok
-*/
-		mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
-		*mybe_ret=mybe;
-		return 0;
-/*
-		} else { return -1; }
-*/
-	} else { // mybe->server_ptr is not null , check its content
-		if ( mybe->ms->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_HARD ) {
-			return -1; // we must close the session
-		}
-		if ( mybe->ms->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT && mybe->server_myds->active_transaction==0) {
-			// disconnect the backend and get a new one
-			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is OFFLINE_SOFT, disconnect\n", mybe->ms->server_ptr->address, mybe->ms->server_ptr->port);
-			//reset_mysql_backend(mybe,0);
-			mybe->reset(mybe,0);
-			goto activate_backend_begin;
-		} else {
-				*mybe_ret=mybe;
-				return 0;
-		};
-	}
-}
-
-/*
 static int active_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id) {
 	assert(hostgroup_id < glovars.mysql_hostgroups);
 	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
@@ -520,7 +469,7 @@ static int active_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id)
 		return 0;
 	}
 }
-*/
+
 
 static int process_client_pkts(mysql_session_t *sess) {
 	while(sess->client_myds->input.pkts->len) {
@@ -584,30 +533,31 @@ static int process_client_pkts(mysql_session_t *sess) {
 			return -1;
 		}
 		if(sess->mysql_query_cache_hit==FALSE) {
-			if ( sess->client_command != COM_QUERY ) { // if it is not a QUERY , always send to hostgroup 0 . Maybe we should a policy to pick the hostgroup based on other critera
+			if ( sess->client_command != COM_QUERY ) { // if it is not a QUERY , always send to hostgroup 0
 				sess->query_info.destination_hostgroup=0;
 			}
-			// connect to a backend for the specified hostgrup, set in client_COM_QUERY 
-
-			mysql_backend_t *mybe;
-/*			if (active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
+			if (active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
 				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
 			}
 			mysql_backend_t *mybe=g_ptr_array_index(sess->mybes, sess->query_info.destination_hostgroup);
-*/
-			int rc;
-			rc=activate_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup,&mybe);
-			if (rc==-1) {
-				// error, return
-  	  	authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
-				return -1;
-			}
-
-			// rc==0, continue...
-
-			if (mybe->ms==NULL) { // rc==0 , but there is no backend
-				// push the packet back to client queue
-				queue_back_client_pkt(sess, p);
+			if (mybe->server_ptr==NULL) {
+				// we don't have a backend , probably because there is no host associated with the hostgroup, or because we have an error
+				// park the packet ?
+				// create a DataStream without FD ?
+				// push the packet back to client_myds ?
+				// FIXME
+				// trying "put it back"
+				GPtrArray *new_input_pkts=g_ptr_array_sized_new(sess->client_myds->input.pkts->len);
+				g_ptr_array_add(new_input_pkts,p);
+				while(sess->client_myds->input.pkts->len) {
+					pkt *pn=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
+					g_ptr_array_add(new_input_pkts,pn);
+				}
+				while(new_input_pkts->len) {
+					pkt *pn=g_ptr_array_remove_index(new_input_pkts, 0);
+					g_ptr_array_add(sess->client_myds->input.pkts,pn);
+				}
+				g_ptr_array_free(new_input_pkts,TRUE);
 				return 0;
 			}
 
@@ -624,12 +574,10 @@ static int process_client_pkts(mysql_session_t *sess) {
 				sess->server_bytes_at_cmd.bytes_recv=mybe->server_myds->bytes_info.bytes_recv;
 			}
 */
-
-			if ( mybe->ms->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_HARD ) {
+			if ( mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_HARD ) {
 				// we didn't manage to gracefully shutdown the connection , disconnect the client
 				return -1;
 			}
-/*
 			if ( mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT && mybe->server_myds->active_transaction==0) {
 				// disconnect the backend and get a new one
 				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is OFFLINE_SOFT, disconnect\n", mybe->server_ptr->address, mybe->server_ptr->port);
@@ -643,19 +591,58 @@ static int process_client_pkts(mysql_session_t *sess) {
 				}
 
 			}
-*/
-			if ( mybe->ms->server_ptr->status==MYSQL_SERVER_STATUS_ONLINE ) {
-				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is ONLINE, forward data\n", mybe->ms->server_ptr->address, mybe->ms->server_ptr->port);
+			if ( mybe->server_ptr->status==MYSQL_SERVER_STATUS_ONLINE ) {
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is ONLINE, forward data\n", mybe->server_ptr->address, mybe->server_ptr->port);
 				sess->server_myds=mybe->server_myds;
 				sess->server_fd=mybe->fd;
 				sess->server_mycpe=mybe->server_mycpe;
-				sess->ms=mybe->ms;
+				sess->server_ptr=mybe->server_ptr;
 				sync_server_bytes_at_cmd(sess);
 				g_ptr_array_add(sess->server_myds->output.pkts, p);
 			} else {
 				// we should never reach here, sanity check
 				assert(0);
 			}
+/*
+			if (
+				(sess->send_to_slave==FALSE) && 
+				(sess->master_ptr==NULL) ) { // we don't have a connection to a master
+
+					// no master assigned yet, find one!
+					//sess->master_ptr=new_server_master();
+					sess->master_ptr=mysql_server_random_entry_from_hostgroup__lock(0);
+					if (sess->master_ptr==NULL) {
+						// handle error!!
+						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+						return -1;
+					}
+					sess->master_mycpe=mysql_connpool_get_connection(&gloconnpool, sess->master_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->master_ptr->port);
+					if (sess->master_mycpe==NULL) {
+						// handle error!!
+						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
+						return -1;
+					}
+					sess->master_fd=sess->master_mycpe->conn->net.fd;
+					sess->master_myds=mysql_data_stream_init(sess->master_fd, sess);
+					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new master_connection fd: %d\n", sess->master_fd);
+					sess->server_myds=sess->master_myds;
+					sess->server_fd=sess->master_fd;
+					sess->server_mycpe=sess->master_mycpe;
+					sess->server_ptr=sess->master_ptr;
+				} 
+				//sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
+				//sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
+			g_ptr_array_add(sess->server_myds->output.pkts, p);
+			if (
+				(sess->mysql_server_reconnect==TRUE)
+				&& (queue_data(&sess->server_myds->input.queue)==0)
+				&& (queue_data(&sess->server_myds->output.queue)==0)
+			) {
+				sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
+				sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
+			}
+		//debug_print("Moving pkts from %s to %s\n", "client", "server");
+*/
 		}
 	}
 	return 0;
@@ -667,8 +654,8 @@ static int remove_all_backends_offline_soft(mysql_session_t *sess) {
 	for (j=0; j<glovars.mysql_hostgroups; j++) {
 		mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
 // remove all the backends that are not active
-		if (mybe->ms!=NULL) {
-			if (mybe->ms->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT) {
+		if (mybe->server_ptr!=NULL) {
+			if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT) {
 				if (mybe->server_myds->active_transaction==0) {
 					if (mybe->server_myds!=sess->server_myds) {
 						//reset_mysql_backend(mybe,0);
@@ -690,8 +677,8 @@ static int remove_all_backends_offline_soft(mysql_session_t *sess) {
 	// count after cleanup
 	for (j=0; j<glovars.mysql_hostgroups; j++) {
 		mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
-		if (mybe->ms!=NULL)
-			if (mybe->ms->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT)
+		if (mybe->server_ptr!=NULL)
+			if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT)
 				cnt++;
 	}
 	return cnt;
@@ -779,7 +766,7 @@ static int session_handler(mysql_session_t *sess) {
       goto exit_session_handler;
     }
 
-    if (sync_net(sess,0)==FALSE) {
+    if (sess->sync_net(sess,0)==FALSE) {
       goto exit_session_handler;
     }
 
@@ -804,13 +791,14 @@ static int session_handler(mysql_session_t *sess) {
     if ( (sess->server_myds==NULL) || (sess->last_server_poll_fd==sess->server_myds->fd)) {
       // this optimization is possible only if a connection to the backend didn't break in the meantime,
       // or we never connected to a backend
-      if (sync_net(sess,1)==FALSE) {
+      if (sess->sync_net(sess,1)==FALSE) {
         goto exit_session_handler;
       }
     }
     if (sess->client_myds->pkts_sent==2 && sess->client_myds->pkts_recv==1) {
       if (sess->mysql_schema_cur==NULL) {
         goto exit_session_handler;
+        //sess->close(sess); return -1;
       }
     }
     return 0;
@@ -832,7 +820,7 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	glomysrvs.mysql_connections_cur+=1;
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	// generic initalization
-	sess->ms=NULL;
+	sess->server_ptr=NULL;
 	sess->server_myds=NULL;
 	sess->server_mycpe=NULL;
 	sess->mysql_username=NULL;
@@ -849,7 +837,7 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	sess->timers=calloc(sizeof(timer),TOTAL_TIMERS);
 	sess->handler_thread=handler_thread;
 	//sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
-	sess->client_myds=mysql_data_stream_new(sess->client_fd, sess, NULL);	
+	sess->client_myds=mysql_data_stream_new(sess->client_fd, sess);	
 	sess->client_myds->fd=sess->client_fd;
 	sess->fds[0].fd=sess->client_myds->fd;
 	sess->fds[0].events=POLLIN|POLLOUT;
@@ -867,7 +855,7 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	}
 
 	sess->conn_poll = conn_poll;
-	//sess->sync_net = sync_net;
+	sess->sync_net = sync_net;
 //	sess->array2buffer_2 = array2buffer_2;
 //	sess->buffer2array_2 = buffer2array_2;
 	sess->check_fds_errors = check_fds_errors;

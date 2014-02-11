@@ -146,8 +146,7 @@ int force_remove_servers() {
 	char c;
 	for (i=0; i<glovars.mysql_threads; i++) {
 		proxy_debug(PROXY_DEBUG_IPC, 4, "Writing 1 bytes to thread #%d on fd %d\n", i, proxyipc.fdOut[i]);
-		//int r;
-		write(proxyipc.fdOut[i],&c,sizeof(char));
+		int r=write(proxyipc.fdOut[i],&c,sizeof(char));
 	}
 	for (i=0; i<glovars.mysql_threads; i++) {
 		gpointer ack;
@@ -371,28 +370,25 @@ inline void mysql_server_entry_add(mysql_server *ms) {
 	g_ptr_array_add(glomysrvs.servers,ms);
 }
 
-void mysql_server_entry_add_hostgroup(mysql_server *server_ptr, int hostgroup_id) {
+void mysql_server_entry_add_hostgroup(mysql_server *ms, int hostgroup_id) {
 	if (hostgroup_id >= glovars.mysql_hostgroups) {
-		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Server %s:%d not inserted in hostgroup %d as this is an invalid hostgroup\n", server_ptr->address, server_ptr->port, hostgroup_id);
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Server %s:%d not inserted in hostgroup %d as this is an invalid hostgroup\n", ms->address, ms->port, hostgroup_id);
 		return;
 	}
 	GPtrArray *hg=g_ptr_array_index(glomysrvs.mysql_hostgroups, hostgroup_id);
-	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Adding server %s:%d in hostgroup %d\n", server_ptr->address, server_ptr->port, hostgroup_id);
-	MSHGE *ms;
-	ms=g_malloc0(sizeof(MSHGE));
-	ms->server_ptr=server_ptr;
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Adding server %s:%d in hostgroup %d\n", ms->address, ms->port, hostgroup_id);
 	g_ptr_array_add(hg,ms);	
 }
 
-MSHGE * mysql_server_random_entry_from_hostgroup__lock(int hostgroup_id) {
-	MSHGE *ms;
+mysql_server * mysql_server_random_entry_from_hostgroup__lock(int hostgroup_id) {
+	mysql_server *ms;
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	ms=mysql_server_random_entry_from_hostgroup__nolock(hostgroup_id);
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;
 }
 
-MSHGE * mysql_server_random_entry_from_hostgroup__nolock(int hostgroup_id) {
+mysql_server * mysql_server_random_entry_from_hostgroup__nolock(int hostgroup_id) {
 	assert(hostgroup_id < glovars.mysql_hostgroups);
 	GPtrArray *hg=g_ptr_array_index(glomysrvs.mysql_hostgroups, hostgroup_id);
 	if (hg->len==0) {
@@ -400,23 +396,23 @@ MSHGE * mysql_server_random_entry_from_hostgroup__nolock(int hostgroup_id) {
 		return NULL;
 	}
 	int i=rand()%hg->len;
-	MSHGE *ms;
+	mysql_server *ms;
 	ms=g_ptr_array_index(hg,i);
-	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Returning server %s:%d from hostgroup %d\n", ms->server_ptr->address, ms->server_ptr->port, hostgroup_id);
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Returning server %s:%d from hostgroup %d\n", ms->address, ms->port, hostgroup_id);
 	return ms;
 }
 
 int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id) {
 	assert(hostgroup_id < glovars.mysql_hostgroups);
-	MSHGE *ms=NULL;
+	mysql_server *ms=NULL;
 	ms=mysql_server_random_entry_from_hostgroup__lock(hostgroup_id);
 	mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
-	mybe->ms=ms;
+	mybe->server_ptr=ms;
 	if (ms==NULL) {
 		// this is a severe condition, needs to be handled
 		return 0;
 	}
-	mybe->server_mycpe=mysql_connpool_get_connection(&gloconnpool, mybe->ms->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->ms->server_ptr->port);
+	mybe->server_mycpe=mysql_connpool_get_connection(&gloconnpool, mybe->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->server_ptr->port);
 	if (mybe->server_mycpe==NULL) {
 		// handle error!!
 		authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
@@ -425,7 +421,7 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 	}
 	mybe->fd=mybe->server_mycpe->conn->net.fd;
 	//mybe->server_myds=mysql_data_stream_init(mybe->fd, sess);
-	mybe->server_myds=mysql_data_stream_new(mybe->fd, sess, mybe);
+	mybe->server_myds=mysql_data_stream_new(mybe->fd, sess);
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new connection for sess %p , hostgroup %d , fd %d\n", sess , hostgroup_id , mybe->fd);
 	return 1;
 }

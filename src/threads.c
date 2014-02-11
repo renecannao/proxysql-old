@@ -9,8 +9,13 @@ void start_background_threads(pthread_attr_t *attr) {
 	int r;
 	if (glovars.mysql_query_cache_enabled==TRUE) {
 		fdb_hashes_new(&QC,glovars.mysql_query_cache_partitions, glovars.mysql_query_cache_default_timeout, glovars.mysql_query_cache_size);
+//		pthread_t qct;
 		pthread_create(&thread_qct, NULL, purgeHash_thread, &QC);
 	}
+//	pthread_t dt;
+	r=pthread_create(&thread_dt, attr, dump_timers , NULL);
+	assert(r==0);
+//	pthread_t cppt;
 	r=pthread_create(&thread_cppt, attr, mysql_connpool_purge_thread , NULL);
 	assert(r==0);
 }

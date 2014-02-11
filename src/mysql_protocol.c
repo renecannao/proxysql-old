@@ -54,7 +54,7 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	int cur=sizeof(mysql_hdr);
 	memcpy(&capabilities,mypkt->data+cur,sizeof(uint32_t));
 	cur+=32;
-	char *username=mypkt->data+cur;
+	unsigned char *username=mypkt->data+cur;
 	sess->mysql_username=strdup(username);
 	unsigned char *scramble_reply=NULL;
 	cur+=strlen(username);
@@ -72,7 +72,7 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 		return ret;
 	}
 	proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Password in hash table = %s\n" , sess->mysql_password);
-	char reply[SHA_DIGEST_LENGTH+1];
+	unsigned char reply[SHA_DIGEST_LENGTH+1];
 	reply[SHA_DIGEST_LENGTH]='\0';
 	if (scramble_reply) {
 		proxy_scramble(reply, sess->scramble_buf, sess->mysql_password);
@@ -340,9 +340,9 @@ int lencint(uint64_t v) {
 	if (v>=65536 && v<16777216) {
 		return 4;
 	}
-	//if (v>=16777216) {
+	if (v>=16777216) {
 		return 9;
-	//}
+	}
 }
 
 
