@@ -2,17 +2,19 @@
 
 static void reset(mysql_backend_t *mybe, int force_close) {
 	mybe->fd=0;
+	int fc=force_close;
 	if (mybe->server_ptr) {
 		// without the IF , this can cause SIGSEGV
 		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend, server %s:%d , fd %d\n", mybe->server_ptr->address, mybe->server_ptr->port, mybe->fd);
 	}
 	mybe->server_ptr=NULL;
 	if (mybe->server_myds) {
+		if (fc==0 && mybe->server_myds->active==FALSE) { fc=1; } // close an inactive data stream
 		mysql_data_stream_delete(mybe->server_myds);
 	}
 	mybe->server_myds=NULL;
 	if (mybe->server_mycpe) {
-		mysql_connpool_detach_connection(&gloconnpool, mybe->server_mycpe, force_close);
+		mysql_connpool_detach_connection(&gloconnpool, mybe->server_mycpe, fc);
 	}
 	mybe->server_mycpe=NULL;
 	memset(&mybe->server_bytes_at_cmd,0,sizeof(bytes_stats));

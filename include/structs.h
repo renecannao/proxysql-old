@@ -1,3 +1,5 @@
+#define MAX_FDS_PER_SESSION 2
+#define MIN_FDS_PER_THREAD  1024
 
 typedef struct __fdb_hash_t fdb_hash_t;
 typedef struct __fdb_hashes_group_t fdb_hashes_group_t;
@@ -220,7 +222,7 @@ struct _mysql_session_t {
 	int status;
 	int force_close_backends;
 	int ret;	// generic return status
-	struct pollfd fds[3];
+	struct pollfd fds[MAX_FDS_PER_SESSION];
 	int nfds;
 	int last_server_poll_fd;
 	bytes_stats server_bytes_at_cmd;

@@ -175,7 +175,7 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 	mysql_cp_entry_t *mycpe=NULL;
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	unsigned long long curr_time=(tv.tv_sec) * 1000000 + (tv.tv_usec);
+	unsigned long long curr_time=(unsigned long long) (tv.tv_sec) * 1000000 + (tv.tv_usec);
 	if (cp->enabled==TRUE) {
 		pthread_mutex_lock(&cp->mutex);
 		mysql_connpool *mcp=mysql_connpool_find(cp, hostname, username, password, db, port);
@@ -270,7 +270,7 @@ void mysql_connpool_detach_connection(myConnPools *cp, mysql_cp_entry_t *mc, int
 		//g_ptr_array_remove_fast(mcp->used_conns,mc);
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
-		unsigned long long curr_time=(tv.tv_sec) * 1000000 + (tv.tv_usec);
+		unsigned long long curr_time=(unsigned long long) (tv.tv_sec) * 1000000 + (tv.tv_usec);
 		if (mc->expire <= curr_time) {	// if the connection is expired ...
 			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Closing expired connection for %s %s %s %s %d\n", mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
 			mysql_close(mc->conn);	// ... close it
