@@ -226,7 +226,7 @@ struct _mysql_session_t {
 	bytes_stats server_bytes_at_cmd;
 	enum enum_server_command client_command;
 	enum enum_resultset_progress resultset_progress;
-	int resultset_size;
+	unsigned long long resultset_size;
 	mysql_query_metadata_t query_info;
 	gboolean query_to_cache; // must go into query_info
 	GPtrArray *resultset; 
@@ -320,7 +320,7 @@ typedef struct _global_variables {
 	unsigned int mysql_query_cache_default_timeout;
 	unsigned long long mysql_wait_timeout;
 	unsigned long long mysql_query_cache_size;
-	int mysql_max_resultset_size;
+	unsigned long long mysql_max_resultset_size;
 	int mysql_max_query_size;
 
 	int mysql_hostgroups;

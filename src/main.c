@@ -296,10 +296,13 @@ int main(int argc, char **argv) {
 	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
 	listen_tcp_admin_fd=listen_on_port((uint16_t)glovars.proxy_admin_port);
 	listen_unix_fd=listen_on_unix(glovars.mysql_socket);
-	int arg_on=1, arg_off=0;
-	ioctl(listen_tcp_fd, FIONBIO, (char *)&arg_on);
-	ioctl(listen_tcp_admin_fd, FIONBIO, (char *)&arg_on);
-	ioctl(listen_unix_fd, FIONBIO, (char *)&arg_on);
+	//int arg_on=1, arg_off=0;
+	//ioctl(listen_tcp_fd, FIONBIO, (char *)&arg_on);
+	//ioctl(listen_tcp_admin_fd, FIONBIO, (char *)&arg_on);
+	//ioctl(listen_unix_fd, FIONBIO, (char *)&arg_on);
+	ioctl_FIONBIO(listen_tcp_fd, 1);
+	ioctl_FIONBIO(listen_tcp_admin_fd, 1);
+	ioctl_FIONBIO(listen_unix_fd, 1);
 	struct pollfd fds[2];
 	int nfds=2;
 	fds[0].fd=listen_tcp_fd;

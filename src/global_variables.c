@@ -24,7 +24,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"global", "proxy_admin_password", G_OPTION_ARG_STRING, &glovars.proxy_admin_password, "proxy admin password", 0, 0, 0, 0, 0, "admin", NULL, NULL},
 	{"mysql", "mysql_threads", G_OPTION_ARG_INT, &glovars.mysql_threads, "number of threads to handle mysql connections", 1, 128, 0, 0, 2, NULL, pre_variable_mysql_threads, NULL},
 	{"mysql", "mysql_max_query_size", G_OPTION_ARG_INT, &glovars.mysql_max_query_size, "mysql max size of a COM_QUERY command", 0, 16777210, 0, 0, 1024*1024, NULL, NULL, NULL},
-	{"mysql", "mysql_max_resultset_size", G_OPTION_ARG_INT, &glovars.mysql_max_resultset_size, "mysql max resultset size", 0, INT_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
+	{"mysql", "mysql_max_resultset_size", G_OPTION_ARG_INT64, &glovars.mysql_max_resultset_size, "mysql max resultset size", 0, INT_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
 	{"mysql", "mysql_poll_timeout", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout, "poll() timeout (in millisecond)", 100, INT_MAX, 0, 0, 10000, NULL, NULL, NULL},
 	{"mysql", "mysql_poll_timeout_maintenance", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout_maintenance, "poll() timeout (in millisecond) during maintenance", 100, 1000, 0, 0, 100, NULL, NULL, NULL},
 	{"mysql", "mysql_maintenance_timeout", G_OPTION_ARG_INT, &glovars.mysql_maintenance_timeout, "max time to remove mysql servers (in millisecond)", 1000, 60000, 0, 0, 10000, NULL, NULL, NULL},

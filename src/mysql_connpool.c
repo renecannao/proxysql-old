@@ -59,6 +59,7 @@ obsoleted by hostgroup : END */
 			// try it
 			if (mycpe) {
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
+				ioctl_FIONBIO(mycpe->conn->net.fd, 0);
 				if (mysql_query(mycpe->conn,"SELECT 1")) {
 					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 3, "SELECT 1 failed on fd %d\n", mycpe->conn->net.fd);
 					//shutdown(mycpe->conn->net.fd, SHUT_RDWR);
@@ -71,6 +72,7 @@ obsoleted by hostgroup : END */
 				MYSQL_RES *result = mysql_store_result(mycpe->conn);
 				mysql_free_result(result);
 				tries=0;
+				ioctl_FIONBIO(mycpe->conn->net.fd, 1);
 				continue;
 			}
 		}
@@ -229,8 +231,9 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 */
 			int tcp_keepalive_time=600;
 			setsockopt(mysql_con->net.fd, SOL_TCP,  TCP_KEEPIDLE, (char *)&tcp_keepalive_time, sizeof(tcp_keepalive_time));
-			int arg_on=1;
-			ioctl(mysql_con->net.fd, FIONBIO, (char *)&arg_on);
+//			int arg_on=1;
+//			ioctl(mysql_con->net.fd, FIONBIO, (char *)&arg_on);
+			ioctl_FIONBIO(mysql_con->net.fd, 1);
 //			pthread_mutex_lock(&cp->mutex);	// acquire the lock only to add the new created connection
 //			mcp=mysql_cp_entry_tpool_find(cp, hostname, username, password, db, port);
 //			g_ptr_array_add(mcp->used_conns,mycpe);
