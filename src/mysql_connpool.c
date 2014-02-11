@@ -49,7 +49,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 				mybe->reset(mybe,1);
 				sess->server_mycpe=NULL;
 			}
-			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
+			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->ms->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->ms->server_ptr->port);   // re-establish a new connection	
 			// try it
 			if (mycpe) {
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
@@ -82,8 +82,8 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 		} else {
 			mybe->server_mycpe=mycpe;
 			mybe->fd=mybe->server_mycpe->conn->net.fd;
-			mybe->server_myds=mysql_data_stream_new(mybe->fd, sess);
-			mybe->server_ptr=sess->server_ptr;
+			mybe->server_myds=mysql_data_stream_new(mybe->fd, sess, mybe);
+			mybe->ms=sess->ms;
 			sess->server_myds->active=TRUE;
 			return TRUE;
 		}

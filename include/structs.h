@@ -58,6 +58,9 @@ typedef struct _queue_t {
 } queue_t;
 
 
+typedef struct _mysql_backend_t mysql_backend_t;
+
+
 // structure that defines mysql protocol header
 typedef struct _mysql_hdr {
    u_int pkt_length:24, pkt_id:8;
@@ -115,6 +118,7 @@ typedef struct _shared_trash_stack_t shared_trash_stack_t;
 
 struct _mysql_data_stream_t {
 	mysql_session_t *sess;	// this MUST always the first, because will be overwritten when pushed in a trash stack
+	mysql_backend_t *mybe;
 	uint64_t pkts_recv;
 	uint64_t pkts_sent;
 	bytes_stats bytes_info;
@@ -200,22 +204,22 @@ typedef struct _mysql_query_metadata_t {
 
 
 
-typedef struct _mysql_server_hostgroup_entry_t mshge;
+typedef struct _mysql_server_hostgroup_entry_t MSHGE;
 struct _mysql_server_hostgroup_entry_t {
 	mysql_server *server_ptr;
 	unsigned long weight;
 	long long connections_created;	
 	long long connections_active;	
-	long long bytes_sent;	
-	long long bytes_recv;	
+	bytes_stats server_bytes;
+//	long long bytes_sent;	
+//	long long bytes_recv;	
 };
 
-typedef struct _mysql_backend_t mysql_backend_t;
 struct _mysql_backend_t {
 	// attributes
 	int fd;
-	mysql_server *server_ptr; // FIXME : deprecate
-	mshge *ms;
+//	mysql_server *server_ptr; // FIXME : deprec
+	MSHGE *ms;
 	mysql_data_stream_t *server_myds;
 	mysql_cp_entry_t *server_mycpe;
 	bytes_stats server_bytes_at_cmd;
@@ -242,7 +246,8 @@ struct _mysql_session_t {
 	mysql_query_metadata_t query_info;
 	gboolean query_to_cache; // must go into query_info
 	GPtrArray *resultset; 
-	mysql_server *server_ptr;
+	//mysql_server *server_ptr;
+	MSHGE *ms;
 	mysql_data_stream_t *client_myds;
 	mysql_data_stream_t *server_myds;
 	mysql_cp_entry_t *server_mycpe;

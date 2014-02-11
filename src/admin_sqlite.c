@@ -249,6 +249,8 @@ int sqlite3_flush_servers_db_to_mem(int populate_if_empty) {
 	for(i=0;i<glovars.mysql_hostgroups;i++) {
 		GPtrArray *sl=g_ptr_array_index(glomysrvs.mysql_hostgroups,i);
 		while (sl->len) {
+			MSHGE *ms=g_ptr_array_index(sl,0);
+			g_free(ms);
 			g_ptr_array_remove_index_fast(sl,0);
 		}
 		g_ptr_array_add(glomysrvs.mysql_hostgroups,sl);
@@ -637,12 +639,12 @@ int sqlite3_dump_runtime_hostgroups() {
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_hostgroups\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_hostgroups");
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_hostgroups\n");
-	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_hostgroups ( hostgroup_id INT NOT NULL DEFAULT 0, hostname VARCHAR NOT NULL , port INT NOT NULL DEFAULT 3306, PRIMARY KEY (hostgroup_id, hostname, port) )");
+	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_hostgroups ( hostgroup_id INT NOT NULL DEFAULT 0, hostname VARCHAR NOT NULL , port INT NOT NULL DEFAULT 3306, connections_active INT NOT NULL, connections_created INT NOT NULL, bytes_sent INT NOT NULL, bytes_recv INT NOT NULL, PRIMARY KEY (hostgroup_id, hostname, port) )");
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_servers\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"DROP TABLE IF EXISTS runtime_servers");
 	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_servers\n");
 	sqlite3_exec_exit_on_failure(sqlite3configdb,"CREATE TABLE runtime_servers ( hostname VARCHAR NOT NULL , port INT NOT NULL, read_only INT NOT NULL, status NOT NULL )");
-	char *query1="INSERT INTO runtime_hostgroups VALUES (%d ,\"%s\", %d)";
+	char *query1="INSERT INTO runtime_hostgroups VALUES (%d ,\"%s\", %d, %llu, %llu, %llu, %llu)";
 	char *query2="INSERT INTO runtime_servers VALUES (\"%s\", %d, %d, %d)";
 	int l;
 	pthread_rwlock_rdlock(&glomysrvs.rwlock);
@@ -650,10 +652,10 @@ int sqlite3_dump_runtime_hostgroups() {
 		proxy_debug(PROXY_DEBUG_SQLITE, 5, "Populating runtime_hostgroups with hosts from hostgroup %d", i);
 		GPtrArray *sl=g_ptr_array_index(glomysrvs.mysql_hostgroups,i);
 		for(j=0;j<sl->len;j++) {
-			mysql_server *ms=g_ptr_array_index(sl,j);
-			l=strlen(query1)+strlen(ms->address)+14;
+			MSHGE *ms=g_ptr_array_index(sl,j);
+			l=strlen(query1)+strlen(ms->server_ptr->address)+14+80;
 			char *buff=g_malloc0(l);
-			sprintf(buff,query1,i,ms->address,ms->port);
+			sprintf(buff,query1,i,ms->server_ptr->address,ms->server_ptr->port, ms->connections_active, ms->connections_created, ms->server_bytes.bytes_sent, ms->server_bytes.bytes_recv);
 			sqlite3_exec_exit_on_failure(sqlite3configdb,buff);
 			g_free(buff);
 			numrow++;

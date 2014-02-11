@@ -2,11 +2,12 @@
 
 static void reset(mysql_backend_t *mybe, int force_close) {
 	mybe->fd=0;
-	if (mybe->server_ptr) {
+	if (mybe->ms) {
 		// without the IF , this can cause SIGSEGV
-		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend, server %s:%d , fd %d\n", mybe->server_ptr->address, mybe->server_ptr->port, mybe->fd);
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend, server %s:%d , fd %d\n", mybe->ms->server_ptr->address, mybe->ms->server_ptr->port, mybe->fd);
+		__sync_fetch_and_sub(&mybe->ms->connections_active,1);
 	}
-	mybe->server_ptr=NULL;
+	mybe->ms=NULL;
 	if (mybe->server_myds) {
 		mysql_data_stream_delete(mybe->server_myds);
 	}
