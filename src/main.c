@@ -29,6 +29,12 @@ int listen_tcp_fd;
 int listen_tcp_admin_fd;
 int listen_unix_fd;
 
+long monotonic_time() {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (((long) ts.tv_sec) * 1000000) + (ts.tv_nsec / 1000);
+}
+
 
 void send_auth_pkt(mysql_session_t *sess) {
 	pkt *hs;
@@ -43,7 +49,7 @@ void *mysql_thread(void *arg) {
 	mysql_thread_init();
 
 	int removing_hosts=0;
-	gint64 maintenance_ends=0;
+	long maintenance_ends=0;
 	proxy_mysql_thread_t thr;
 	thr.thread_id=*(int *)arg;
 	thr.free_pkts.stack=NULL;
@@ -121,7 +127,7 @@ void *mysql_thread(void *arg) {
 			if (strncmp(admincmd,"REMOVE SERVER",20)==0) {
 				
 				removing_hosts=1;
-				maintenance_ends=g_get_monotonic_time()+glovars.mysql_maintenance_timeout*1000;
+				maintenance_ends=monotonic_time()+glovars.mysql_maintenance_timeout*1000;
 //				mysql_server *ms=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
 //				proxy_debug(PROXY_DEBUG_IPC, 6, "Got %p on thr %d\n", ms, thr.thread_id);
 			}
@@ -143,7 +149,7 @@ void *mysql_thread(void *arg) {
 				proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thr.thread_id);
 				g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
 			} else {
-				gint64 ct=g_get_monotonic_time();
+				long ct=monotonic_time();
 				if (ct > maintenance_ends) {
 					// drop all connections that aren't switched yet
 					int i;
