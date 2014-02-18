@@ -323,10 +323,12 @@ static void array2buffer_2(mysql_session_t *sess) {
 
 static void check_fds_errors(mysql_session_t *sess) {
 	if ( ((sess->fds[0].revents & POLLERR)==POLLERR) || ((sess->fds[0].revents & POLLHUP)==POLLHUP) || ((sess->fds[0].revents & POLLNVAL)==POLLNVAL) ) { 
+		proxy_debug(PROXY_DEBUG_NET, 4, "Detected error on client connection fd %d . events=%d , revents=%d\n", sess->fds[0].fd, sess->fds[0].events, sess->fds[0].revents);
 		sess->client_myds->shut_soft(sess->client_myds);
 	}
 	if (sess->server_myds!=NULL) { // the backend is initialized
-		if ( ((sess->fds[1].revents & POLLERR)==POLLERR) || ((sess->fds[1].revents & POLLHUP)==POLLHUP) || ((sess->fds[1].revents & POLLNVAL)==POLLNVAL) ) { 
+		if ( ((sess->fds[1].revents & POLLERR)==POLLERR) || ((sess->fds[1].revents & POLLHUP)==POLLHUP) || ((sess->fds[1].revents & POLLNVAL)==POLLNVAL) ) {
+			proxy_debug(PROXY_DEBUG_NET, 4, "Detected error on server connection fd %d . events=%d , revents=%d\n", sess->fds[1].fd, sess->fds[1].events, sess->fds[1].revents);
 			sess->server_myds->shut_soft(sess->server_myds);
 		}
 	}
