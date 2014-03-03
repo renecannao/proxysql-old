@@ -89,7 +89,7 @@ void process_global_variables_from_file(GKeyFile *gkf) {
 }
 
 
-void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *config_file) {
+void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **config_fileptr) {
 
 
 	// Prepare the processing of config file
@@ -120,7 +120,7 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar *co
 	}
 */
 	proxy_debug(PROXY_DEBUG_GENERIC, 1, "processing opts\n");
-
+	gchar *config_file=*config_fileptr;
 	// check if file exists and is readable
 	if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
 		g_print("Config file %s does not exist\n", config_file); exit(EXIT_FAILURE);

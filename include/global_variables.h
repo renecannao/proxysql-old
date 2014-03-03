@@ -44,7 +44,7 @@ int init_global_variables(GKeyFile *);
 mysql_server * new_server_master();
 mysql_server * new_server_slave();
 void process_global_variables_from_file(GKeyFile *);
-void main_opts(const GOptionEntry *, gint *, gchar ***, gchar *);
+void main_opts(const GOptionEntry *, gint *, gchar ***, gchar **);
 
 void init_glomysrvs(global_variable_entry_t *);
 void load_mysql_users_from_file(GKeyFile *);

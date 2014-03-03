@@ -269,7 +269,7 @@ int main(int argc, char **argv) {
 
 
 	// parse all the arguments and the config file
-	main_opts(entries, &argc, &argv, config_file);
+	main_opts(entries, &argc, &argv, &config_file);
 
 	admin_init_sqlite3();
 
