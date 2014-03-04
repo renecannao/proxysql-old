@@ -245,7 +245,7 @@ void *mysql_thread(void *arg) {
 			// allocate more fds
 			max_fds+=MIN_FDS_PER_THREAD;
 			struct pollfd *fds_tmp=(void *)g_malloc0(sizeof(struct pollfd)*max_fds);
-			memcpy(fds,fds_tmp,sizeof(struct pollfd)*nfds);
+			memcpy(fds_tmp,fds,sizeof(struct pollfd)*nfds);
 			g_free(fds);
 			fds=fds_tmp;
 		}
