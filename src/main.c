@@ -30,7 +30,7 @@ pthread_attr_t attr;
 int conn_cnt=0;
 
 time_t laststart;
-
+////
 
 __thread l_sfp *__thr_sfp=NULL;
 __thread myConnPools __thr_myconnpool;
@@ -42,7 +42,6 @@ int listen_unix_fd;
 
 pthread_t *glo_mysql_thrarr=NULL;
 
-	//fprintf(stderr,"%s\n",daemon_pid_file_ident);
 
 static const char * proxysql_pid_file() {
 	static char fn[512];
