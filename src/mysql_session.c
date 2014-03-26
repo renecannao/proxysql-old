@@ -83,8 +83,8 @@ static inline void server_COM_INIT_DB(mysql_session_t *sess, pkt *p, enum MySQL_
 	if (r==OK_Packet) {
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got OK on COM_INIT_DB for schema %s\n", sess->mysql_schema_new);
 		if (sess->mysql_schema_cur) {
-			free(sess->mysql_schema_cur);
-			sess->mysql_schema_cur=strdup(sess->mysql_schema_new);
+			g_free(sess->mysql_schema_cur);
+			sess->mysql_schema_cur=g_strdup(sess->mysql_schema_new);
 		}
 		sess->mysql_schema_cur=g_strdup(sess->mysql_schema_new);
 		MY_SESS_ADD_PKT_OUT_CLIENT(p);
@@ -97,7 +97,7 @@ static inline void server_COM_INIT_DB(mysql_session_t *sess, pkt *p, enum MySQL_
 	}
 	if (sess->mysql_schema_new) {
 		PROXY_TRACE();
-		free(sess->mysql_schema_new);
+		g_free(sess->mysql_schema_new);
 		sess->mysql_schema_new=NULL;
 	}
 	// sync for auto-reconnect
@@ -480,7 +480,7 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		sess->healthy=0;
 		return;
 	}
-	sess->mysql_schema_new=calloc(1,p->length-sizeof(mysql_hdr));
+	sess->mysql_schema_new=g_malloc0(p->length-sizeof(mysql_hdr));
 	memcpy(sess->mysql_schema_new, p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1);
 	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got COM_INIT_DB packet for schema %s\n", sess->mysql_schema_new);
 	if ((sess->mysql_schema_cur) && (strcmp(sess->mysql_schema_new, sess->mysql_schema_cur)==0)) {
@@ -499,7 +499,7 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		MY_SESS_ADD_PKT_OUT_CLIENT(p);
 		//l_ptr_array_add(sess->client_myds->output.pkts, p);
 		// reset conn->mysql_schema_new 
-		free(sess->mysql_schema_new);
+		g_free(sess->mysql_schema_new);
 		sess->mysql_schema_new=NULL;
 	} else {
 		if ( (sess->server_mybe) && (sess->server_mybe->server_mycpe) &&
@@ -513,7 +513,7 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 				l_free(p->length, p->data);
 				create_ok_packet(p,1);
 				MY_SESS_ADD_PKT_OUT_CLIENT(p);
-				free(sess->mysql_schema_new);
+				g_free(sess->mysql_schema_new);
 				sess->mysql_schema_new=NULL;
 				sess->last_mysql_connpool=NULL;
 				sess->server_mybe->bereset(sess->server_mybe, &sess->last_mysql_connpool, 0);
@@ -783,8 +783,8 @@ static inline void __mysql_session__drop_resultset(mysql_session_t *sess) {
 static void inline __mysql_session__free_user_pass_schema(mysql_session_t *sess) {
 	if (sess->mysql_username) { free(sess->mysql_username); sess->mysql_username=NULL; }
 	if (sess->mysql_password) { free(sess->mysql_password); sess->mysql_password=NULL; }
-	if (sess->mysql_schema_cur) { free(sess->mysql_schema_cur); sess->mysql_schema_cur=NULL; }
-	if (sess->mysql_schema_new) { free(sess->mysql_schema_new); sess->mysql_schema_new=NULL; }
+	if (sess->mysql_schema_cur) { g_free(sess->mysql_schema_cur); sess->mysql_schema_cur=NULL; }
+	if (sess->mysql_schema_new) { g_free(sess->mysql_schema_new); sess->mysql_schema_new=NULL; }
 }
 
 

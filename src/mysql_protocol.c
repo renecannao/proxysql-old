@@ -147,7 +147,7 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	if (!ret) {
 		if(cur!=mypkt->length) { // we aren't at the end of the packet
 			if (( capabilities & CLIENT_CONNECT_WITH_DB ) == CLIENT_CONNECT_WITH_DB) {
-				sess->mysql_schema_cur=strdup(mypkt->data+cur);
+				sess->mysql_schema_cur=g_strdup(mypkt->data+cur);
 				cur+=strlen(sess->mysql_schema_cur);
 			}
 //			if ((cur==(mypkt->length-1)) || (strlen(sess->mysql_schema_cur)==0) ) {

@@ -30,7 +30,6 @@ pthread_attr_t attr;
 int conn_cnt=0;
 
 time_t laststart;
-////
 
 __thread l_sfp *__thr_sfp=NULL;
 __thread myConnPools __thr_myconnpool;
