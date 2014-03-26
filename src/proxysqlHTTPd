@@ -7,8 +7,8 @@ use Proc::Daemon;
 use Net::Server::PreFork;
 use HTTP::Server::Simple::CGI;
 use HTTP::Server::Simple::CGI::PreFork;
-use base qw(HTTP::Server::Simple::CGI);
-#use base qw(HTTP::Server::Simple::CGI::PreFork);
+#use base qw(HTTP::Server::Simple::CGI);
+use base qw(HTTP::Server::Simple::CGI::PreFork);
 #use base qw(HTTP::Server);
 
 
@@ -112,7 +112,7 @@ print "datadir = $datadir , pidfile = $pidfile , errorlog = $errorlog , port = $
 my $server = MyWebServer->new($port);
 #$server::Prefork
 #$server->net_server(user => "nobody" , group => "nobody" , min_spare_servers => 8, max_servers => 10);
-$server->net_server(PreFork);
+#$server->net_server(PreFork);
 #$server->prefork(4);
 #$server::Simple::CGI->run(prefork=>1);
 #$server->run(prefork=>1);
