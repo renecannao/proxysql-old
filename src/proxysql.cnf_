@@ -8,29 +8,42 @@
 core_dump_file_size=423432400
 debug=0
 stack_size=524288
+net_buffer_size=8192
+backlog=2000
+datadir=/home/vegaicm/proxysql/proxysql-new/proxysql/src
+pid_file=proxy1234.pid
+
+[admin]
 proxy_admin_port=6032
 proxy_admin_user=admin
 proxy_admin_password=admin
-net_buffer_size=8192
-backlog=2000
+proxy_monitor_port=6031
+proxy_monitor_user=monitor
+proxy_monitor_password=monitor1
+proxy_admin_pathdb=proxysql2.db
+
+[http]
+#port=5080
 
 [mysql]
-mysql_threads=8
-proxy_mysql_port=6034
+mysql_threads=4
+proxy_mysql_port=6033
 mysql_socket=/tmp/proxysql.sock
 mysql_query_cache_partitions=16
 mysql_query_cache_default_timeout=30
 mysql_query_cache_size=67108864
+#mysql_query_cache_size=671
 mysql_poll_timeout=10000
 mysql_max_query_size=1048576
 mysql_max_resultset_size=1048576
 mysql_connection_pool_enabled=1
 #mysql_auto_reconnect_enabled=1
-mysql_wait_timeout=28800
+mysql_wait_timeout=1200
 mysql_servers=127.0.0.1:23389;127.0.0.1:23390;127.0.0.1:23391
 mysql_usage_user=msandbox
 mysql_usage_password=msandbox
 [mysql users]
+root=
 msandbox=msandbox
 
 [debug]

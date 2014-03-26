@@ -1,58 +1,6 @@
 #include "proxysql.h"
 
 
-/*
-  set ret to the default values for debug , and exc for all the exception 
-  for debug all but exceptions  : ret=1 , exc=0
-  for debug none but exceptions : ret=0 , exc=1
-*/
-/*
-int __debug_code(const char *func) {
-	int ret=1;
-	int exc=0;
-	int s=strlen(func);
-	if (!strncmp(func,"buffer2array",s)) return exc;
-	if (!strncmp(func,"array2buffer",s)) return exc;
-	if (!strncmp(func,"write_to_net",s)) return exc;
-	if (!strncmp(func,"read_from_net",s)) return exc;
-	return ret;
-}
-*/
-
-
-
-
-
-void * dump_timers() {
-	int i;
-	char **timers_name=malloc(sizeof(char *)*TOTAL_TIMERS);
-	timers_name[0]="array2buffer ";
-	timers_name[1]="buffer2array ";
-	timers_name[2]="read_from_net";
-	timers_name[3]="write_to_net ";
-	timers_name[4]="processdata  ";
-	timers_name[5]="find_queue   ";
-	timers_name[6]="find_queue   ";
-	while (glovars.shutdown==0) {
-		sleep(glovars.print_statistics_interval);
-		if (glovars.verbose < 10 || glovars.enable_timers==0) continue;
-		for (i=0;i<TOTAL_TIMERS;i++)
-			fprintf(stderr,"TIMER %d - %s : total = %lld\n", i, timers_name[i], glotimers[i]);
-		if (glovars.mysql_query_cache_enabled==TRUE) {
-			int QC_entries=0;
-			for (i=0; i<QC.size; i++) {
-				QC_entries+=QC.fdb_hashes[i]->ptrArray->len;
-			}
-			fprintf(stderr,"QC entries: %d , SET: %llu , GET: %llu(OK)/%llu(Total) , Purged: %llu\n", QC_entries, QC.cntSet, QC.cntGetOK, QC.cntGet, QC.cntPurge);
-		}
-	}
-	free(timers_name);
-	proxy_error("Shutdown dump_timers\n");
-	return;
-}
-
-
-
 void crash_handler(int sig) {
 	void *arr[20];
 	size_t s;
@@ -64,6 +12,7 @@ void crash_handler(int sig) {
 	exit(EXIT_FAILURE);
 }
 
+/*
 void proxy_debug_func(enum debug_module module, int verbosity, const char *fmt, ...) {
 	assert(module<PROXY_DEBUG_UNKNOWN);
 	if (gdbg_lvl[module].verbosity < verbosity) return;
@@ -72,7 +21,44 @@ void proxy_debug_func(enum debug_module module, int verbosity, const char *fmt, 
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
 };
+*/
 
+#define DEBUG_MSG_MAXSIZE	256
+
+#ifdef DEBUG
+void proxy_debug_func(enum debug_module module, int verbosity, int thr, const char *__file, int __line, const char *__func, const char *fmt, ...) {
+	assert(module<PROXY_DEBUG_UNKNOWN);
+	//char debugbuff[DEBUG_MSG_MAXSIZE];
+	if (gdbg_lvl[module].verbosity < verbosity) return;
+	//fprintf(stderr, "%d:%s:%d:%s(): LVL#%d : %s" , thr, __file, __line, __func, verbosity, debugbuff);
+	//dbg_msg_t *dbg_msg=g_slice_alloc(sizeof(dbg_msg_t));
+	SPIN_LOCK(glo_debug->glock);
+	//dbg_msg_t *dbg_msg=g_malloc(sizeof(dbg_msg_t));
+	dbg_msg_t *dbg_msg=__l_alloc(glo_debug->sfp,sizeof(dbg_msg_t));
+	SPIN_UNLOCK(glo_debug->glock);
+  gettimeofday(&dbg_msg->tv, NULL);
+	dbg_msg->thr=thr;
+	//dbg_msg->file=g_strdup(__file);
+	dbg_msg->file=(char *)__file;
+	dbg_msg->line=__line;
+	//dbg_msg->func=g_strdup(__func);
+	dbg_msg->func=(char *)__func;
+	dbg_msg->verb=verbosity;
+	while (__sync_fetch_and_add(&glo_debug->msg_count,0)>9000) {}
+	SPIN_LOCK(glo_debug->glock);
+	__sync_fetch_and_add(&glo_debug->msg_count,1);
+	dbg_msg->msg=__l_alloc(glo_debug->sfp,DEBUG_MSG_MAXSIZE);
+	SPIN_UNLOCK(glo_debug->glock);
+	va_list ap;
+	va_start(ap, fmt);
+	//vfprintf(stderr, fmt, ap);
+	vsnprintf(dbg_msg->msg,DEBUG_MSG_MAXSIZE,fmt,ap);
+	va_end(ap);
+	//memcpy(dbg_msg->msg,debugbuff,DEBUG_MSG_MAXSIZE);
+	//dbg_msg->msg=g_strdup(debugbuff);
+	g_async_queue_push(glo_debug->async_queue,dbg_msg);
+};
+#endif
 
 void proxy_error_func(const char *fmt, ...) {
 	va_list ap;
@@ -108,4 +94,32 @@ void init_debug_struct() {
 		// if this happen, the above table is not populated correctly
 		assert(gdbg_lvl[i].name!=NULL);
 	}
-}	
+}
+
+
+#ifdef DEBUG
+void *debug_logger() {
+	while(glovars.shutdown==0) {
+		dbg_msg_t *dbg_msg=g_async_queue_pop(glo_debug->async_queue);
+		if (dbg_msg) {
+			char __buffer[25];
+//		struct timeval tv;
+//  	gettimeofday(&tv, NULL);
+			struct tm *__tm_info=localtime(&dbg_msg->tv.tv_sec);
+			strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
+			fprintf(stderr, "%s:%06d %d:%s:%d:%s(): LVL#%d : %s" , __buffer, (int)dbg_msg->tv.tv_usec, dbg_msg->thr, dbg_msg->file, dbg_msg->line, dbg_msg->func, dbg_msg->verb, dbg_msg->msg);
+			//g_free(dbg_msg->file);
+			//g_free(dbg_msg->func);
+	SPIN_LOCK(glo_debug->glock);
+	__l_free(glo_debug->sfp,DEBUG_MSG_MAXSIZE, dbg_msg->msg);
+	__sync_fetch_and_sub(&glo_debug->msg_count,1);
+	__l_free(glo_debug->sfp, sizeof(dbg_msg_t), dbg_msg);
+	//g_free(dbg_msg);
+	SPIN_UNLOCK(glo_debug->glock);
+		//	g_free(dbg_msg->msg);
+			//g_slice_free1(sizeof(dbg_msg_t *),dbg_msg);
+		}
+	}
+	return NULL;
+}
+#endif

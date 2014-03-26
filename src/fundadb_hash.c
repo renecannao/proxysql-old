@@ -3,43 +3,53 @@
 
 
 pkt * fdb_get(fdb_hashes_group_t *hg, const char *kp, mysql_session_t *sess) {
-	void *value=NULL;
+	//void *value=NULL;
 	pkt * result=NULL;
-	unsigned int vl=0;
+	//unsigned int vl=0;
 	int kl=strlen(kp);
 	unsigned char i;
 	i=*((unsigned char *)kp);
-    if((kl)>2) i=i+(*((unsigned char *)kp+1))+(*((unsigned char *)kp+2));
-    i=i%hg->size;
+	if((kl)>2) i=i+(*((unsigned char *)kp+1))+(*((unsigned char *)kp+2));
+	i=i%hg->size;
 	pthread_rwlock_rdlock(&hg->fdb_hashes[i]->lock);
 	fdb_hash_entry *entry=g_hash_table_lookup(hg->fdb_hashes[i]->hash, kp);
-    if (entry!=NULL) {
+	if (entry!=NULL) { __sync_fetch_and_add(&entry->ref_count,1);	}
+  pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
+	if (entry!=NULL) {
 		time_t t=hg->now;
 		if (entry->expire > t) {
-				result=mypkt_alloc(sess);
-				result->data=g_slice_alloc(entry->length);
-    	    	memcpy(result->data,entry->value,entry->length);
-				result->length=entry->length;
-    			__sync_fetch_and_add(&hg->cntGetOK,1);
-    			__sync_fetch_and_add(&hg->dataOUT,result->length);
-				if (t > entry->access) entry->access=t;
+				//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+			result=mypkt_alloc();
+				//result=mypkt_alloc(sess);
+				//result->data=g_slice_alloc(entry->length);
+				//result->data=l_alloc(thrLD->sfp, entry->length);
+			result->data=l_alloc(entry->length);
+			memcpy(result->data,entry->value,entry->length);
+			result->length=entry->length;
+			__sync_fetch_and_add(&hg->cntGetOK,1);
+			__sync_fetch_and_add(&hg->dataOUT,result->length);
+			if (t > entry->access) entry->access=t;
 		} else {
 		// this was a bug. Altering an entry should not possible when the lock is rdlock
 		//	g_hash_table_remove (hg->fdb_hashes[i]->hash,kp);
 		}
+			__sync_fetch_and_sub(&entry->ref_count,1);	
     }
-    __sync_fetch_and_add(&hg->cntGet,1);
-    pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
+	__sync_fetch_and_add(&hg->cntGet,1);
 	return result;
 }
 
 gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, unsigned int vl, time_t expire, gboolean copy) {
-	fdb_hash_entry *entry = g_malloc(sizeof(fdb_hash_entry));
+	//fdb_hash_entry *entry = g_malloc(sizeof(fdb_hash_entry));
+	fdb_hash_entry *entry = g_slice_alloc(sizeof(fdb_hash_entry));
 	entry->klen=kl;
 	entry->length=vl;
+	entry->ref_count=0;
     if (copy) {
-		entry->key=g_malloc(kl);
-		memcpy(entry->key,kp,kl);
+		//entry->key=g_malloc(kl);
+		entry->key=g_slice_alloc(kl);
+		//memcpy(entry->key,kp,kl);
+		MEM_COPY_FWD(entry->key,kp,kl);
 		entry->value=g_malloc(vl);
 		memcpy(entry->value,vp,vl);
 	} else {
@@ -65,7 +75,7 @@ gboolean fdb_set(fdb_hashes_group_t *hg, void *kp, unsigned int kl, void *vp, un
     g_ptr_array_add(hg->fdb_hashes[i]->ptrArray, entry);
     g_hash_table_replace(hg->fdb_hashes[i]->hash, entry->key, entry);
     pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
-	int s;
+	//int s;
     __sync_fetch_and_add(&hg->cntSet,1);
 	__sync_fetch_and_add(&hg->size_keys,kl);
 	__sync_fetch_and_add(&hg->size_values,vl);
@@ -159,15 +169,18 @@ void *purgeHash_thread(void *arg) {
 				if (( entry->expire!=EXPIRE_DROPIT) && entry->expire <= t) {
 					g_hash_table_remove(hg->fdb_hashes[i]->hash,entry->key);
 				}
-				if (entry->expire==EXPIRE_DROPIT) {
-
+				if ( (entry->expire==EXPIRE_DROPIT)
+					&& (__sync_fetch_and_add(&entry->ref_count,0)==0) 
+				) {
 					__sync_fetch_and_sub(&hg->size_keys,entry->klen);
 					__sync_fetch_and_sub(&hg->size_values,entry->length);
 					__sync_fetch_and_sub(&hg->size_metas,sizeof(fdb_hash_entry)+sizeof(fdb_hash_entry *));
 					g_free(entry->key);
+					//g_slice_free1(entry->klen,entry->key);
 					g_free(entry->value);
 					entry->self=NULL;
-					g_free(entry);
+					//g_free(entry);
+					g_slice_free1(sizeof(fdb_hash_entry),entry);
 
 					__sync_fetch_and_add(&hg->cntPurge,1);
 					g_ptr_array_remove_index_fast(hg->fdb_hashes[i]->ptrArray,hg->fdb_hashes[i]->purgeIdx);
@@ -178,7 +191,7 @@ void *purgeHash_thread(void *arg) {
 		}
 	}
 	proxy_error("Shutdown purgeHash_thread\n");
-	return;
+	return NULL;
 }
 
 long long fdb_hashes_group_free_mem(fdb_hashes_group_t *hg) {

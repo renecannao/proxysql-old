@@ -1,13 +1,20 @@
-
+#define DEFINE_VARIABLES
 #include "proxysql.h"
 
+//static pthread_key_t tsd_key;
 
 
-static gint timers = 0;
+
+
+
 static gint proxy_admin_port = 0;
 static gint proxy_mysql_port = 0;
 static gchar *config_file="proxysql.cnf";
 static gint verbose = -1;
+
+pthread_key_t tsd_key;
+
+int errfd=0;
 
 static GOptionEntry entries[] =
 {
@@ -19,73 +26,97 @@ static GOptionEntry entries[] =
   { NULL }
 };
 
-
+pthread_attr_t attr;
 int conn_cnt=0;
 
+time_t laststart;
 
+
+__thread l_sfp *__thr_sfp=NULL;
+__thread myConnPools __thr_myconnpool;
 
 int listen_tcp_fd;
 int listen_tcp_admin_fd;
+int listen_tcp_monitor_fd;
 int listen_unix_fd;
 
 pthread_t *glo_mysql_thrarr=NULL;
-long monotonic_time() {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (((long) ts.tv_sec) * 1000000) + (ts.tv_nsec / 1000);
+
+	//fprintf(stderr,"%s\n",daemon_pid_file_ident);
+
+static const char * proxysql_pid_file() {
+	static char fn[512];
+	snprintf(fn, sizeof(fn), "%s", daemon_pid_file_ident);
+	return fn;
 }
 
 
-void send_auth_pkt(mysql_session_t *sess) {
-	pkt *hs;
-	hs=mypkt_alloc(sess);
-	create_handshake_packet(hs,sess->scramble_buf);
-	g_ptr_array_add(sess->client_myds->output.pkts, hs);
-}
+
+
+
 
 
 void *mysql_thread(void *arg) {
 	int admin=0;
 	mysql_thread_init();
-
+	int rc;
 	int removing_hosts=0;
 	long maintenance_ends=0;
-	proxy_mysql_thread_t thr;
-	thr.thread_id=*(int *)arg;
-	thr.free_pkts.stack=NULL;
-	thr.free_pkts.blocks=g_ptr_array_new();
-	if (thr.thread_id==glovars.mysql_threads) {
-		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started Admin thread_id = %d\n", thr.thread_id);
-		admin=1;
-	} else {
-		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started MySQL thread_id = %d\n", thr.thread_id);
+	proxy_mysql_thread_t thrLD;
+	rc=pthread_setspecific(tsd_key, &thrLD);
+	assert(rc==0);
+	thrLD.thread_id=*(int *)arg;
+
+	// Initialize local memory allocator
+	__thr_sfp=l_mem_init();
+
+	// Initialize local connection pool
+	local_mysql_connpool_init();
+
+	if (thrLD.thread_id>=glovars.mysql_threads) { // starting admin or monitoring thread
+		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started %s Thread with thread_id = %d\n", (thrLD.thread_id==glovars.mysql_threads ? "Admin" : "Monitoring") , thrLD.thread_id);
+		admin=thrLD.thread_id+1-glovars.mysql_threads;
+	} else {	// starting normal mysql thread
+		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Started MySQL Thread with thread_id = %d\n", thrLD.thread_id);
 	}
-	thr.sessions=g_ptr_array_new();
+
+	// Initialize local array of sessions
+	thrLD.sessions=l_ptr_array_new();
 //	thr.QC_rules=NULL;
 //	thr.QCRver=0;
 //	if (admin==0) { // no need for QC rules in
 //		reset_QC_rules(thr.QC_rules);
 //	}
+
 	int i, nfds, r, max_fds;
 	mysql_session_t *sess=NULL;
-	//struct pollfd fds[1000]; // FIXME: this must be dynamic
 
 	struct pollfd *fds;
 	max_fds = MIN_FDS_PER_THREAD;
+
+	// preallocate an array of fds
 	fds=(void *)g_malloc0(sizeof(struct pollfd)*MIN_FDS_PER_THREAD);
+
+
 	// listen on various ports, different depending from admin status
-	if (admin==1) {
-		fds[0].fd=listen_tcp_admin_fd;
-	} else {
+	switch (admin) {
+	case 0:	// normal mysql thread
 		fds[0].fd=listen_tcp_fd;
 		fds[1].fd=listen_unix_fd; // Unix Domain Socket
-		fds[2].fd=proxyipc.fdIn[thr.thread_id]; // IPC pipe
+		fds[2].fd=proxyipc.fdIn[thrLD.thread_id]; // IPC pipe
+		break;
+	case 1:	// admin thread
+		fds[0].fd=listen_tcp_admin_fd;
+		break;
+	case 2: // monitoring thread
+		fds[0].fd=listen_tcp_monitor_fd;
+		break;
 	}
 	while(glovars.shutdown==0) {
 		// always wait for new connections
 		fds[0].events=POLLIN;
 		fds[0].revents=0;
-		if (admin==0) {
+		if (admin==0) {	// normal mysql thread
 			// Unix Domain Socket
 			fds[1].events=POLLIN;
 			fds[1].revents=0;
@@ -93,18 +124,21 @@ void *mysql_thread(void *arg) {
 			fds[2].events=POLLIN;
 			fds[2].revents=0;
 			nfds=3;
-		} else { nfds=1;} ;
-		for (i=0; i < thr.sessions->len; i++) {
-			sess=g_ptr_array_index(thr.sessions, i);
+		} else { nfds=1;}	// admin and monitoring thread
+
+
+		// cycle through all healthy sessions
+		// if the session has an active backend, prepare that fd
+		for (i=0; i < thrLD.sessions->len; i++) {
+			sess=l_ptr_array_index(thrLD.sessions, i);
 			if (sess->healthy==1) {	
-				if (sess->admin==0 && sess->server_myds) {
-					sess->fds[1].fd=sess->server_myds->fd;
-					sess->last_server_poll_fd=sess->server_myds->fd;	
+				if (sess->admin==0 && sess->server_mybe && sess->server_mybe->server_myds && sess->server_mybe->server_mycpe) {
+					sess->fds[1].fd=sess->server_mybe->server_myds->fd;
+					sess->last_server_poll_fd=sess->server_mybe->server_myds->fd;	
 					sess->nfds=2;
 				} else {
 					sess->nfds=1;
-				}
-			
+				}	
 				sess->status=CONNECTION_READING_CLIENT|CONNECTION_WRITING_CLIENT|CONNECTION_READING_SERVER|CONNECTION_WRITING_SERVER;
 				sess->conn_poll(sess);
 				int j;
@@ -112,71 +146,63 @@ void *mysql_thread(void *arg) {
 				for (j=0; j<sess->nfds; j++) {
 					if (sess->fds[j].events) {
 						sess->fds[j].revents=0;
-						memcpy(&fds[nfds],&sess->fds[j],sizeof(struct pollfd));
+						//memcpy(&fds[nfds],&sess->fds[j],sizeof(struct pollfd));
+						MEM_COPY_FWD(&fds[nfds],&sess->fds[j],sizeof(struct pollfd));
 						nfds++;
 					}
 				}
 			}
 		}
+
+		// poll() for all the fds of all the sessions
 		r=poll(fds,nfds,glovars.mysql_poll_timeout);
 		if (r == -1 && errno == EINTR)
-	        continue;
-		
+	        continue;		
 	    if (r == -1) {
 	        PANIC("poll()");
 		}
-		if (admin==0 && fds[2].revents==POLLIN) { // admin threads is calling
+
+
+		if (admin==0 && fds[2].revents==POLLIN) { // admin thread is calling
 			char c;
-			//int r;
-			read(fds[2].fd,&c,sizeof(char));
-			proxy_debug(PROXY_DEBUG_IPC, 4, "Got byte on thr %d from FD %d\n", thr.thread_id, fds[2].fd);
-			gchar *admincmd=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
-			proxy_debug(PROXY_DEBUG_IPC, 4, "Got command %s on thr %d\n", admincmd, thr.thread_id);
+			int r;
+			r=read(fds[2].fd,&c,sizeof(char));
+			assert(r>=1);
+			proxy_debug(PROXY_DEBUG_IPC, 4, "Got byte on thr %d from FD %d\n", thrLD.thread_id, fds[2].fd);
+			gchar *admincmd=g_async_queue_pop(proxyipc.queue[thrLD.thread_id]);
+			proxy_debug(PROXY_DEBUG_IPC, 4, "Got command %s on thr %d\n", admincmd, thrLD.thread_id);
 			if (strncmp(admincmd,"REMOVE SERVER",20)==0) {
 				
 				removing_hosts=1;
 				maintenance_ends=monotonic_time()+glovars.mysql_maintenance_timeout*1000;
-//				mysql_server *ms=g_async_queue_pop(proxyipc.queue[thr.thread_id]);
-//				proxy_debug(PROXY_DEBUG_IPC, 6, "Got %p on thr %d\n", ms, thr.thread_id);
 			}
 			g_free(admincmd);
 		}
-		if (admin==0 && removing_hosts==1) {
-//				proxy_debug(PROXY_DEBUG_ADMIN, 1, "Received order REMOVE SERVER for server %s:%d\n", ms->address, ms->port);
+
+
+		if (admin==0 && removing_hosts==1) { // admin thread is forcing the mysql thread to remove a server
 			int i;
-			//int j;
 			int cnt=0;
-			for (i=0; i < thr.sessions->len; i++) {
-				sess=g_ptr_array_index(thr.sessions, i);
+			for (i=0; i < thrLD.sessions->len; i++) {
+				sess=l_ptr_array_index(thrLD.sessions, i);
 				cnt+=sess->remove_all_backends_offline_soft(sess);
 			}
 			if (cnt==0) {
 				removing_hosts=0;
 				gchar *ack=g_malloc0(20);
 				sprintf(ack,"%d",cnt);
-				proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thr.thread_id);
+				proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thrLD.thread_id);
 				g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
 			} else {
 				long ct=monotonic_time();
 				if (ct > maintenance_ends) {
 					// drop all connections that aren't switched yet
 					int i;
-					//int j;
 					int t=0;
-					for (i=0; i < thr.sessions->len; i++) {
+					for (i=0; i < thrLD.sessions->len; i++) {
 						int c=0;
-						sess=g_ptr_array_index(thr.sessions, i);
+						sess=l_ptr_array_index(thrLD.sessions, i);
 						c=sess->remove_all_backends_offline_soft(sess);
-						/*
-						for (j=0; j<glovars.mysql_hostgroups; j++) {
-							mysql_backend_t *mybe=g_ptr_array_index(sess->mybes,j);
-							if (mybe->server_ptr!=NULL) {
-								if (mybe->server_ptr->status==MYSQL_SERVER_STATUS_OFFLINE_SOFT) {
-									c++;
-								}
-							}
-						}
-						*/
 						if (c) {
 							t+=c;
 							sess->force_close_backends=1;
@@ -186,62 +212,80 @@ void *mysql_thread(void *arg) {
 					removing_hosts=0;
 					gchar *ack=g_malloc0(20);
 					sprintf(ack,"%d",t);
-					proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thr.thread_id);
+					proxy_debug(PROXY_DEBUG_IPC, 4, "Sending ACK from thr %d\n", thrLD.thread_id);
 					g_async_queue_push(proxyipc.queue[glovars.mysql_threads],ack);
 				}
 			}
 		}
-		if (admin==0) {nfds=3;} else {nfds=1;}
-		for (i=0; i < thr.sessions->len; i++) {
+
+
+		if (admin==0) {nfds=3;} else {nfds=1;} // define the starting point for fds array
+
+
+		// cycle through all healthy sessions
+		// and copy the fds back the the sessions
+		for (i=0; i < thrLD.sessions->len; i++) {
 			// copy pollfd back from the thread into the session
-			sess=g_ptr_array_index(thr.sessions, i);
+			sess=l_ptr_array_index(thrLD.sessions, i);
 			if (sess->healthy==1) {	
 				int j;
 				for (j=0; j<sess->nfds; j++) {
 					if (sess->fds[j].events) {
-						memcpy(&sess->fds[j],&fds[nfds],sizeof(struct pollfd));
+						//memcpy(&sess->fds[j],&fds[nfds],sizeof(struct pollfd));
+						MEM_COPY_FWD(&sess->fds[j],&fds[nfds],sizeof(struct pollfd));
 						nfds++;
 					}
 				}
-			sess->check_fds_errors(sess);
-			sess->handler(sess);
+				// handle the session. This is the real core of the proxy
+				sess->check_fds_errors(sess);
+				sess->handler(sess);
 			}
 		}
-		for (i=0; i < thr.sessions->len; i++) {
-			sess=g_ptr_array_index(thr.sessions, i);
+
+		// cycle through all sessions
+		// remove and delete all unhealthy session
+		for (i=0; i < thrLD.sessions->len; i++) {
+			sess=l_ptr_array_index(thrLD.sessions, i);
 			if (sess->healthy==0) {
-				g_ptr_array_remove_index_fast(thr.sessions,i);
+				l_ptr_array_remove_index_fast(thrLD.sessions,i);
 				i--;
 				mysql_session_delete(sess);
 			}
 		}
+
+
+		// This section manages new incoming connections via TCP
 		if (fds[0].revents==POLLIN) {
-			int c;
-			if (admin==0) {
+			int c=0;
+			switch (admin) {
+			case 0:	// mysql thread
 				c=accept(listen_tcp_fd, NULL, NULL);
-			} else {
+				break;
+			case 1:	// admin thread
 				c=accept(listen_tcp_admin_fd, NULL, NULL);
+				break;
+			case 2:	// monitoring thread
+				c=accept(listen_tcp_monitor_fd, NULL, NULL);
+				break;
 			}
-			if (c>0) {
+			if (c>0) {	// this thread got the new connection
 				int arg_on=1;
 				setsockopt(c, IPPROTO_TCP, TCP_NODELAY, (char *) &arg_on, sizeof(int));
-				mysql_session_t *ses=mysql_session_new(&thr, c);
-				if (admin==1) {
-					ses->admin=1;
-				}
+				mysql_session_t *ses=mysql_session_new(&thrLD, c);
+				ses->admin=admin;	// make the session aware of what sort of session is
 				send_auth_pkt(ses);
-				g_ptr_array_add(thr.sessions,ses);
+				l_ptr_array_add(thrLD.sessions,ses);
 			}
 		}
 		if (admin==0 && fds[1].revents==POLLIN) {
 			int c=accept(listen_unix_fd, NULL, NULL);
 			if (c>0) {
-				mysql_session_t *ses=mysql_session_new(&thr, c);
+				mysql_session_t *ses=mysql_session_new(&thrLD, c);
 				send_auth_pkt(ses);			
-				g_ptr_array_add(thr.sessions,ses);
+				l_ptr_array_add(thrLD.sessions,ses);
 			}
 		}
-		if ( ( (thr.sessions->len + 10) * MAX_FDS_PER_SESSION ) > max_fds ) {
+		if ( ( (thrLD.sessions->len + 10) * MAX_FDS_PER_SESSION ) > max_fds ) {
 			// allocate more fds
 			max_fds+=MIN_FDS_PER_THREAD;
 			struct pollfd *fds_tmp=(void *)g_malloc0(sizeof(struct pollfd)*max_fds);
@@ -250,12 +294,6 @@ void *mysql_thread(void *arg) {
 			fds=fds_tmp;
 		}
 	}
-	while (thr.free_pkts.blocks->len) {
-		void *p=g_ptr_array_remove_index_fast(thr.free_pkts.blocks, 0);
-		free(p);
-    }
-    g_ptr_array_free(thr.free_pkts.blocks,TRUE);
-
 	return NULL;
 }
 
@@ -264,27 +302,179 @@ void *mysql_thread(void *arg) {
 
 int main(int argc, char **argv) {
 	gdbg=0;
-	int i;
+	pid_t pid;
+	int i, rc;
+
 	g_thread_init(NULL);
 
-
+	mtrace();
+	rc=pthread_key_create(&tsd_key, NULL);
+	assert(rc==0);
 	// parse all the arguments and the config file
 	main_opts(entries, &argc, &argv, &config_file);
+
+	daemon_pid_file_ident=glovars.proxy_pidfile;
+	daemon_log_ident=daemon_ident_from_argv0(argv[0]);
+
+	rc=chdir(glovars.proxy_datadir);
+	if (rc) {
+		daemon_log(LOG_ERR, "Could not chdir into datadir: %s . Error: %s", glovars.proxy_datadir, strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+
+	daemon_pid_file_proc=proxysql_pid_file;
+	
+	pid=daemon_pid_file_is_running();
+	if (pid>=0) {
+		daemon_log(LOG_ERR, "Daemon already running on PID file %u", pid);
+		return EXIT_FAILURE;
+	}
+	if (daemon_retval_init() < 0) {
+		daemon_log(LOG_ERR, "Failed to create pipe.");
+		return EXIT_FAILURE;
+	}
+
+
+/* Do the fork */
+	if ((pid = daemon_fork()) < 0) {
+		/* Exit on error */
+		daemon_retval_done();
+		return EXIT_FAILURE;
+
+	} else if (pid) { /* The parent */
+		int ret;
+		/* Wait for 20 seconds for the return value passed from the daemon process */
+		if ((ret = daemon_retval_wait(20)) < 0) {
+			daemon_log(LOG_ERR, "Could not recieve return value from daemon process: %s", strerror(errno));
+			return EXIT_FAILURE;
+		}
+
+		if (ret) {
+			daemon_log(LOG_ERR, "Daemon returned %i as return value.", ret);
+		}
+		return ret;
+	} else { /* The daemon */
+
+		/* Close FDs */
+		if (daemon_close_all(-1) < 0) {
+			daemon_log(LOG_ERR, "Failed to close all file descriptors: %s", strerror(errno));
+
+			/* Send the error condition to the parent process */
+			daemon_retval_send(1);
+			goto finish;
+		}
+
+		rc=chdir(glovars.proxy_datadir);
+		if (rc) {
+			daemon_log(LOG_ERR, "Could not chdir into datadir: %s . Error: %s", glovars.proxy_datadir, strerror(errno));
+			return EXIT_FAILURE;
+		}
+		/* Create the PID file */
+		if (daemon_pid_file_create() < 0) {
+			daemon_log(LOG_ERR, "Could not create PID file (%s).", strerror(errno));
+			daemon_retval_send(2);
+			goto finish;
+		}
+
+
+
+		/* Send OK to parent process */
+		daemon_retval_send(0);
+		errfd=open(glovars.proxy_errorlog, O_WRONLY | O_APPEND | O_CREAT , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+		assert(errfd>0);
+		dup2(errfd, STDERR_FILENO);
+		close(errfd);
+
+		proxy_error("Starting ProxySQL\n");
+		daemon_log(LOG_INFO, "Sucessfully started");
+		
+	}
+
+	laststart=0;
+gotofork:
+	if (laststart) {
+		proxy_error("Angel process is waiting %d seconds before starting a new ProxySQL process\n", glovars.proxy_restart_delay);
+		sleep(glovars.proxy_restart_delay);
+	}
+	laststart=time(NULL);
+	pid = fork();
+	if (pid < 0) {
+		proxy_error("[FATAL]: Error in fork()\n");
+		return EXIT_FAILURE;
+	}
+	
+	if (pid) {
+		int status;
+		proxy_error("Angel process started ProxySQL process %d\n", pid);
+		rc=waitpid(pid, &status, 0);
+		if (rc==-1) {
+			perror("waitpid");
+			//proxy_error("[FATAL]: waitpid: %s\n", perror("waitpid"));
+			return EXIT_FAILURE;
+		}
+		rc=WIFEXITED(status);
+		if (rc) { // client exit()ed
+			rc=WEXITSTATUS(status);
+			if (rc==0) {
+				proxy_error("Shutdown angel process\n");
+				if (glovars.http_start) system("pkill -f proxysqlHTTPd");
+				return 0;
+				} else {
+					proxy_error("ProxySQL exited with code %d . Restarting!\n", rc);
+					goto gotofork;
+				}
+		} else {
+			proxy_error("ProxySQL crashed. Restarting!\n");
+			goto gotofork;
+		}
+	}
+
+	if (glovars.http_start) {
+		pid = fork();
+		if (!pid) {
+			system("pkill -f proxysqlHTTPd");
+			sleep(1);
+			//execlp("perl", "perl", "-f", "./proxysqlHTTPd",NULL);
+			char *execbin="./proxysqlHTTPd";
+			char *newargv[] = { NULL, NULL, NULL };
+			char *newenviron[] = { NULL };
+			newargv[0]=execbin;
+			newargv[1]=config_file;
+			int rc;
+			rc=chdir(glovars.proxy_datadir);
+			if (rc) {
+				daemon_log(LOG_ERR, "Could not chdir into datadir: %s . Error: %s", glovars.proxy_datadir, strerror(errno));
+				return EXIT_FAILURE;
+			}
+			execve(execbin,newargv,newenviron);
+			//execve(execbin,NULL,NULL);
+		}
+	}
+
+#ifdef DEBUG
+	glo_debug=g_slice_alloc(sizeof(glo_debug_t));
+	glo_debug->glock=0;
+	glo_debug->msg_count=0;
+	glo_debug->async_queue=g_async_queue_new();
+	glo_debug->sfp=l_mem_init();
+#endif
+
 
 	admin_init_sqlite3();
 
 	if (glovars.merge_configfile_db==1) {
-		sqlite3_flush_users_mem_to_db(0,1);
-		sqlite3_flush_debug_levels_mem_to_db(0);
+		sqlite3_flush_users_mem_to_db(sqlite3admindb,0,1);
+		sqlite3_flush_debug_levels_mem_to_db(sqlite3admindb,0);
 	}
 	// copying back and forth should merge the data
-	sqlite3_flush_debug_levels_db_to_mem();
-	sqlite3_flush_users_db_to_mem();
-	sqlite3_flush_query_rules_db_to_mem();
+	sqlite3_flush_debug_levels_db_to_mem(sqlite3admindb);
+	sqlite3_flush_users_db_to_mem(sqlite3admindb);
+	sqlite3_flush_query_rules_db_to_mem(sqlite3admindb);
 
 
-	sqlite3_flush_servers_mem_to_db(0);
-	sqlite3_flush_servers_db_to_mem(1);
+	sqlite3_flush_servers_mem_to_db(sqlite3admindb,0);
+	sqlite3_flush_servers_db_to_mem(sqlite3admindb,1);
 
 
 	//  command line options take precedences over config file
@@ -300,59 +490,82 @@ int main(int argc, char **argv) {
 	if (glovars.verbose>0) {
 		proxy_debug(PROXY_DEBUG_GENERIC, 1, "mysql port %d, admin port %d, config file %s, verbose %d\n", glovars.proxy_mysql_port, glovars.proxy_admin_port, config_file, verbose);
 		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 1, "Query cache partitions: %d\n", glovars.mysql_query_cache_partitions);
-		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "MySQL USAGE user: %s, password: %s\n", glovars.mysql_usage_user, glovars.mysql_usage_password);
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "MySQL USAGE user: %s, password: _OMITTED_\n", glovars.mysql_usage_user);
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 1, "Max query size: %d, Max resultset size: %d\n", glovars.mysql_max_query_size, glovars.mysql_max_resultset_size);
 		//fprintf(stderr, "verbose level: %d, print_statistics_interval: %d\n", glovars.verbose, glovars.print_statistics_interval);
 	}
 
-	// FIXME : this needs to moved elsewhere
-	for (i=0;i<TOTAL_TIMERS;i++) { glotimers[i]=0; }
+	//glomybepools_init();
 
 
+	proxy_error("Opening Sockets\n");
 	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
 	listen_tcp_admin_fd=listen_on_port((uint16_t)glovars.proxy_admin_port);
+	listen_tcp_monitor_fd=listen_on_port((uint16_t)glovars.proxy_monitor_port);
 	listen_unix_fd=listen_on_unix(glovars.mysql_socket);
 	ioctl_FIONBIO(listen_tcp_fd, 1);
 	ioctl_FIONBIO(listen_tcp_admin_fd, 1);
 	ioctl_FIONBIO(listen_unix_fd, 1);
-	mysql_library_init(0, NULL, NULL);
-
+	//mysql_library_init(0, NULL, NULL);
+	//pthread_init();
+	my_init();
+	mysql_server_init(0, NULL, NULL);
 
 
 
 	// Set threads attributes . For now only setstacksize is defined
-	pthread_attr_t attr;
-	set_thread_attr(&attr,glovars.stack_size);
+	rc=pthread_attr_init(&attr);
+	rc=pthread_attr_setstacksize(&attr, glovars.stack_size);
+	assert(rc==0);
+	//set_thread_attr(&attr,glovars.stack_size);
+	{
+	size_t ss;
+	rc=pthread_attr_getstacksize(&attr,&ss);
+//	fprintf(stderr,"stack size=%d (%d)\n", ss, glovars.stack_size);
+	}	
+
 
 //	start background threads:
 //	- mysql QC purger ( purgeHash_thread )
-//	- timer dumper ( dump_timers )
 //	- mysql connection pool purger ( mysql_connpool_purge_thread )
 	start_background_threads(&attr);
 
 
 	init_proxyipc();
 
-	// Note: glovars.mysql_threads+1 threads are created. The +1 is for the admin module
-	glo_mysql_thrarr=g_malloc0(sizeof(pthread_t)*(glovars.mysql_threads+1));
-	int *args=g_malloc0(sizeof(int)*(glovars.mysql_threads+1));
+	// Note: glovars.mysql_threads+1 threads are created. The +2 is for the admin and monitoring module 
+	glo_mysql_thrarr=g_malloc0(sizeof(pthread_t)*(glovars.mysql_threads+2));
+	int *args=g_malloc0(sizeof(int)*(glovars.mysql_threads+2));
 
 	// while all other threads are detachable, the mysql connections handlers are not
 //	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	for (i=0; i< glovars.mysql_threads+1; i++) {
+	for (i=0; i< glovars.mysql_threads+2; i++) {
 		args[i]=i;
 		int rc;
+		void *sp;
+		rc=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
+		assert(rc==0);
+		rc = pthread_attr_setstack(&attr, sp, glovars.stack_size);
+		assert(rc==0);
 		rc=pthread_create(&glo_mysql_thrarr[i], &attr, mysql_thread , &args[i]);
 		assert(rc==0);
 	}
+
+
 	// wait for graceful shutdown
-	for (i=0; i<glovars.mysql_threads+1; i++) {
+	for (i=0; i<glovars.mysql_threads+2; i++) {
 		pthread_join(glo_mysql_thrarr[i], NULL);
 	}
 	g_free(glo_mysql_thrarr);
 	g_free(args);
-	pthread_join(thread_dt, NULL);
 	pthread_join(thread_cppt, NULL);
 	pthread_join(thread_qct, NULL);
+finish:
+	daemon_log(LOG_INFO, "Exiting...");
+	daemon_retval_send(255);
+	daemon_signal_done();
+	daemon_pid_file_remove();
+
+
 	return 0;
 }

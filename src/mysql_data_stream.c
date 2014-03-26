@@ -1,10 +1,17 @@
 #include "proxysql.h"
 
+
+static void mysql_data_stream_setfd(mysql_data_stream_t *myds, int fd) {
+	myds->fd=fd;
+}
+
 void mysql_data_stream_delete(mysql_data_stream_t *my) {
-	pthread_mutex_lock(&conn_queue_pool.mutex);
-	queue_destroy(&my->input.queue);
-	queue_destroy(&my->output.queue);
-	pthread_mutex_unlock(&conn_queue_pool.mutex);
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	queue_t *q=NULL;
+	q=&my->input.queue;
+	queue_destroy(q);
+	q=&my->output.queue;
+	queue_destroy(q);
 
 	pkt *p;
 /*
@@ -21,17 +28,17 @@ void mysql_data_stream_delete(mysql_data_stream_t *my) {
 	}
 */
 	while (my->input.pkts->len) {
-		p=g_ptr_array_remove_index(my->input.pkts, 0);
-		mypkt_free(p,my->sess,1);
+		p=l_ptr_array_remove_index(my->input.pkts, 0);
+		mypkt_free1(p);
 	}
 	while (my->output.pkts->len) {
-		p=g_ptr_array_remove_index(my->output.pkts, 0);
-		mypkt_free(p,my->sess,1);
+		p=l_ptr_array_remove_index(my->output.pkts, 0);
+		mypkt_free1(p);
 	}
 
 
-	g_ptr_array_free(my->input.pkts,TRUE);
-	g_ptr_array_free(my->output.pkts,TRUE);
+	l_ptr_array_free1(my->input.pkts);
+	l_ptr_array_free1(my->output.pkts);
 	g_slice_free1(sizeof(mysql_data_stream_t),my);
 	//stack_free(my,&myds_pool);
 }
@@ -39,6 +46,7 @@ void mysql_data_stream_delete(mysql_data_stream_t *my) {
 static void shut_soft(mysql_data_stream_t *myds) {
 	proxy_debug(PROXY_DEBUG_NET, 4, "Shutdown soft %d\n", myds->fd);
 	myds->active=FALSE;
+	myds->sess->net_failure=1;
 }
 
 static void shut_hard(mysql_data_stream_t *myds) {
@@ -53,12 +61,14 @@ static void shut_hard(mysql_data_stream_t *myds) {
 
 static int buffer2array(mysql_data_stream_t *myds) {
 	int ret=0;
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	queue_t *qin = &myds->input.queue;
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "BEGIN : bytes in buffer = %d\n", queue_data(qin));
 	if (queue_data(qin)==0) return ret;
 	if (myds->input.mypkt==NULL) {
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Allocating a new packet\n");
-		myds->input.mypkt=mypkt_alloc(myds->sess);	
+		myds->input.mypkt=mypkt_alloc();
+		//myds->input.mypkt=mypkt_alloc(myds->sess);
 		myds->input.mypkt->length=0;
 	}	
 	if ((myds->input.mypkt->length==0) && queue_data(qin)<sizeof(mysql_hdr)) {
@@ -70,8 +80,15 @@ static int buffer2array(mysql_data_stream_t *myds) {
 		queue_r(qin,sizeof(mysql_hdr));
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Allocating %d bytes for a new packet\n", myds->input.hdr.pkt_length+sizeof(mysql_hdr));
 		myds->input.mypkt->length=myds->input.hdr.pkt_length+sizeof(mysql_hdr);
-		myds->input.mypkt->data=g_slice_alloc(myds->input.mypkt->length);
-		memcpy(myds->input.mypkt->data, &myds->input.hdr, sizeof(mysql_hdr)); // immediately copy the header into the packet
+		//myds->input.mypkt->data=l_alloc(thrLD->sfp, myds->input.mypkt->length);
+		myds->input.mypkt->data=l_alloc(myds->input.mypkt->length);
+		//myds->input.mypkt->data=g_slice_alloc(myds->input.mypkt->length);
+
+		//void *__a=myds->input.mypkt->data;
+		//void *__b=&myds->input.hdr;
+		//MEM_COPY_FWD(__a, __b, sizeof(mysql_hdr));
+		MEM_COPY_FWD(myds->input.mypkt->data, &myds->input.hdr, sizeof(mysql_hdr)); // immediately copy the header into the packet
+		//memcpy(myds->input.mypkt->data, &myds->input.hdr, sizeof(mysql_hdr)); // immediately copy the header into the packet
 		myds->input.partial=sizeof(mysql_hdr);
 		ret+=sizeof(mysql_hdr);
 	}
@@ -85,7 +102,7 @@ static int buffer2array(mysql_data_stream_t *myds) {
 	}
 	if ((myds->input.mypkt->length>0) && (myds->input.mypkt->length==myds->input.partial) ) {
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Packet (%d bytes) completely read, moving into input.pkts array\n", myds->input.mypkt->length);
-		g_ptr_array_add(myds->input.pkts, myds->input.mypkt);
+		l_ptr_array_add(myds->input.pkts, myds->input.mypkt);
 		myds->pkts_recv+=1;
 		myds->input.mypkt=NULL;
 	}
@@ -95,6 +112,7 @@ static int buffer2array(mysql_data_stream_t *myds) {
 
 static int array2buffer(mysql_data_stream_t *myds) {
 	int ret=0;
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	queue_t *qout = &myds->output.queue;
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Entering array2buffer with partial_send = %d and queue_available = %d\n", myds->output.partial, queue_available(qout));
 	if (queue_available(qout)==0) return ret;	// no space to write
@@ -102,9 +120,9 @@ static int array2buffer(mysql_data_stream_t *myds) {
 		if (myds->output.pkts->len) {
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "%s\n", "Removing a packet from array");
 			if (myds->output.mypkt) {
-				mypkt_free(myds->output.mypkt, myds->sess, 0);	
+				mypkt_free0(myds->output.mypkt);	
 			}
-			myds->output.mypkt=g_ptr_array_remove_index(myds->output.pkts, 0);
+			myds->output.mypkt=l_ptr_array_remove_index(myds->output.pkts, 0);
 		} else {
 			return ret;
 		}
@@ -116,7 +134,9 @@ static int array2buffer(mysql_data_stream_t *myds) {
 	myds->output.partial+=b;
 	ret=b;
 	if (myds->output.partial==myds->output.mypkt->length) {
-		g_slice_free1(myds->output.mypkt->length, myds->output.mypkt->data);
+		//g_slice_free1(myds->output.mypkt->length, myds->output.mypkt->data);
+		//l_free(thrLD->sfp,myds->output.mypkt->length, myds->output.mypkt->data);
+		l_free(myds->output.mypkt->length, myds->output.mypkt->data);
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Packet completely written into send buffer\n");
 		myds->output.partial=0;
 		myds->pkts_sent+=1;
@@ -139,6 +159,9 @@ static int read_from_net(mysql_data_stream_t *myds) {
 	else {
 		queue_w(q,r);
 		myds->bytes_info.bytes_recv+=r;
+		if (myds->mybe) {
+			 __sync_fetch_and_add(&myds->mybe->mshge->server_bytes.bytes_recv,r);
+		}
 	}
 	return r;	
 }
@@ -157,28 +180,42 @@ static int write_to_net(mysql_data_stream_t *myds) {
 	else {
 		queue_r(q,r);
 		myds->bytes_info.bytes_sent+=r;
+		if (myds->mybe) {
+			 __sync_fetch_and_add(&myds->mybe->mshge->server_bytes.bytes_sent,r);
+		}
 	}
 	return r;
 }
 
-mysql_data_stream_t * mysql_data_stream_new(int fd, mysql_session_t *sess) {
+
+
+
+mysql_data_stream_t * mysql_data_stream_new(mysql_session_t *sess, mysql_backend_t *mybe) {
 	mysql_data_stream_t *my=g_slice_new(mysql_data_stream_t);
 //	mysql_data_stream_t *my=stack_alloc(&myds_pool);
+	my->mybe=mybe;
+	if (mybe) {
+		__sync_fetch_and_add(&mybe->mshge->connections_created,1);
+		__sync_fetch_and_add(&mybe->mshge->connections_active,1);
+	}
 	my->bytes_info.bytes_recv=0;
 	my->bytes_info.bytes_sent=0;
 	my->pkts_recv=0;
 	my->pkts_sent=0;
-	pthread_mutex_lock(&conn_queue_pool.mutex);
-	queue_init(&my->input.queue);
-	queue_init(&my->output.queue);
-	pthread_mutex_unlock(&conn_queue_pool.mutex);
-	my->input.pkts=g_ptr_array_new();
-	my->output.pkts=g_ptr_array_new();
+	queue_t *q=NULL;
+	//pthread_mutex_lock(&conn_queue_pool.mutex);
+	q=&my->input.queue;
+	queue_init(q,glovars.net_buffer_size);
+	q=&my->output.queue;
+	queue_init(q,glovars.net_buffer_size);
+	//pthread_mutex_unlock(&conn_queue_pool.mutex);
+	my->input.pkts=l_ptr_array_new();
+	my->output.pkts=l_ptr_array_new();
 	my->input.mypkt=NULL;
 	my->output.mypkt=NULL;
 	my->input.partial=0;
 	my->output.partial=0;
-	my->fd=fd;
+//	my->fd=fd;
 	my->active_transaction=0;
 	my->active=TRUE;
 	my->sess=sess;
@@ -188,6 +225,7 @@ mysql_data_stream_t * mysql_data_stream_new(int fd, mysql_session_t *sess) {
 	my->buffer2array = buffer2array;
 	my->read_from_net = read_from_net;
 	my->write_to_net = write_to_net;
+	my->setfd=mysql_data_stream_setfd;
 	return my;
 }
 

@@ -29,8 +29,8 @@ extern unsigned int hash_initialized;
 #endif /* DEFINE_VARIABLES */
 
 
-EXTERN fdb_system_var_t fdb_system_var;
-EXTERN fdb_hash_t **fdb_hashes;
+//EXTERN fdb_system_var_t fdb_system_var;
+//EXTERN fdb_hash_t **fdb_hashes;
 
 struct __fdb_hash_t {
     pthread_rwlock_t lock;
@@ -69,6 +69,7 @@ struct __fdb_hash_entry {
     unsigned int length;
     time_t expire;
     time_t access;
+		int ref_count;
 };
 
 pkt * fdb_get(fdb_hashes_group_t *, const char *, mysql_session_t *);

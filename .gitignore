@@ -20,12 +20,21 @@
 *.swp
 
 # SQLITE files
-proxysql.db*
+*.db
+*.db-shm
+*.db-wal
+
+
+#pidfile and errorlog
+*.pid
+*.log
+*.err
 
 #binary
 proxysql
 
 #config
-proxysql.cnf
+proxysql.cnf*
 
 notes.txt
+architecture.txt

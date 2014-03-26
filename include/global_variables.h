@@ -4,12 +4,17 @@
 #define CONNECTION_READING_SERVER	4
 #define CONNECTION_WRITING_SERVER	8
 
-#define TOTAL_TIMERS 7
 
-#define SQLITE_ADMINDB  "proxysql.db"
+//#define SQLITE_ADMINDB  "proxysql.db"
 
 
-EXTERN unsigned long long glotimers[TOTAL_TIMERS];
+#ifdef DEBUG
+EXTERN glo_debug_t *glo_debug;
+#endif
+
+//EXTERN static pthread_key_t tsd_key;
+extern __thread l_sfp *__thr_sfp;
+extern __thread myConnPools __thr_myconnpool;
 
 EXTERN global_variables glovars;
 EXTERN global_mysql_servers glomysrvs;
@@ -22,20 +27,27 @@ EXTERN global_query_rules_t gloQR;
 EXTERN long long glotimenew;
 EXTERN long long glotimeold;
 EXTERN myConnPools gloconnpool;
+//EXTERN myBackendPools glomybepools;
 
-EXTERN mem_superblock_t conn_queue_pool;
+//EXTERN mem_superblock_t conn_queue_pool;
 EXTERN shared_trash_stack_t myds_pool;
 
 EXTERN sqlite3 *sqlite3configdb;
+EXTERN sqlite3 *sqlite3admindb;
+EXTERN sqlite3 *sqlite3monitordb;
+
+EXTERN time_t sqlite3admindb_lastupdate;
+EXTERN time_t sqlite3monitordb_lastupdate;
+EXTERN int sqlite3monitordb_rebuild;
 
 EXTERN ProxyIPC proxyipc;
 
 EXTERN int gdbg;	// global debug
 EXTERN debug_level *gdbg_lvl;	// global debug levels
 
-EXTERN pthread_t thread_dt;
 EXTERN pthread_t thread_qct;
 EXTERN pthread_t thread_cppt;
+EXTERN pthread_t thread_dbg_logger;
 
 
 //EXTERN admin_sqlite_table_def_t *table_defs;

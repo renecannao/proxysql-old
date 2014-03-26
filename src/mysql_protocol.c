@@ -1,11 +1,28 @@
 #include "proxysql.h"
 
 
+
+void send_auth_pkt(mysql_session_t *sess) {
+	pkt *hs;
+	hs=mypkt_alloc();
+	create_handshake_packet(hs,sess->scramble_buf);
+	MY_SESS_ADD_PKT_OUT_CLIENT(hs);
+}
+
+
 char *user_password(char *username, int admin) {
 	char *ret=NULL; char *pass=NULL;
 	if (admin==1) {
 		if (strncmp(username,glovars.proxy_admin_user,strlen(glovars.proxy_admin_user))==0) {
 			pass=strdup(glovars.proxy_admin_password);
+			return pass;
+		} else {
+			return NULL;
+		}
+	}
+	if (admin==2) {
+		if (strncmp(username,glovars.proxy_monitor_user,strlen(glovars.proxy_monitor_user))==0) {
+			pass=strdup(glovars.proxy_monitor_password);
 			return pass;
 		} else {
 			return NULL;
@@ -22,8 +39,49 @@ char *user_password(char *username, int admin) {
 
 
 
-inline int mysql_pkt_get_size (pkt *p) {
-	return p->length-sizeof(mysql_hdr);
+//inline int mysql_pkt_get_size (pkt *p) {
+//	return p->length-sizeof(mysql_hdr);
+//}
+
+
+
+inline uint16_t status_flags(pkt *p) {
+	int offset=1+sizeof(mysql_hdr);
+	enum MySQL_response_type c;
+	c=mysql_response(p);
+	unsigned long v;
+	uint16_t status=0;
+	if (c==OK_Packet) {
+		// affected rows
+		//memcpy(&v,p->data+offset,sizeof(unsigned long));
+		MEM_COPY_FWD(&v,p->data+offset,sizeof(unsigned long));
+		offset+=lencint(lencint_unknown(v));
+		// last insert id
+		//memcpy(&v,p->data+offset,sizeof(unsigned long));
+		MEM_COPY_FWD(&v,p->data+offset,sizeof(unsigned long));
+		offset+=lencint(lencint_unknown(v));
+		//offset+=lencint(v);
+		//memcpy(&status,p->data+offset,sizeof(uint16_t));	
+		MEM_COPY_FWD(&status,p->data+offset,sizeof(uint16_t));
+	};
+	if (c==EOF_Packet) {
+		// warning counts
+		offset+=2;
+		//memcpy(&status,p->data+offset,sizeof(uint16_t));
+		MEM_COPY_FWD(&status,p->data+offset,sizeof(uint16_t));
+	}
+	//fprintf(stderr,"Status = %d\n", status);
+	if (status < 3) {
+		PROXY_TRACE();
+	}
+	return status;
+}
+
+inline int is_transaction_active(pkt *p) {
+	uint16_t status=0;
+	status=status_flags(p);
+	if ((status & SERVER_STATUS_IN_TRANS)==SERVER_STATUS_IN_TRANS) { return 1; }
+	return 0;	
 }
 
 inline enum MySQL_response_type mysql_response(pkt *p) {
@@ -54,7 +112,7 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	int cur=sizeof(mysql_hdr);
 	memcpy(&capabilities,mypkt->data+cur,sizeof(uint32_t));
 	cur+=32;
-	unsigned char *username=mypkt->data+cur;
+	char *username=mypkt->data+cur;
 	sess->mysql_username=strdup(username);
 	unsigned char *scramble_reply=NULL;
 	cur+=strlen(username);
@@ -71,8 +129,8 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 		proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Username %s does not exist\n" , username);
 		return ret;
 	}
-	proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Password in hash table = %s\n" , sess->mysql_password);
-	unsigned char reply[SHA_DIGEST_LENGTH+1];
+	//proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Password in hash table = %s\n" , sess->mysql_password);
+	char reply[SHA_DIGEST_LENGTH+1];
 	reply[SHA_DIGEST_LENGTH]='\0';
 	if (scramble_reply) {
 		proxy_scramble(reply, sess->scramble_buf, sess->mysql_password);
@@ -104,6 +162,8 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 
 
 void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Generating handshake pkt\n");
 	mysql_hdr myhdr;
 	myhdr.pkt_id=0;
 	myhdr.pkt_length=sizeof(glovars.protocol_version)
@@ -121,7 +181,9 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 		+ (strlen("mysql_native_password")+1);
 
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc0(mypkt->length);
+	//mypkt->data=g_slice_alloc0(mypkt->length);
+	//mypkt->data=l_alloc0(thrLD->sfp, mypkt->length);
+	mypkt->data=l_alloc0(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
 	int l;
 	l=sizeof(mysql_hdr);
@@ -166,7 +228,7 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 #else
 	proxy_create_random_string(scramble_buf+8,12,(struct rand_struct *)&rand_st);
 #endif
-//	create_random_string(scramble_buf+8,12,&rand_st);
+	//create_random_string(scramble_buf+8,12,&rand_st);
 
 	for (i=8;i<20;i++) {
 		if (scramble_buf[i]==0) {
@@ -182,21 +244,29 @@ void create_handshake_packet(pkt *mypkt, char *scramble_buf) {
 
 
 void create_ok_packet(pkt *mypkt, unsigned int id) {
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Generating OK pkt . id %d\n", id);
 	mysql_hdr myhdr;
 	myhdr.pkt_id=id;
 	myhdr.pkt_length=7;
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp, mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
 	memcpy(mypkt->data+sizeof(mysql_hdr),"\x00\x00\x00\x02\x00\x00\x00",7);
 }
 
 void create_err_packet(pkt *mypkt, unsigned int id, uint16_t errcode, char *errstr) {
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Generating ERR pkt . id %d, errcode %d , errstr %s\n", id, errcode, errstr);
 	mysql_hdr myhdr;
 	myhdr.pkt_id=id;
 	myhdr.pkt_length=3+strlen(errstr);
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp, mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
 	memcpy(mypkt->data+sizeof(mysql_hdr),"\xff",1);
 	memcpy(mypkt->data+sizeof(mysql_hdr)+1,&errcode,sizeof(uint16_t));
@@ -206,15 +276,18 @@ void create_err_packet(pkt *mypkt, unsigned int id, uint16_t errcode, char *errs
 void authenticate_mysql_client_send_OK(mysql_session_t *sess) {
 	// prepare an ok packet
 	pkt *hs;
-	hs=mypkt_alloc(sess);
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	hs=mypkt_alloc();
 	create_ok_packet(hs,2);
 	// send it to the client
 	write_one_pkt_to_net(sess->client_myds,hs);
 }
 
 void authenticate_mysql_client_send_ERR(mysql_session_t *sess, uint16_t errcode, char *errstr) {
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Sending auth ERR. sess %p , errcode %d , errmsg %s\n", sess, errcode, errstr);
 	pkt *hs;
-	hs=mypkt_alloc(sess);
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	hs=mypkt_alloc();
 //	create_err_packet(hs, 2, 1045, "#28000Access denied for user");
 	create_err_packet(hs, 2, errcode, errstr);
 	write_one_pkt_to_net(sess->client_myds,hs);
@@ -226,7 +299,7 @@ int mysql_check_alive_and_read_only(const char *hostname, uint16_t port) {
 		exit(EXIT_FAILURE);
 	}
 	if (mysql_real_connect(conn, hostname, glovars.mysql_usage_user, glovars.mysql_usage_password, NULL, port, NULL, 0) == NULL) {
-		proxy_error("FATAL: server %s:%d not alive: \n", hostname, port, mysql_error(conn));
+		proxy_error("[ERROR]: server %s:%d not alive: \n", hostname, port, mysql_error(conn));
 		mysql_close(conn);
 		return -1;
 	}
@@ -303,6 +376,7 @@ void proxy_scramble(char *to, const char *message, const char *password)
 }
 
 void proxy_compute_sha1_hash_multi(uint8 *digest, const char *buf1, int len1, const char *buf2, int len2) {
+	PROXY_TRACE();
 	SHA_CTX sha1_context;
 	SHA1_Init(&sha1_context);
 	SHA1_Update(&sha1_context, buf1, len1);
@@ -317,6 +391,7 @@ inline void proxy_compute_two_stage_sha1_hash(const char *password, size_t pass_
 }
 
 void proxy_compute_sha1_hash(uint8 *digest, const char *buf, int len) {
+	PROXY_TRACE();
 	SHA_CTX sha1_context;
 	SHA1_Init(&sha1_context);
 	SHA1_Update(&sha1_context, buf, len);
@@ -343,52 +418,80 @@ int lencint(uint64_t v) {
 	if (v>=16777216) {
 		return 9;
 	}
+	return 9;
 }
 
+uint64_t lencint_unknown(uint64_t v) {
+	char c8=v;
+	if (c8<251) {return c8;}
+	uint32_t c32=0;
+	//memcpy(&c32,&v,3);
+	MEM_COPY_FWD(&c32,&v,3);
+	if (c32 >= 251 && c32<65536) { return c32; }
+	c32=v;
+	if (c32 >= 65536 && c32<16777216) { return c32; }
+	return v;
+}
 
 int writeencint(void *ptr, uint64_t v) {
 	int l=lencint(v);
 	if (l==1) {
-		memcpy(ptr,&v,1);
+		//memcpy(ptr,&v,1);
+		MEM_COPY_FWD(ptr,&v,1);
 	}
 	if (l==3) {
-		memcpy(ptr, "\xfc", 1);
-		memcpy(ptr+1, &v, 2);
+		//memcpy(ptr, "\xfc", 1);
+		//memcpy(ptr+1, &v, 2);
+		MEM_COPY_FWD(ptr, "\xfc", 1);
+		MEM_COPY_FWD(ptr+1, &v, 2);
 	}
 	if (l==4) {
-		memcpy(ptr, "\xfd", 1);
-		memcpy(ptr+1, &v, 3);
+		//memcpy(ptr, "\xfd", 1);
+		//memcpy(ptr+1, &v, 3);
+		MEM_COPY_FWD(ptr, "\xfd", 1);
+		MEM_COPY_FWD(ptr+1, &v, 3);
 	}
 	if (l==9) {
-		memcpy(ptr, "\xfe", 1);
-		memcpy(ptr+1, &v, 8);
+		//memcpy(ptr, "\xfe", 1);
+		//memcpy(ptr+1, &v, 8);
+		MEM_COPY_FWD(ptr, "\xfe", 1);
+		MEM_COPY_FWD(ptr+1, &v, 8);
 	}
 	return l;
 }
 
+//int writeencstrnull(void *ptr, const char *s) {
 int writeencstrnull(void *ptr, const char *s) {
 	if (s==NULL) {
 		// NULL
-		memcpy(ptr, "\xfb", 1);
+		//memcpy(ptr, "\xfb", 1);
+		MEM_COPY_FWD(ptr, "\xfb", 1);
 		return 1;
 	}
 	int l=strlen(s);
 	int el=lencint(l);
 	if (el==1) {
-		memcpy(ptr,&l,1);
+		//memcpy(ptr,&l,1);
+		MEM_COPY_FWD(ptr,&l,1);
 	}
 	if (el==3) {
-		memcpy(ptr, "\xfc", 1);
-		memcpy(ptr+1, &l, el-1);
+		//memcpy(ptr, "\xfc", 1);
+		//memcpy(ptr+1, &l, el-1);
+		MEM_COPY_FWD(ptr, "\xfc", 1);
+		MEM_COPY_FWD(ptr+1, &l, el-1);
 	}
 	if (el==4) {
-		memcpy(ptr, "\xfd", 1);
+		//memcpy(ptr, "\xfd", 1);
+		MEM_COPY_FWD(ptr, "\xfd", 1);
 	}
 	if (el==9) {
-		memcpy(ptr, "\xfe", 1);
-		memcpy(ptr+1, &l, el-1);
+		//memcpy(ptr, "\xfe", 1);
+		//memcpy(ptr+1, &l, el-1);
+		MEM_COPY_FWD(ptr, "\xfe", 1);
+		MEM_COPY_FWD(ptr+1, &l, el-1);
 	}
-	memcpy(ptr+el,s,l);
+	//memcpy(ptr+el,s,l);
+	MEM_COPY_FWD(ptr+el,(char *)s,l);
 	return l+el;
 }
 
@@ -396,6 +499,8 @@ int writeencstrnull(void *ptr, const char *s) {
 
 void myproto_ok_pkt(pkt *mypkt, unsigned int id, uint64_t affected_rows, uint64_t last_insert_id, uint16_t status, uint16_t warnings) {
 	int i=0;
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Generating OK pkt . id %d, affected_rows %d , last_insert_id %d , status %d , warning %d\n", id, affected_rows, last_insert_id, status, warnings);
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	mysql_hdr myhdr;
 	myhdr.pkt_id=id;
 	myhdr.pkt_length=1;
@@ -404,7 +509,9 @@ void myproto_ok_pkt(pkt *mypkt, unsigned int id, uint64_t affected_rows, uint64_
 	myhdr.pkt_length+=sizeof(uint16_t);
 	myhdr.pkt_length+=sizeof(uint16_t);
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp, mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
 	i=sizeof(mysql_hdr);
 	memcpy(mypkt->data+i, "\x00", 1); // OK header
@@ -419,17 +526,21 @@ void myproto_ok_pkt(pkt *mypkt, unsigned int id, uint64_t affected_rows, uint64_
 }
 
 void myproto_column_count(pkt *mypkt, unsigned int id, uint64_t cnt) {
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	mysql_hdr myhdr;
 	myhdr.pkt_id=id;
 	myhdr.pkt_length=0;
 	myhdr.pkt_length+=lencint(cnt);
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp, mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
 	writeencint(mypkt->data+sizeof(mysql_hdr), cnt);
 }
 
 void myproto_column_def(pkt *mypkt, unsigned int id, const char *schema, const char *table, const char *org_table, const char *name, const char *org_name, uint32_t column_length, uint8_t column_type, uint16_t flags, uint8_t decimals) {
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	int i;
 	int length_schema=strlen(schema);
 	int length_table=strlen(table);
@@ -451,7 +562,9 @@ void myproto_column_def(pkt *mypkt, unsigned int id, const char *schema, const c
 	myhdr.pkt_length+=sizeof(uint8_t); //decimals
 	myhdr.pkt_length+=2; //filler
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp,mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr)); i=sizeof(mysql_hdr);
 	memcpy(mypkt->data+i,"\x03\x64\x65\x66",4); i+=4;
 	i+=writeencstrnull(mypkt->data+i,schema);
@@ -470,11 +583,15 @@ void myproto_column_def(pkt *mypkt, unsigned int id, const char *schema, const c
 
 void myproto_eof(pkt *mypkt, unsigned int id, uint16_t warning_count, uint16_t status_flags) {
 	int i;
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Generating EOF pkt . id %d, warning %d , status %d\n", id, warning_count, status_flags);
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	mysql_hdr myhdr;
 	myhdr.pkt_id=id;
 	myhdr.pkt_length=5;
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp,mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr)); i=sizeof(mysql_hdr);
 	memcpy(mypkt->data+i,"\xfe",1); i+=1;
 	memcpy(mypkt->data+i,&warning_count,sizeof(uint16_t)); i+=2;
@@ -484,14 +601,19 @@ void myproto_eof(pkt *mypkt, unsigned int id, uint16_t warning_count, uint16_t s
 void mysql_new_payload_select(pkt *mypkt, void *payload, int len) {
 	proxy_debug(PROXY_DEBUG_QUERY_CACHE, 7, "Creating new pkt with SELECT %s\n", (char *)payload);
 	int i;
+	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	mysql_hdr myhdr;
-	unsigned char c=COM_QUERY;
-	g_slice_free1(mypkt->length, mypkt->data);
+	unsigned char c=MYSQL_COM_QUERY;
+	//g_slice_free1(mypkt->length, mypkt->data);
+	//l_free(thrLD->sfp,mypkt->length, mypkt->data);
+	l_free(mypkt->length, mypkt->data);
 	if (len==-1) { len=strlen(payload); }
 	myhdr.pkt_id=0;
 	myhdr.pkt_length=len+1;
 	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
-	mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=g_slice_alloc(mypkt->length);
+	//mypkt->data=l_alloc(thrLD->sfp,mypkt->length);
+	mypkt->data=l_alloc(mypkt->length);
 	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr)); i=sizeof(mysql_hdr);
 	memcpy(mypkt->data+i,&c,1); i+=1;
 	memcpy(mypkt->data+i,payload,len);	

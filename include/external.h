@@ -1,7 +1,7 @@
 #undef EXTERN
 #undef INITIALIZER
 
-#ifdef DEFINE_VARIABLES
+#ifndef DEFINE_VARIABLES
 #define EXTERN                  extern
 #define INITIALIZER(...)        /* nothing */
 #else

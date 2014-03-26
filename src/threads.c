@@ -1,27 +1,49 @@
 #include "proxysql.h"
 void set_thread_attr(pthread_attr_t *attr, size_t stacksize) {
-	pthread_attr_init(attr);
+//	int rc;
+	//assert(rc==0);
 //	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_DETACHED);
-	pthread_attr_setstacksize (attr, stacksize);
+//	int ss;
 }
 
-void start_background_threads(pthread_attr_t *attr) {
+void start_background_threads(pthread_attr_t *attra) {
+	pthread_attr_t attr;
+
 	int r;
+	r=pthread_attr_init(&attr);
+		assert(r==0);
+	void *sp;
+#ifdef DEBUG
+		r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
+		assert(r==0);
+		r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
+		assert(r==0);
+	r=pthread_create(&thread_dbg_logger, &attr, debug_logger , NULL);
+	assert(r==0);
+#endif
 	if (glovars.mysql_query_cache_enabled==TRUE) {
+		PROXY_TRACE();
 		fdb_hashes_new(&QC,glovars.mysql_query_cache_partitions, glovars.mysql_query_cache_default_timeout, glovars.mysql_query_cache_size);
 //		pthread_t qct;
-		pthread_create(&thread_qct, NULL, purgeHash_thread, &QC);
+		r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
+		assert(r==0);
+		r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
+		assert(r==0);
+		r=pthread_create(&thread_qct, &attr, purgeHash_thread, &QC);
+		assert(r==0);
 	}
-//	pthread_t dt;
-	r=pthread_create(&thread_dt, attr, dump_timers , NULL);
-	assert(r==0);
 //	pthread_t cppt;
-	r=pthread_create(&thread_cppt, attr, mysql_connpool_purge_thread , NULL);
+	r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
+	assert(r==0);
+	r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
+	assert(r==0);
+	r=pthread_create(&thread_cppt, &attr, mysql_connpool_purge_thread , NULL);
 	assert(r==0);
 }
 
 void init_proxyipc() {
 	int i;
+	PROXY_TRACE();
 	proxyipc.fdIn=g_malloc0_n(glovars.mysql_threads,sizeof(int));
 	proxyipc.fdOut=g_malloc0_n(glovars.mysql_threads,sizeof(int));
 	proxyipc.queue=g_malloc0_n(glovars.mysql_threads+1,sizeof(GAsyncQueue *));

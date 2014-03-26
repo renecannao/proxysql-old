@@ -1,42 +1,54 @@
-IDIR =../include
+MARIADBLIBPATH=../../mariadb-native-client
+DAEMONPATH=../../libdaemon-0.14
+GLIB_CFLAGS=`pkg-config --cflags gthread-2.0`
+GLIB_LIB=`pkg-config --libs gthread-2.0`
+ODIR= obj
+LDIR=../lib
+IDIR=../include
+IDIRS=-I../include -I../sqlite3 -I$(MARIADBLIBPATH)/include -I$(DAEMONPATH) $(GLIB_CFLAGS)
+LDIRS=-L$(MARIADBLIBPATH)/libmysql -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
 CC=gcc
-#CFLAGS=-I$(IDIR) -lpthread -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O2 -DDEBUG
-CFLAGS=-I$(IDIR) -lpthread -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -DDEBUG
-#CFLAGS=-I$(IDIR) -lpthread -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O2
-#CFLAGS=-I$(IDIR) -lpthread -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0`
-#CFLAGS=-I$(IDIR) -lpthread -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O2
-#CFLAGS=-I$(IDIR) -lpthread -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0`
-#CFLAGS=-I$(IDIR) -lpthread -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O3 -mtune=native -DDEBUG
-#CFLAGS=-I$(IDIR) -lpthread -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags gthread-2.0` -O3 -mtune=native
+MARIADBAR=$(MARIADBLIBPATH)/libmysql/libmariadbclient.a
+DAEMONAR=$(DAEMONPATH)/libdaemon/.libs/libdaemon.a
+DEBUG=-ggdb -DDEBUG
+O0=-O0
+O2=-O2
+O1=-O1
+O3=-O3 -mtune=native
+OPTZ=$(O0)
+CFLAGS=$(IDIRS) -rdynamic $(OPTZ) $(DEBUG)
+LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -Wl,-Bdynamic -lssl -ldl -lpthread -lm $(GLIB_LIB)
+SQLITEOBJ=../sqlite3/sqlite3.o
 EXECUTABLE=proxysql
 
-ODIR=obj
-LDIR =../lib
-
-LIBS=-lm
-
-_DEPS = proxysql.h
-DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
-
-_OBJ = mysql_session.o mysql_data_stream.o mysql_backend.o main.o free_pkts.o mem.o debug.o sqlite3.o fundadb_hash.o global_variables.o mysql_connpool.o mysql_protocol.o mysql_handler.o network.o queue.o threads.o admin_sqlite.o
+_OBJ = utils.o l_utils.o mysql_session.o mysql_data_stream.o mysql_backend.o main.o debug.o fundadb_hash.o global_variables.o mysql_connpool.o mysql_protocol.o mysql_handler.o network.o threads.o admin.o admin_sqlite.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
+$(ODIR)/%.o: %.c
+	$(CC) -c -o $@ $< $(CFLAGS) -Wall
 
-$(ODIR)/%.o: %.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
 
-proxysql: $(ODIR) $(OBJ)
-	gcc -o $@ $(OBJ) $(CFLAGS) $(LIBS)
+proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ) $(MARIADBAR) $(DAEMONAR)
+	gcc -o $@ $(MARIADBAR) $(DAEMONAR) $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
+
+$(SQLITEOBJ): ../sqlite3/sqlite3.c
+	$(CC) -c -o $@ $(CFLAGS) ../sqlite3/sqlite3.c
 
 $(ODIR):
 	mkdir $(ODIR)
 
 all: $(EXECUTABLE)
 
-.PHONY: clean resetdb
+.PHONY: clean resetdb clean_sqlite3 cleanall
+
+
+cleanall: clean clean_sqlite3
 
 clean:
-	rm -f $(ODIR)/*.o *~ core $(INCDIR)/*~ $(EXECUTABLE)
+	rm -f *.pid $(ODIR)/*.o *~ core $(INCDIR)/*~ $(EXECUTABLE)
+
+clean_sqlite3:
+	rm -f ../sqlite3/*.o
 
 resetdb:
 	rm -rf $(EXECUTABLE).db*

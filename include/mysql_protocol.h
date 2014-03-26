@@ -4,13 +4,14 @@
 
 char *user_password(char *, int);
 
-inline int mysql_pkt_get_size(pkt *);
+//inline int mysql_pkt_get_size(pkt *);
 inline enum MySQL_response_type mysql_response(pkt *);
 
 typedef struct _rand_struct_t {
   unsigned long seed1,seed2,max_value;
   double max_value_dbl;
 } rand_struct_t;
+
 
 void create_ok_packet(pkt *, unsigned int);
 void create_handshake_packet(pkt *, char *);
@@ -26,7 +27,9 @@ void proxy_compute_sha1_hash_multi(uint8 *, const char *, int , const char *, in
 inline void proxy_compute_two_stage_sha1_hash(const char *, size_t, uint8 *, uint8 *);
 void proxy_compute_sha1_hash(uint8 *, const char *, int);
 void proxy_my_crypt(char *, const uchar *, const uchar *, uint);
+inline int is_transaction_active(pkt *);
 int lencint(uint64_t);
+uint64_t lencint_unknown(uint64_t);
 int writeencint(void *, uint64_t);
 int writeencstrnull(void *, const char *);
 void myproto_ok_pkt(pkt *, unsigned int , uint64_t , uint64_t, uint16_t, uint16_t);

@@ -1,9 +1,16 @@
 #define MAX_FDS_PER_SESSION 2
 #define MIN_FDS_PER_THREAD  1024
 
+
+
+typedef struct _LPtrArray LPtrArray;
+typedef struct _l_super_free_pool_t l_sfp;
 typedef struct __fdb_hash_t fdb_hash_t;
 typedef struct __fdb_hashes_group_t fdb_hashes_group_t;
 typedef struct __fdb_hash_entry fdb_hash_entry;
+
+typedef struct _mysql_backend_t mysql_backend_t;
+
 
 typedef struct __fdb_system_var_t {
     long long hash_purge_time;
@@ -15,24 +22,27 @@ typedef struct __fdb_system_var_t {
 } fdb_system_var_t;
 
 
+typedef struct _dbg_msg_t {
+	struct timeval tv;
+	int thr;
+	char *file;
+	int line;
+	char *func;
+	int verb;
+	char *msg;
+} dbg_msg_t;
+
 EXTERN fdb_system_var_t fdb_system_var;
 EXTERN fdb_hash_t **fdb_hashes;
 
-enum enum_timer { 
-	TIMER_array2buffer,
-	TIMER_buffer2array,
-	TIMER_read_from_net,
-	TIMER_write_to_net,
-	TIMER_processdata,
-	TIMER_find_queue,
-	TIMER_poll
-};
 
-
-typedef struct _timer {
-	unsigned long long total, begin;
-} timer;
-
+typedef struct _glo_debug_t {
+	int glock;
+	int status;
+	GAsyncQueue *async_queue;
+	l_sfp *sfp;
+	int msg_count;
+} glo_debug_t;
 
 enum enum_resultset_progress {
 	RESULTSET_WAITING,
@@ -86,7 +96,7 @@ typedef struct _bytes_stats {
 
 typedef struct _mysql_uni_ds_t {
 	queue_t queue;
-	GPtrArray *pkts;
+	LPtrArray *pkts;
 	int partial;
 	pkt *mypkt;
 	mysql_hdr hdr;
@@ -95,6 +105,7 @@ typedef struct _mysql_uni_ds_t {
 typedef struct _mysql_cp_entry_t {
 	MYSQL *conn;
 	unsigned long long expire;
+	int reusable;
 } mysql_cp_entry_t;
 
 typedef struct _mysql_connpool {
@@ -108,13 +119,29 @@ typedef struct _mysql_connpool {
 } mysql_connpool;
 
 
+
+#define MAX_USERNAME_LENGTH 16*3
+#define MAX_PASSWORD_LENGTH 40
+#define MAX_SCHEMA_LENGTH	64*3
+
+typedef struct _mysql_backend_pool_t {
+	//char user[MAX_USERNAME_LENGTH+1];
+	//char pass[MAX_PASSWORD_LENGTH+1];
+	//char schema[MAX_SCHEMA_LENGTH+1];
+	char *username;
+	char *password;
+	char *schema;
+	int hostgroup;
+	LPtrArray *free_backends;
+} mysql_backend_pool_t;
+
 typedef struct _mysql_data_stream_t mysql_data_stream_t;
 typedef struct _mysql_session_t mysql_session_t;
-typedef struct _free_pkts_t free_pkts_t;
 typedef struct _shared_trash_stack_t shared_trash_stack_t;
 
 struct _mysql_data_stream_t {
 	mysql_session_t *sess;	// this MUST always the first, because will be overwritten when pushed in a trash stack
+	mysql_backend_t *mybe;
 	uint64_t pkts_recv;
 	uint64_t pkts_sent;
 	bytes_stats bytes_info;
@@ -125,6 +152,7 @@ struct _mysql_data_stream_t {
 	gboolean active;
 //	mysql_server *server_ptr;
 //	mysql_cp_entry_t *mycpe;
+	void (*setfd) (mysql_data_stream_t *, int);
 	void (*shut_soft) (mysql_data_stream_t *);
 	void (*shut_hard) (mysql_data_stream_t *);
 	int (*array2buffer) (mysql_data_stream_t *);
@@ -134,16 +162,21 @@ struct _mysql_data_stream_t {
 };
 
 
-struct _free_pkts_t {
-	GTrashStack *stack;
-	GPtrArray *blocks;	
+// this structure is shared amount backends, and it contains global metadata and stats
+typedef struct _mysql_server_hostgroup_entry_t MSHGE;
+struct _mysql_server_hostgroup_entry_t {
+	int hostgroup_id;
+  mysql_server *MSptr;
+  unsigned long weight;
+  long long connections_created; 
+  long long connections_active;
+  bytes_stats server_bytes;
 };
-
 
 struct _shared_trash_stack_t {
 	pthread_mutex_t mutex;
 	GTrashStack *stack;
-	GPtrArray *blocks;
+	LPtrArray *blocks;
 	int size;
 	int incremental;	
 };
@@ -175,12 +208,12 @@ typedef struct _global_query_rules_t {
 } global_query_rules_t;
 
 
+typedef struct _l_super_free_pool_t l_sfp;
 typedef struct _proxysql_mysql_thread_t {
 	int thread_id;
-	free_pkts_t free_pkts;
 //	GPtrArray *QC_rules;   // regex should be thread-safe, use just a global one
 //	int QCRver;
-	GPtrArray *sessions;
+	LPtrArray *sessions;
 } proxy_mysql_thread_t;
 
 
@@ -195,20 +228,21 @@ typedef struct _mysql_query_metadata_t {
 	int performance_log;
 	int mysql_query_cache_hit;
 	char *query;
+	int prepared_statement;
 	int query_len;
 } mysql_query_metadata_t ;
 
 
-typedef struct _mysql_backend_t mysql_backend_t;
 struct _mysql_backend_t {
 	// attributes
 	int fd;
-	mysql_server *server_ptr;
+	MSHGE *mshge;
 	mysql_data_stream_t *server_myds;
 	mysql_cp_entry_t *server_mycpe;
 	bytes_stats server_bytes_at_cmd;
 	// methods
-	void (*reset) (mysql_backend_t *, int);
+	void (*bedetach) (mysql_backend_t *, mysql_connpool **, int);
+	void (*bereset) (mysql_backend_t *, mysql_connpool **, int);
 };
 
 struct _mysql_session_t {
@@ -217,8 +251,6 @@ struct _mysql_session_t {
 	int admin;
 	int client_fd;
 	int server_fd;
-	int master_fd;
-	int slave_fd;
 	int status;
 	int force_close_backends;
 	int ret;	// generic return status
@@ -231,25 +263,14 @@ struct _mysql_session_t {
 	unsigned long long resultset_size;
 	mysql_query_metadata_t query_info;
 	gboolean query_to_cache; // must go into query_info
-	GPtrArray *resultset; 
-	mysql_server *server_ptr;
-/* obsoleted by hostgroup : BEGIN
-	mysql_server *master_ptr;
-	mysql_server *slave_ptr;
-obsoleted by hostgroup : END */
+	LPtrArray *resultset; 
+//	mysql_server *server_ptr;
 	mysql_data_stream_t *client_myds;
-	mysql_data_stream_t *server_myds;
-/* obsoleted by hostgroup : BEGIN
-	mysql_data_stream_t *master_myds;
-	mysql_data_stream_t *slave_myds;
-obsoleted by hostgroup : END */
-//	mysql_data_stream_t *idle_server_myds;
-	mysql_cp_entry_t *server_mycpe;
-/* obsoleted by hostgroup : BEGIN
-	mysql_cp_entry_t *master_mycpe;
-	mysql_cp_entry_t *slave_mycpe;
-obsoleted by hostgroup : END */
-	GPtrArray *mybes;
+//	mysql_data_stream_t *server_myds;
+//	mysql_cp_entry_t *server_mycpe;
+	mysql_backend_t *server_mybe;
+	mysql_connpool *last_mysql_connpool;
+	LPtrArray *mybes;
 
 //	mysql_cp_entry_t *idle_server_mycpe;
 	char *mysql_username;
@@ -257,13 +278,13 @@ obsoleted by hostgroup : END */
 	char *mysql_schema_cur;
 	char *mysql_schema_new;	
 	char scramble_buf[21];
-	timer *timers;
 	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
+	int net_failure;
 	gboolean send_to_slave; // must go into query_info
 
 //	public methods
-	int (*conn_poll) (mysql_session_t *);
+	void (*conn_poll) (mysql_session_t *);
 	gboolean (*sync_net) (mysql_session_t *, int);
 	//void (*buffer2array_2) (mysql_session_t *);
 	//void (*array2buffer_2) (mysql_session_t *);
@@ -303,12 +324,14 @@ typedef struct _global_variables {
 	int stack_size;
 	gint proxy_mysql_port;
 	gint proxy_admin_port;
+	gint proxy_monitor_port;
+	int proxy_admin_refresh_status_interval;
+	int proxy_monitor_refresh_status_interval;
+	//int proxy_flush_status_interval;
 	int backlog;
 	int verbose;
 	int print_statistics_interval;
 	
-	gboolean enable_timers;
-
 	int mysql_poll_timeout;
 	int mysql_poll_timeout_maintenance;
 
@@ -319,6 +342,9 @@ typedef struct _global_variables {
 	gboolean mysql_query_cache_enabled;
 	gboolean mysql_query_cache_precheck;
 	int mysql_query_cache_partitions;
+	int mysql_parse_trx_cmds;
+	int mysql_share_connections;
+
 	unsigned int mysql_query_cache_default_timeout;
 	unsigned long long mysql_wait_timeout;
 	unsigned long long mysql_query_cache_size;
@@ -329,15 +355,23 @@ typedef struct _global_variables {
 
 	// this user needs only USAGE grants
 	// and it is use only to create a connection
-	unsigned char *mysql_usage_user;
-	unsigned char *mysql_usage_password;
+	char *mysql_usage_user;
+	char *mysql_usage_password;
 	
-	unsigned char *proxy_admin_user;
-	unsigned char *proxy_admin_password;
+	char *proxy_admin_user;
+	char *proxy_admin_password;
+	char *proxy_monitor_user;
+	char *proxy_monitor_password;
 
-	unsigned char *mysql_default_schema;
-	unsigned char *mysql_socket;
-
+	char *mysql_default_schema;
+	char *mysql_socket;
+	char *proxy_datadir;
+	char *proxy_admin_pathdb;
+	char *proxy_pidfile;
+	char *proxy_errorlog;
+	int proxy_restart_on_error;
+	int proxy_restart_delay;
+	int http_start;
 //	unsigned int count_masters;
 //	unsigned int count_slaves;
 //	GPtrArray *servers_masters;
@@ -351,7 +385,7 @@ typedef struct _global_variables {
 //	unsigned int mysql_connections_max;
 //	unsigned int mysql_connections_cur;
 //	GPtrArray *mysql_connections;
-//	unsigned int net_buffer_size;
+	unsigned int net_buffer_size;
 //	unsigned int conn_queue_allocator_blocks;
 //	GPtrArray *conn_queue_allocator;
 //	GPtrArray *QC_rules;
@@ -385,8 +419,8 @@ enum MySQL_response_type {
 
 
 typedef struct _mem_block_t {
-	GPtrArray *used;
-	GPtrArray *free;
+	LPtrArray *used;
+	LPtrArray *free;
 	void *mem;
 } mem_block_t;
 
@@ -459,3 +493,25 @@ struct _global_variable_entry_t {
 
 
 //#define MYSQL_SERVER_STATUS_OFFLINE	0
+
+/*
+typedef struct _myBackendPools {
+  //int mutex;
+  pthread_mutex_t mutex;
+  GPtrArray *mybepools;
+  int enabled;
+	mysql_backend_t * (*get) (const char *, const char *, const char *, int);
+	void (*detach) (mysql_backend_t *, int, int);
+
+} myBackendPools;
+*/
+
+typedef struct _myConnPools {
+	pthread_mutex_t mutex;
+	GPtrArray *connpools;
+	int enabled;
+	struct timeval tv;
+} myConnPools;
+
+#define MYSQL_CONNPOOL_LOCAL 0
+#define MYSQL_CONNPOOL_GLOBAL 1

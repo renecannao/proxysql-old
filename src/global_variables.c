@@ -3,15 +3,35 @@
 static global_variable_entry_t glo_entries[]= {
 	{"global", "core_dump_file_size", G_OPTION_ARG_INT, &glovars.core_dump_file_size, "core dump file size", 0, INT_MAX, 0, 0, 0, NULL, NULL, post_variable_core_dump_file_size},
 	{"global", "stack_size", G_OPTION_ARG_INT, &glovars.stack_size, "stack size", 64*1024, 32*1024*1024 , 1024, 0, 512*1024, NULL, NULL, NULL},
-	{"global", "net_buffer_size", G_OPTION_ARG_INT, &conn_queue_pool.size, "net buffer size", 1024, 16*1024*1024 , 1024, 0, 8*1024, NULL, NULL, post_variable_net_buffer_size},
+	{"global", "net_buffer_size", G_OPTION_ARG_INT, &glovars.net_buffer_size, "net buffer size", 1024, 16*1024*1024 , 1024, 0, 8*1024, NULL, NULL, NULL},
 	{"global", "backlog", G_OPTION_ARG_INT, &glovars.backlog, "backlog for listen()", 50, 10000 , 0, 0, 2000, NULL, NULL, NULL},
-	{"global", "proxy_admin_port", G_OPTION_ARG_INT, &glovars.proxy_admin_port, "administrative port", 0, 65535, 0, 0, 6032, NULL, NULL, NULL},
 	{"global", "merge_configfile_db", G_OPTION_ARG_INT, &glovars.merge_configfile_db, "merge users, hosts and debugs from config file to DB, without replacing DB content", 0, 1, 0, 0, 1, NULL, NULL, NULL},
+	{"global", "datadir", G_OPTION_ARG_STRING, &glovars.proxy_datadir, "Path to datadir", 0, 0, 0, 0, 0, "/var/run/proxysql", NULL, NULL},
+	{"global", "pid_file", G_OPTION_ARG_STRING, &glovars.proxy_pidfile, "Path to pidfile", 0, 0, 0, 0, 0, "proxysql.pid", NULL, NULL},
+	{"global", "error_log", G_OPTION_ARG_STRING, &glovars.proxy_errorlog, "Path to error log", 0, 0, 0, 0, 0, "proxysql.log", NULL, NULL},
+	{"global", "restart_on_error", G_OPTION_ARG_INT, &glovars.proxy_restart_on_error, "Restart proxysql in case of crash or error", 0, 1 , 0, 0, 1, NULL, NULL, NULL},
+	{"global", "restart_delay", G_OPTION_ARG_INT, &glovars.proxy_restart_delay, "delay between restart", 0, 600 , 0, 0, 5, NULL, NULL, NULL},
+
+	{"admin", "proxy_admin_pathdb", G_OPTION_ARG_STRING, &glovars.proxy_admin_pathdb, "Path to internal DB for ProxySQL", 0, 0, 0, 0, 0, "proxysql.db", NULL, NULL},
+	{"admin", "proxy_admin_port", G_OPTION_ARG_INT, &glovars.proxy_admin_port, "administrative port", 0, 65535, 0, 0, 6032, NULL, NULL, NULL},
+	{"admin", "proxy_admin_user", G_OPTION_ARG_STRING, &glovars.proxy_admin_user, "proxy admin user", 0, 0, 0, 0, 0, "admin", NULL, NULL},
+	{"admin", "proxy_admin_password", G_OPTION_ARG_STRING, &glovars.proxy_admin_password, "proxy admin password", 0, 0, 0, 0, 0, "admin", NULL, NULL},
+	{"admin", "proxy_admin_refresh_status_interval", G_OPTION_ARG_INT, &glovars.proxy_admin_refresh_status_interval, "interval to update status variables", 0, 3600, 0, 0, 600, NULL, NULL, NULL},
+
+	{"admin", "proxy_monitor_port", G_OPTION_ARG_INT, &glovars.proxy_monitor_port, "monitoring port", 0, 65535, 0, 0, 6031, NULL, NULL, NULL},
+	{"admin", "proxy_monitor_user", G_OPTION_ARG_STRING, &glovars.proxy_monitor_user, "proxy monitoring user", 0, 0, 0, 0, 0, "monitor", NULL, NULL},
+	{"admin", "proxy_monitor_password", G_OPTION_ARG_STRING, &glovars.proxy_monitor_password, "proxy monitoring password", 0, 0, 0, 0, 0, "monitor", NULL, NULL},
+	{"admin", "proxy_monitor_refresh_status_interval", G_OPTION_ARG_INT, &glovars.proxy_monitor_refresh_status_interval, "interval to update status variables", 0, 3600, 0, 0, 10, NULL, NULL, NULL},
+
+	{"http", "http_start", G_OPTION_ARG_INT, &glovars.http_start, "start HTTP server", 0, 1 , 0, 0, 0, NULL, NULL, NULL},
+
 	{"mysql", "proxy_mysql_port", G_OPTION_ARG_INT, &glovars.proxy_mysql_port, "mysql port", 0, 65535, 0, 0, 6033, NULL, NULL, NULL},
 	{"mysql", "mysql_server_version", G_OPTION_ARG_STRING, &glovars.mysql_server_version, "mysql server version", 0, 0, 0, 0, 0, "5.1.30", NULL, NULL},
 	{"mysql", "mysql_socket", G_OPTION_ARG_STRING, &glovars.mysql_socket, "mysql socket", 0, 0, 0, 0, 0, "/tmp/proxysql.sock", NULL, NULL},
 	{"mysql", "mysql_default_schema", G_OPTION_ARG_STRING, &glovars.mysql_default_schema, "mysql default schema", 0, 0, 0, 0, 0, "information_schema", NULL, NULL},
 	{"mysql", "mysql_connection_pool_enabled", G_OPTION_ARG_INT, &gloconnpool.enabled, "enable/disable connection pool", 0, 1, 0, 0, 1, NULL, NULL, mysql_connpool_init},
+	{"mysql", "mysql_parse_trx_cmds", G_OPTION_ARG_INT, &glovars.mysql_parse_trx_cmds, "parse and filter unnecessary transaction commands", 0, 1, 0, 0, 0, NULL, NULL, NULL},
+	{"mysql", "mysql_share_connections", G_OPTION_ARG_INT, &glovars.mysql_share_connections, "share mysql connections among clients", 0, 1, 0, 0, 0, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_enabled", G_OPTION_ARG_INT, &glovars.mysql_query_cache_enabled, "enable/disable query cache", 0, 1, 0, 0, 1, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_partitions", G_OPTION_ARG_INT, &glovars.mysql_query_cache_partitions, "number of mysql query cache", 1, 128, 0, 0, 16, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_size", G_OPTION_ARG_INT64, &glovars.mysql_query_cache_size, "mysql query cache size", 1024*1024, LLONG_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
@@ -20,8 +40,6 @@ static global_variable_entry_t glo_entries[]= {
 	{"mysql", "mysql_auto_reconnect_enabled", G_OPTION_ARG_INT, &glovars.mysql_auto_reconnect_enabled, "enable/disable auto-reconnect", 0, 1, 0, 0, 0, NULL, NULL, NULL},
 	{"mysql", "mysql_usage_user", G_OPTION_ARG_STRING, &glovars.mysql_usage_user, "mysql usage user", 0, 0, 0, 0, 0, "proxy", NULL, NULL},
 	{"mysql", "mysql_usage_password", G_OPTION_ARG_STRING, &glovars.mysql_usage_password, "mysql usage password", 0, 0, 0, 0, 0, "proxy", NULL, NULL},
-	{"global", "proxy_admin_user", G_OPTION_ARG_STRING, &glovars.proxy_admin_user, "proxy admin user", 0, 0, 0, 0, 0, "admin", NULL, NULL},
-	{"global", "proxy_admin_password", G_OPTION_ARG_STRING, &glovars.proxy_admin_password, "proxy admin password", 0, 0, 0, 0, 0, "admin", NULL, NULL},
 	{"mysql", "mysql_threads", G_OPTION_ARG_INT, &glovars.mysql_threads, "number of threads to handle mysql connections", 1, 128, 0, 0, 2, NULL, pre_variable_mysql_threads, NULL},
 	{"mysql", "mysql_max_query_size", G_OPTION_ARG_INT, &glovars.mysql_max_query_size, "mysql max size of a COM_QUERY command", 0, 16777210, 0, 0, 1024*1024, NULL, NULL, NULL},
 	{"mysql", "mysql_max_resultset_size", G_OPTION_ARG_INT64, &glovars.mysql_max_resultset_size, "mysql max resultset size", 0, INT_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
@@ -89,7 +107,7 @@ void process_global_variables_from_file(GKeyFile *gkf) {
 }
 
 
-void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **config_fileptr) {
+void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **config_file_ptr) {
 
 
 	// Prepare the processing of config file
@@ -99,6 +117,8 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 	GOptionContext *context;
 
 	signal(SIGSEGV, crash_handler);
+	signal(SIGABRT, crash_handler);
+	signal(SIGTERM, term_handler);
 
 	context = g_option_context_new ("- High Performance Advanced Proxy for MySQL");
 	g_option_context_add_main_entries (context, entries, NULL);
@@ -120,12 +140,14 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 	}
 */
 	proxy_debug(PROXY_DEBUG_GENERIC, 1, "processing opts\n");
-	gchar *config_file=*config_fileptr;
+
+	gchar *config_file=*config_file_ptr;
+
 	// check if file exists and is readable
 	if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
 		g_print("Config file %s does not exist\n", config_file); exit(EXIT_FAILURE);
 	}   
-	if (g_access(config_file, R_OK)) {
+	if (access(config_file, R_OK)) {
 		g_print("Config file %s is not readable\n", config_file); exit(EXIT_FAILURE);
 	}
 	keyfile = g_key_file_new();
@@ -141,7 +163,7 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 
 
 int init_global_variables(GKeyFile *gkf) {
-	int i;
+	//int i;
 	GError *error=NULL;
 
 	// open the file and verify it has [global] section
@@ -225,16 +247,16 @@ int init_global_variables(GKeyFile *gkf) {
 
 
 
-	
+/*	
 	pthread_mutex_init(&myds_pool.mutex, NULL);
 	myds_pool.size=sizeof(mysql_data_stream_t);
 	myds_pool.incremental=1024;
 	myds_pool.blocks=g_ptr_array_new();
-	
+*/	
 	{
 		// pop and push on element : initialize
-		mysql_data_stream_t *t=stack_alloc(&myds_pool);
-		stack_free(t,&myds_pool);
+		//mysql_data_stream_t *t=stack_alloc(&myds_pool);
+		//tack_free(t,&myds_pool);
 	}
 	
 	
@@ -254,15 +276,6 @@ int init_global_variables(GKeyFile *gkf) {
 		gint r=g_key_file_get_integer(gkf, "global", "verbose", &error);
 		if (r >= 0 ) {
 			glovars.verbose=r;
-		}
-	}
-
-	// set enable_timers
-	glovars.enable_timers=0;
-	if (g_key_file_has_key(gkf, "global", "enable_timers", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "enable_timers", &error);
-		if (r >= 0 ) {
-			glovars.enable_timers=TRUE;
 		}
 	}
 
@@ -305,7 +318,7 @@ mysql_server * new_server_master() {
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	if ( glomysrvs.count_masters==0 ) return NULL;
 	int i=rand()%glomysrvs.count_masters;
-	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_masters,i);
+	mysql_server *ms=l_ptr_array_index(glomysrvs.servers_masters,i);
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using master %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_masters);
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;
@@ -315,7 +328,7 @@ mysql_server * new_server_slave() {
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	if ( glomysrvs.count_slaves==0 ) return NULL;
 	int i=rand()%glomysrvs.count_slaves;
-	mysql_server *ms=g_ptr_array_index(glomysrvs.servers_slaves,i);
+	mysql_server *ms=l_ptr_array_index(glomysrvs.servers_slaves,i);
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Using slave %s port %d , index %d from a pool of %d servers\n", ms->address, ms->port, i, glomysrvs.count_slaves);
 	pthread_rwlock_unlock(&glomysrvs.rwlock);
 	return ms;
@@ -365,10 +378,10 @@ void load_mysql_users_from_file(GKeyFile *gkf) {
 			if (mysql_users_pass[i]==NULL) {
 				g_print("Error in password for user %s\n", mysql_users_name[i]); exit(EXIT_FAILURE);
 			}
-			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Adding user %s password %s (%d)\n", mysql_users_name[i], mysql_users_pass[i], strlen(mysql_users_pass[i]));
+			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Adding user %s password _OMITTED_ (%d)\n", mysql_users_name[i], strlen(mysql_users_pass[i]));
 			g_ptr_array_add(glovars.mysql_users_name,g_strdup(mysql_users_name[i]));
 			g_ptr_array_add(glovars.mysql_users_pass,g_strdup(mysql_users_pass[i]));
-			g_hash_table_insert(glovars.usernames, g_ptr_array_index(glovars.mysql_users_name,i), g_ptr_array_index(glovars.mysql_users_pass,i));
+			g_hash_table_insert(glovars.usernames, l_ptr_array_index(glovars.mysql_users_name,i), l_ptr_array_index(glovars.mysql_users_pass,i));
 
 		}
 	}
@@ -478,14 +491,16 @@ void post_variable_core_dump_file_size(global_variable_entry_t *gve) {
 	assert(rc==0);
 }
 
+/*
 void post_variable_net_buffer_size(global_variable_entry_t *gve) {
 	pthread_mutex_init(&conn_queue_pool.mutex, NULL);
 	conn_queue_pool.incremental=128; // default queue allocator blocks size
 	pthread_mutex_lock(&conn_queue_pool.mutex);
 	conn_queue_pool.blocks=g_ptr_array_new();
 	{ // create a memory block for queues
-		mem_block_t *mb=create_mem_block(&conn_queue_pool);
-		g_ptr_array_add(conn_queue_pool.blocks,mb);	
+		//mem_block_t *mb=create_mem_block(&conn_queue_pool);
+		//g_ptr_array_add(conn_queue_pool.blocks,mb);	
 	}
 	pthread_mutex_unlock(&conn_queue_pool.mutex);
 }
+*/
