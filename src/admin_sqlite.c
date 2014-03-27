@@ -4,13 +4,20 @@ extern pthread_key_t tsd_key;
 
 static admin_sqlite_table_def_t table_defs[] = 
 {
-	{ "server_status" , ADMIN_SQLITE_TABLE_SERVER_STATUS , ADMIN_SQLITE_DUMP_TABLE_SERVER_STATUS , {NULL, NULL, NULL}},
-	{ "servers" , ADMIN_SQLITE_TABLE_SERVERS , ADMIN_SQLITE_DUMP_TABLE_SERVERS , {NULL, NULL, NULL}},
-	{ "hostgroups" , ADMIN_SQLITE_TABLE_HOSTGROUPS , ADMIN_SQLITE_DUMP_TABLE_HOSTGROUPS , {NULL, NULL, NULL}}, 
-	{ "users" , ADMIN_SQLITE_TABLE_USERS , ADMIN_SQLITE_DUMP_TABLE_USERS, {NULL, NULL, NULL}},
-	{ "global_variables" , ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES , NULL, {NULL, NULL, NULL}},
-	{ "debug_levels" , ADMIN_SQLITE_TABLE_DEBUG_LEVELS , ADMIN_SQLITE_DUMP_TABLE_DEBUG_LEVELS , {NULL, NULL, NULL}},
-	{ "query_rules" , ADMIN_SQLITE_TABLE_QUERY_RULES , ADMIN_SQLITE_DUMP_TABLE_QUERY_RULES , {NULL, NULL, NULL}}
+//	{ "server_status" , ADMIN_SQLITE_TABLE_SERVER_STATUS , ADMIN_SQLITE_DUMP_TABLE_SERVER_STATUS , {NULL, NULL, NULL}},
+//	{ "servers" , ADMIN_SQLITE_TABLE_SERVERS , ADMIN_SQLITE_DUMP_TABLE_SERVERS , {NULL, NULL, NULL}},
+//	{ "hostgroups" , ADMIN_SQLITE_TABLE_HOSTGROUPS , ADMIN_SQLITE_DUMP_TABLE_HOSTGROUPS , {NULL, NULL, NULL}}, 
+//	{ "users" , ADMIN_SQLITE_TABLE_USERS , ADMIN_SQLITE_DUMP_TABLE_USERS, {NULL, NULL, NULL}},
+//	{ "global_variables" , ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES , NULL, {NULL, NULL, NULL}},
+//	{ "debug_levels" , ADMIN_SQLITE_TABLE_DEBUG_LEVELS , ADMIN_SQLITE_DUMP_TABLE_DEBUG_LEVELS , {NULL, NULL, NULL}},
+//	{ "query_rules" , ADMIN_SQLITE_TABLE_QUERY_RULES , ADMIN_SQLITE_DUMP_TABLE_QUERY_RULES , {NULL, NULL, NULL}}
+	{ "server_status" , ADMIN_SQLITE_TABLE_SERVER_STATUS }, 
+	{ "servers" , ADMIN_SQLITE_TABLE_SERVERS },
+	{ "hostgroups" , ADMIN_SQLITE_TABLE_HOSTGROUPS },
+	{ "users" , ADMIN_SQLITE_TABLE_USERS }, 
+	{ "global_variables" , ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES },
+	{ "debug_levels" , ADMIN_SQLITE_TABLE_DEBUG_LEVELS },
+	{ "query_rules" , ADMIN_SQLITE_TABLE_QUERY_RULES }
 };
 
 
@@ -28,7 +35,7 @@ static void __admin_sqlite3__validate_data(sqlite3 *db) {
 }
 
 
-
+/*
 static void __admin_sqlite3__load_table(admin_sqlite_table_def_t *td, sqlite3 *db, int offset){
 	sqlite3_stmt *statement;
 	int rc;
@@ -59,6 +66,16 @@ static void __admin_sqlite3__insert_table(admin_sqlite_table_def_t *td, sqlite3 
 		char *a=g_ptr_array_index(td->dumps[offset],i);
 		sqlite3_exec_exit_on_failure(db,a);
 	}		
+}
+*/
+
+static void __admin_sqlite3__insert_or_ignore_maintable_select_disktable() {
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = OFF");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.servers SELECT * FROM disk.servers");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.hostgroups SELECT * FROM disk.hostgroups");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.query_rules SELECT * FROM disk.query_rules");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.users SELECT * FROM disk.users");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
 }
 
 void mysql_pkt_err_from_sqlite(pkt *p, const char *s) {
@@ -213,17 +230,18 @@ int mysql_pkt_to_sqlite_exec(pkt *p, mysql_session_t *sess) {
 
 }
 
+/*
 void sqlite3_exec_exit_on_failure(sqlite3 *db, const char *str) {
 	char *err=NULL;
 	sqlite3_exec(db, str, NULL, 0, &err);
 	if(err!=NULL) {
-		proxy_error("SQLITE error: %s\n", err);
+		proxy_error("SQLITE error: %s --- %s\n", err, str);
 		proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Error on %s : %s\n",str, err); 
 		//exit(EXIT_FAILURE);
 		assert(err==NULL);
 	}
 }
-
+*/
 
 void sqlite3_flush_servers_mem_to_db(sqlite3 *db, int replace) {
 	sqlite3_stmt *statement;
@@ -642,7 +660,7 @@ void admin_init_sqlite3() {
 //	__admin_sqlite3__fill_table_server_status(sqlite3admindb);
 //	__admin_sqlite3__fill_table_server_status(sqlite3monitordb);
 
-
+/*
 	for (i=0;i<sizeof(table_defs)/sizeof(admin_sqlite_table_def_t);i++) {
 		admin_sqlite_table_def_t *table_def=table_defs+i;
 		proxy_debug(PROXY_DEBUG_SQLITE, 6, "SQLITE: loading table %s from configdb\n" , table_def->table_name);
@@ -654,18 +672,26 @@ void admin_init_sqlite3() {
 		proxy_debug(PROXY_DEBUG_SQLITE, 6, "SQLITE: inserting table %s into admindb\n" , table_def->table_name);
 		__admin_sqlite3__insert_table(table_def,sqlite3admindb,0);
 	}
-	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
+*/
 
-	__admin_sqlite3__validate_data(sqlite3admindb);	
+	
+
+
+
 
 	{
 		const char *a="ATTACH DATABASE '%s' AS disk";
 		char *cmd=g_malloc0(strlen(a)+strlen(glovars.proxy_admin_pathdb)+5);
 		sprintf(cmd,a,glovars.proxy_admin_pathdb);
-		fprintf(stderr,"%s\n", cmd);
+		//fprintf(stderr,"%s\n", cmd);
 		sqlite3_exec_exit_on_failure(sqlite3admindb, cmd);
 		g_free(cmd);	
 	}
+
+
+	__admin_sqlite3__insert_or_ignore_maintable_select_disktable();
+
+	__admin_sqlite3__validate_data(sqlite3admindb);	
 
 }
 

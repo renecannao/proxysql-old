@@ -6,6 +6,7 @@
 #define ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES "CREATE TABLE global_variables ( name VARCHAR NOT NULL PRIMARY KEY , value VARCHAR NOT NULL )"
 #define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, active INT NOT NULL DEFAULT 0, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)"
 
+/*
 #define ADMIN_SQLITE_DUMP_TABLE_SERVER_STATUS "SELECT 'INSERT INTO server_status VALUES (' || quote(status) || ',' || quote(status_desc) || ')' FROM server_status"
 #define ADMIN_SQLITE_DUMP_TABLE_SERVERS "SELECT 'INSERT INTO servers VALUES (' || quote(hostname) || ',' || quote(port) || ',' || quote(read_only) || ',' || quote(status) || ')' FROM servers"
 #define ADMIN_SQLITE_DUMP_TABLE_HOSTGROUPS "SELECT 'INSERT INTO hostgroups VALUES (' || quote(hostgroup_id) || ',' || quote(hostname) || ',' || quote(port) || ')' FROM hostgroups"
@@ -13,7 +14,7 @@
 #define ADMIN_SQLITE_DUMP_TABLE_DEBUG_LEVELS "SELECT 'INSERT INTO debug_levels VALUES (' || quote(module) || ',' || quote(verbosity) || ')' FROM debug_levels"
 
 #define ADMIN_SQLITE_DUMP_TABLE_QUERY_RULES "SELECT 'INSERT INTO query_rules VALUES (' || quote(rule_id) || ',' || quote(active) || ',' || quote(username) || ',' || quote(schemaname) || ',' || quote(flagIN) || ',' || quote(match_pattern) || ',' || quote(negate_match_pattern) || ',' || quote(flagOUT) || ',' || quote(replace_pattern) || ',' || quote(destination_hostgroup) || ',' || quote(audit_log) || ',' || quote(performance_log) || ',' || quote(cache_tag) || ',' || quote(invalidate_cache_tag) || ',' || quote(invalidate_cache_pattern) || ',' || quote(cache_ttl) || ')' FROM query_rules"
-
+*/
 
 #define ADMIN_SQLITE_TABLE_BACKUP_SERVER_STATUS "CREATE TABLE server_status ( status INT NOT NULL PRIMARY KEY, status_desc VARCHAR NOT NULL, UNIQUE(status_desc) )"
 #define ADMIN_SQLITE_TABLE_BACKUP_SERVERS "CREATE TABLE servers ( hostname VARCHAR NOT NULL , port INT NOT NULL DEFAULT 3306 , read_only INT NOT NULL DEFAULT 1, status INT NOT NULL DEFAULT ('OFFLINE') REFERENCES server_status(status) , PRIMARY KEY(hostname, port) )"
@@ -35,8 +36,8 @@
 struct _admin_sqlite_table_def_t {
 	char *table_name;
 	char *table_def;
-	char *dumpcmd;
-	GPtrArray *dumps[3];
+//	char *dumpcmd;
+//	GPtrArray *dumps[3];
 //	GPtrArray *dump_configdb;
 //	GPtrArray *dump_admindb;
 //	GPtrArray *dump_monitordb;
@@ -98,3 +99,15 @@ struct callback_data {
 
 
 int do_meta_command(char *, struct callback_data *);
+
+#define sqlite3_exec_exit_on_failure(__db, __str) \
+	do { \
+  	char *err=NULL; \
+	  sqlite3_exec(__db, __str, NULL, 0, &err); \
+  	if(err!=NULL) { \
+    	proxy_error("SQLITE error: %s --- %s\n", err, __str); \
+    	proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Error on %s : %s\n",__str, err); \
+    	assert(err==NULL); \
+  	} \
+	} while(0)
+
