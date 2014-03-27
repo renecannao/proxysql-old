@@ -47,7 +47,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"mysql", "mysql_poll_timeout_maintenance", G_OPTION_ARG_INT, &glovars.mysql_poll_timeout_maintenance, "poll() timeout (in millisecond) during maintenance", 100, 1000, 0, 0, 100, NULL, NULL, NULL},
 	{"mysql", "mysql_maintenance_timeout", G_OPTION_ARG_INT, &glovars.mysql_maintenance_timeout, "max time to remove mysql servers (in millisecond)", 1000, 60000, 0, 0, 10000, NULL, NULL, NULL},
 	{"mysql", "mysql_wait_timeout", G_OPTION_ARG_INT64, &glovars.mysql_wait_timeout, "timeout to drop unused connection", 1, 3600*24*7, 0, 1000000, 3600*8, NULL, NULL, NULL},
-	{"mysql", "mysql_hostgroups", G_OPTION_ARG_INT, &glovars.mysql_hostgroups, "total number of hostgroups", 2, 64, 0, 0, 2, NULL, NULL, init_glomysrvs},
+	{"mysql", "mysql_hostgroups", G_OPTION_ARG_INT, &glovars.mysql_hostgroups, "total number of hostgroups", 2, 64, 0, 0, 8, NULL, NULL, init_glomysrvs},
 	{"fundadb", "fundadb_hash_purge_time", G_OPTION_ARG_INT64, &fdb_system_var.hash_purge_time, "fundadb hash purge time (in millisecond): total time to purge a hash", 100, 600000, 0, 1000, 10000, NULL, NULL, NULL},
 	{"fundadb", "fundadb_hash_purge_loop", G_OPTION_ARG_INT64, &fdb_system_var.hash_purge_loop, "fundadb hash purge loop (in millisecond): time to purge a chunk", 100, 600000, 0, 1000, 100, NULL, NULL, NULL},
 	{"fundadb", "fundadb_hash_expire_default", G_OPTION_ARG_INT, &fdb_system_var.hash_expire_default, "fundadb hash default expire (in second)", 1, 3600*24*365*10, 0, 0, 10, NULL, NULL, NULL},
