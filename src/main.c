@@ -9,7 +9,8 @@
 
 static gint proxy_admin_port = 0;
 static gint proxy_mysql_port = 0;
-static gchar *config_file="proxysql.cnf";
+//static gchar *config_file="proxysql.cnf";
+static gchar *config_file=NULL;
 static gint verbose = -1;
 
 pthread_key_t tsd_key;
@@ -438,7 +439,7 @@ gotofork:
 			char *newargv[] = { NULL, NULL, NULL };
 			char *newenviron[] = { NULL };
 			newargv[0]=execbin;
-			newargv[1]=config_file;
+			newargv[1]=glovars.proxy_configfile;
 			int rc;
 			rc=chdir(glovars.proxy_datadir);
 			if (rc) {

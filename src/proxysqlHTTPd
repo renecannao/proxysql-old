@@ -63,8 +63,8 @@ my $num_args = $#ARGV + 1;
 
 ## open the config file passed as argument
 my $inicfg;
-#$inicfg=Config::IniFiles->new( -file => $ARGV[0] ) || die "Could not open config file";
-$inicfg=Config::IniFiles->new( -file => "proxysql.cnf" ) || die "Could not open config file";
+$inicfg=Config::IniFiles->new( -file => $ARGV[0] ) || die "Could not open config file";
+#$inicfg=Config::IniFiles->new( -file => "proxysql.cnf" ) || die "Could not open config file";
 
 
 my $datadir;

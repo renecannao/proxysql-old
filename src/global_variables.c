@@ -139,9 +139,16 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 		}
 	}
 */
-	proxy_debug(PROXY_DEBUG_GENERIC, 1, "processing opts\n");
+	proxy_debug(PROXY_DEBUG_GENERIC, 4, "processing opts\n");
 
 	gchar *config_file=*config_file_ptr;
+
+	if (config_file==NULL) {
+		config_file="proxysql.cnf";
+		if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
+			config_file="/etc/proxysql.cnf";
+		}
+	}
 
 	// check if file exists and is readable
 	if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
@@ -159,6 +166,8 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 	init_global_variables(keyfile);
 
 	g_key_file_free(keyfile);
+	glovars.proxy_configfile=config_file;
+	g_print("%s\n", glovars.proxy_configfile);
 }
 
 
