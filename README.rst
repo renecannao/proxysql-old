@@ -310,8 +310,8 @@ This module is not implemented yet.
 
 
 
-[mysql users] configuration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[mysql users] section
+~~~~~~~~~~~~~~~~~~~~~
 
 This section includes a list of users and relative password in the form **user=password** . Users without password are in the form **user=** . For example::
 
@@ -319,6 +319,32 @@ This section includes a list of users and relative password in the form **user=p
   webapp=$ecr3t
   guest=
   test=password
+
+
+[fundadb] section
+~~~~~~~~~~~~~~~~~
+
+This section allows advenced tunings related to the thread responsible to purge the internal query cache. normally there is no need to tune it.
+
+* **fundadb_hash_purge_time**
+
+  Total time to purge a hash table, in millisecond. Default is 10000 (10 second), miminum is 100 (0.1 second) and maximum is 600000 (10 minutes)
+
+* **fundadb_hash_purge_loop**
+
+  The purge of a hash table is performed in small chunks of time, defined by *fundadb_hash_purge_loop* . Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 60000 (1 minute)
+
+* **fundadb_hash_expire_default**
+
+	fundadb hash default expire in second. This is not relevant as every entry in the internal query always have an explicit timeout.
+
+* **fundadb_hash_purge_threshold_pct_min**
+
+  Minimum percentage of memory usage that triggers normal purge. No purge is performed if memory usage is below this threshold. Default is 50 (%), minimum is 0, maximum is 90.
+
+* **fundadb_hash_purge_threshold_pct_max**
+
+  Maximum percentage of memory usage that triggers normal purge. Aggressive purging is performed if memory usage is above this threshold. Default is 90 (%), minimum is 50, maximum is 100.
 
 
 Quick start Tutorial
