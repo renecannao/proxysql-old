@@ -124,27 +124,27 @@ Currently 7 groups are available:
 
 * **stack_size**
 
-  Specify the stack size used by every thread created in proxysql , in bytes . Default is 524288 ( 512KB ) , minimum is 65536 ( 64KB ) , and maximum is 33554432 (32MB).
+	Specify the stack size used by every thread created in proxysql , in bytes . Default is 524288 ( 512KB ) , minimum is 65536 ( 64KB ) , and maximum is 33554432 (32MB).
 
-  Latest versions of ProxySQL use threads pool instead of one thread per connection, therefore the stack size has little memory footprint.
+	Latest versions of ProxySQL use threads pool instead of one thread per connection, therefore the stack size has little memory footprint.
 
 * **net_buffer_size**
 
-  Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each of these buffers. Each connection from proxysql to a mysql server needs a MySQL data stream. Each client connection can have a different number of MySQL data streams associated to it, that can range from just one data stream if no connections are established to mysql servers, to N+1 where N is the number of defined hostgroups.
+	Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each of these buffers. Each connection from proxysql to a mysql server needs a MySQL data stream. Each client connection can have a different number of MySQL data streams associated to it, that can range from just one data stream if no connections are established to mysql servers, to N+1 where N is the number of defined hostgroups.
 
-  Default is 8192 (8KB), minimum is 1024 (1KB), and maximum is 16777216 (16MB). Increasing this variable can slighly boost performance in case of large dataset, at the cost of additional memory usage.
+	Default is 8192 (8KB), minimum is 1024 (1KB), and maximum is 16777216 (16MB). Increasing this variable can slighly boost performance in case of large dataset, at the cost of additional memory usage.
 
 * **backlog**
 
-  Defines the backlog argument of the listen() call. Default is 2000, minimum is 50
+	Defines the backlog argument of the listen() call. Default is 2000, minimum is 50
 
 * **core_dump_file_size**
 
-  Defines the maximum size of a core dump file, to be used to debug crashes. Default is 0 (no core dump).
+	Defines the maximum size of a core dump file, to be used to debug crashes. Default is 0 (no core dump).
 
 * **datadir**
 
-  Defines the datadir. Not absolute files paths are relative to *datadir* . Default is */var/run/proxysql* .
+	Defines the datadir. Not absolute files paths are relative to *datadir* . Default is */var/run/proxysql* .
 
 * **error_log**
 
@@ -152,7 +152,7 @@ Currently 7 groups are available:
 
 * **pid_file**
 
-  PID file . Default is *proxysql.pid*
+	PID file . Default is *proxysql.pid*
 
 * **restart_on_error**
 
@@ -160,7 +160,7 @@ Currently 7 groups are available:
 
 * **restart_delay**
 
-  If the proxy process dies unexpectedly and the angel process is configured to restart it (*restart_on_error=1*), this one pauses *restart_delay* seconds before restarting. Default is 5, minimum is 0 and maximum is 600 (10 minutes).
+	If the proxy process dies unexpectedly and the angel process is configured to restart it (*restart_on_error=1*), this one pauses *restart_delay* seconds before restarting. Default is 5, minimum is 0 and maximum is 600 (10 minutes).
  
 
 [admin] section
@@ -168,11 +168,11 @@ Currently 7 groups are available:
 
 * **proxy_admin_pathdb**
 
-  It defines the path of the built-in database that stores advanced configurations. Default is *proxysql.db*
+	It defines the path of the built-in database that stores advanced configurations. Default is *proxysql.db*
 
 * **proxy_admin_port**
 
-  It defines the administrative port for runtime configuration and statistics. Default is 6032
+	It defines the administrative port for runtime configuration and statistics. Default is 6032
 
 * **proxy_admin_user**
 
@@ -184,11 +184,11 @@ Currently 7 groups are available:
 
 * **proxy_admin_refresh_status_interval**
 
-  ProxySQL doesn't constantly update status variables/tables in the admin interface. These are updates only when read, and up to once every *proxy_admin_refresh_status_interval* seconds. Default is 600 (10 minutes), minimum is 0 and maximum is 3600 (1 hour). 
+	ProxySQL doesn't constantly update status variables/tables in the admin interface. These are updates only when read, and up to once every *proxy_admin_refresh_status_interval* seconds. Default is 600 (10 minutes), minimum is 0 and maximum is 3600 (1 hour). 
 
 * **proxy_monitor_port**
 
-  It defines the monitoring port for runtime statistics. Default is 6031 . This module is not completely implemented yet
+	It defines the monitoring port for runtime statistics. Default is 6031 . This module is not completely implemented yet
 
 * **proxy_monitor_user**
 
@@ -200,7 +200,7 @@ Currently 7 groups are available:
 
 * **proxy_monitor_refresh_status_interval**
 
-  ProxySQL doesn't constantly update status variables/tables in the monitoring interface. These are updates only when read, and up to once every *proxy_monitor_refresh_status_interval* seconds. Default is 10, minimum is 0 and maximum is 3600 (1 hour). This module is not completely implemented yet
+	ProxySQL doesn't constantly update status variables/tables in the monitoring interface. These are updates only when read, and up to once every *proxy_monitor_refresh_status_interval* seconds. Default is 10, minimum is 0 and maximum is 3600 (1 hour). This module is not completely implemented yet
 
 
 [http] section
@@ -214,92 +214,94 @@ This module is not implemented yet.
 
 * **mysql_threads**
 
-  Early versions of ProxySQL used 1 thread per connection, while recent versions use a pool of threads that handle all the connections. Performance improved by 20% for certain workload and an optimized number of threads. This can also drastically reduces the amount of memory uses by ProxySQL. Further optimizations are expected. Default is *number-of-CPU-cores X 2* , minimum is 2 and maximum is 128 .
+	Early versions of ProxySQL used 1 thread per connection, while recent versions use a pool of threads that handle all the connections. Performance improved by 20% for certain workload and an optimized number of threads. This can also drastically reduces the amount of memory uses by ProxySQL. Further optimizations are expected. Default is *number-of-CPU-cores X 2* , minimum is 2 and maximum is 128 .
 
 * **mysql_default_schema**
 
-  Each connection *requires* a default schema (database). If a client connects without specifying a schema, mysql_default_schema is applied. It defaults to *information_schema*.
+	Each connection *requires* a default schema (database). If a client connects without specifying a schema, mysql_default_schema is applied. It defaults to *information_schema*.
 
-  If you're using mostly one database, specifying a default schema (database) *could* save a request for each new connection.
+	If you're using mostly one database, specifying a default schema (database) *could* save a request for each new connection.
 
 * **proxy_mysql_port**
 
-  Specifies the port that mysql clients should connect to. Default is 6033.
+	Specifies the port that mysql clients should connect to. Default is 6033.
 
 * **mysql_socket**
 
-  ProxySQL can accept connection also through the Unix Domain socket specified in *mysql_socket* . This socket is usable only if the client and ProxySQL are running on the same server. Benchmark shows that with workloads where all the queries are served from the internal query cache (that is, very fast), Unix Domain socket provides 50% more throughput than TCP socket. Default is */tmp/proxysql.sock*
+	ProxySQL can accept connection also through the Unix Domain socket specified in *mysql_socket* . This socket is usable only if the client and ProxySQL are running on the same server. Benchmark shows that with workloads where all the queries are served from the internal query cache (that is, very fast), Unix Domain socket provides 50% more throughput than TCP socket. Default is */tmp/proxysql.sock*
 
 
 * **mysql_hostgroups**
 
-  ProxySQL groups MySQL backends into hostgroups. *mysql_hostgroups* defines the maximum number of hostgroups. Default is 8, mimimum is 2 (enough for classic read/write split) and maximum is 64 .
+	ProxySQL groups MySQL backends into hostgroups. *mysql_hostgroups* defines the maximum number of hostgroups. Default is 8, mimimum is 2 (enough for classic read/write split) and maximum is 64 .
 
 * **mysql_poll_timeout**
 
-  Each connection to proxysql is handled by a thread that call poll() on all the file descriptors opened. poll() is called with a timeout of *mysql_poll_timeout* milliseconds. Default is 10000 (10 seconds) and minimum is 100 (0.1 seconds). The same timeout is applied also in the admin interface and in the monitoring interface.
+	Each connection to proxysql is handled by a thread that call poll() on all the file descriptors opened. poll() is called with a timeout of *mysql_poll_timeout* milliseconds. Default is 10000 (10 seconds) and minimum is 100 (0.1 seconds). The same timeout is applied also in the admin interface and in the monitoring interface.
 
 * **mysql_auto_reconnect_enabled**
 
-  If a connection to mysql server is dropped because killed or timed out, it automatically reconnects. This feature is very unstable and should not be enabled. Default is 0 (disabled).
+	If a connection to mysql server is dropped because killed or timed out, it automatically reconnects. This feature is very unstable and should not be enabled. Default is 0 (disabled).
 
 * **mysql_query_cache_enabled**
 
-  Enable the internal query cache that can be used to cache SELECT statements. Boolean parameter (0/1) , and default is 1 (enabled).
+	Enable the internal query cache that can be used to cache SELECT statements. Boolean parameter (0/1) , and default is 1 (enabled).
 
 * **mysql_query_cache_partitions**
 
-  The internal query cache is divided in several partitions to reduce contentions. Default is 16, minimum is 1 and maximum is 128.
+	The internal query cache is divided in several partitions to reduce contentions. Default is 16, minimum is 1 and maximum is 128.
 
 * **mysql_query_cache_size**
 
-  It defines the size of the internal query cache, if enabled. Default is 1048576 (1MB), so is its minimum. There is no maximum defined.
+	It defines the size of the internal query cache, if enabled. Default is 1048576 (1MB), so is its minimum. There is no maximum defined.
 
 * **mysql_query_cache_precheck**
 
-  It this option is enabled, the internal query cache is checked for possible resultset for every query even if not configured to be cached. Enabling this option can improved performance if the query cache hit ratio is high, as it prevents the parsing of the queries. Boolean parameter (0/1) , and default is 1 (enabled).
+	It this option is enabled, the internal query cache is checked for possible resultset for every query even if not configured to be cached. Enabling this option can improved performance if the query cache hit ratio is high, as it prevents the parsing of the queries. Boolean parameter (0/1) , and default is 1 (enabled).
 
 * **mysql_max_query_size**
 
-  A query received from a client can be of any length. Although, to optimize memory utilization and to improve performance, only queries with a length smaller than *mysql_max_query_size* are analyzed and processed. Any query longer than *mysql_max_query_size* is forwarded to a mysql servers without being processed. That also means that for large queries the query cache is disabled. Default value is 1048576 (1MB), and the maximum length is 16777210 (few bytes less than 16MB).
+	A query received from a client can be of any length. Although, to optimize memory utilization and to improve performance, only queries with a length smaller than *mysql_max_query_size* are analyzed and processed. Any query longer than *mysql_max_query_size* is forwarded to a mysql servers without being processed. That also means that for large queries the query cache is disabled. Default value is 1048576 (1MB), and the maximum length is 16777210 (few bytes less than 16MB).
 
 * **mysql_max_resultset_size**
 
-  When the server sends a resultset to proxysql, the resultset is stored internally before being forwarded to the client. *mysql_max_resultset_size* defines the maximum size of a resultset for being buffered: once a resultset passes this threshold it stops the buffering and triggers a fast forward algorithm. Indirectly, it also defines also the maximum size of a cachable resultset. In future a separate option will be introduced. Default is 1048576 (1MB).
+	When the server sends a resultset to proxysql, the resultset is stored internally before being forwarded to the client. *mysql_max_resultset_size* defines the maximum size of a resultset for being buffered: once a resultset passes this threshold it stops the buffering and triggers a fast forward algorithm. Indirectly, it also defines also the maximum size of a cachable resultset. In future a separate option will be introduced. Default is 1048576 (1MB).
 
 * **mysql_query_cache_default_timeout**
 
-  Every cached resultset has a time to live . *mysql_query_cache_default_timeout* defines the default time to live (in second) for the predefined caching rules when the administrator didn't explicitly configure query rules. Default is 1 seconds.
+	Every cached resultset has a time to live . *mysql_query_cache_default_timeout* defines the default time to live (in second) for the predefined caching rules when the administrator didn't explicitly configure query rules. Default is 1 seconds.
 
 * **mysql_server_version**
 
-  When a client connects to ProxySQL , this introduces itself as mysql version *mysql_server_version* . The default is "5.1.30" ( first GA release of 5.1 ).
+	When a client connects to ProxySQL , this introduces itself as mysql version *mysql_server_version* . The default is "5.1.30" ( first GA release of 5.1 ).
 
 * **mysql_usage_user** and **mysql_usage_password**
 
-  At startup (and in future releases also at regular interval), ProxySQL connects to all the MySQL servers configured to verify connectivity and the status of read_only (this option if used to determine if a server is a master or a slave only during the first automatic configuration: do not rely on this for advanced setup).  *mysql_usage_user* and *mysql_usage_password* define the username and password that ProxySQL uses to connect to MySQL server. As the name suggests, only USAGE privilege is required. Defaults are *mysql_usage_user=proxy* and *mysql_usage_password=proxy* .
+	At startup (and in future releases also at regular interval), ProxySQL connects to all the MySQL servers configured to verify connectivity and the status of read_only (this option if used to determine if a server is a master or a slave only during the first automatic configuration: do not rely on this for advanced setup).  *mysql_usage_user* and *mysql_usage_password* define the username and password that ProxySQL uses to connect to MySQL server. As the name suggests, only USAGE privilege is required. Defaults are *mysql_usage_user=proxy* and *mysql_usage_password=proxy* .
 
 * **mysql_servers**
 
-  Defines a list of mysql servers to use as backend in the format of hostname:port , separated by ';' . Example : mysql_servers=192.168.1.2:3306;192.168.1.3:3306;192.168.1.4:3306 . No default applies.
+	Defines a list of mysql servers to use as backend in the format of hostname:port , separated by ';' . Example : mysql_servers=192.168.1.2:3306;192.168.1.3:3306;192.168.1.4:3306 . No default applies.
+
+	**Note** : this list is used only of the built-in database is not present yet. If the built-in database is already present, this option is ignored.
 
 * **mysql_connection_pool_enabled**
 
-  ProxySQL implements its own connection pool to MySQL backends. Boolean parameter (0/1) , where 1 is the default (enabled).
+	ProxySQL implements its own connection pool to MySQL backends. Boolean parameter (0/1) , where 1 is the default (enabled).
 
 * **mysql_share_connections**
 
 	When connection pool is enabled, it is also possible to share connections among clients. Boolean parameter (0/1) , where 0 is the default (disabled).
 
-  When this feature is disabled (default) and a connection is assigned to a client, this connection will be used only by that specific client connection and will be never shared. That is: connections to MySQL servers are not shared among client connections . When this feature is enabled, multiple clients can use the same connection to a single backend. This feature is *experimental*. 
+	When this feature is disabled (default) and a connection is assigned to a client, this connection will be used only by that specific client connection and will be never shared. That is: connections to MySQL servers are not shared among client connections . When this feature is enabled, multiple clients can use the same connection to a single backend. This feature is *experimental*. 
 
 * **mysql_wait_timeout**
 
-  If connection pool is enabled ( *mysql_connection_pool_enabled=1* ) , unused connection (not assigned to any client) are automatically dropped after *mysql_wait_timeout* seconds. Default is 28800 (8 hours) , minimum is 1 second and maximum is 604800 (1 week). This option *must* be smaller than mysql variable *wait_timeout* .
+	If connection pool is enabled ( *mysql_connection_pool_enabled=1* ) , unused connection (not assigned to any client) are automatically dropped after *mysql_wait_timeout* seconds. Default is 28800 (8 hours) , minimum is 1 second and maximum is 604800 (1 week). This option *must* be smaller than mysql variable *wait_timeout* .
 
 * **mysql_parse_trx_cmds**
 
-  ProxySQL can filter unnecessary transaction commands if irrelevant. For example, if a connection sends BEGIN or COMMIT twice without any command in between, the second command is filtered. Boolean parameter (0/1) , where 0 is the default (disabled). This feature is absolutely *unstable*.
+	ProxySQL can filter unnecessary transaction commands if irrelevant. For example, if a connection sends BEGIN or COMMIT twice without any command in between, the second command is filtered. Boolean parameter (0/1) , where 0 is the default (disabled). This feature is absolutely *unstable*.
 
 * **mysql_maintenance_timeout**
 
@@ -307,7 +309,7 @@ This module is not implemented yet.
 
 * **mysql_poll_timeout_maintenance**
 
-  When a backend server is disabled, poll() timeout is *mysql_poll_timeout_maintenance* instead of *mysql_poll_timeout*. Also this variable is in milliseconds. Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 1000 (1 second).
+	When a backend server is disabled, poll() timeout is *mysql_poll_timeout_maintenance* instead of *mysql_poll_timeout*. Also this variable is in milliseconds. Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 1000 (1 second).
 
 
 
@@ -329,11 +331,11 @@ This section allows advenced tunings related to the thread responsible to purge 
 
 * **fundadb_hash_purge_time**
 
-  Total time to purge a hash table, in millisecond. Default is 10000 (10 second), miminum is 100 (0.1 second) and maximum is 600000 (10 minutes)
+	Total time to purge a hash table, in millisecond. Default is 10000 (10 second), miminum is 100 (0.1 second) and maximum is 600000 (10 minutes)
 
 * **fundadb_hash_purge_loop**
 
-  The purge of a hash table is performed in small chunks of time, defined by *fundadb_hash_purge_loop* . Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 60000 (1 minute)
+	The purge of a hash table is performed in small chunks of time, defined by *fundadb_hash_purge_loop* . Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 60000 (1 minute)
 
 * **fundadb_hash_expire_default**
 
@@ -341,11 +343,11 @@ This section allows advenced tunings related to the thread responsible to purge 
 
 * **fundadb_hash_purge_threshold_pct_min**
 
-  Minimum percentage of memory usage that triggers normal purge. No purge is performed if memory usage is below this threshold. Default is 50 (%), minimum is 0, maximum is 90.
+	Minimum percentage of memory usage that triggers normal purge. No purge is performed if memory usage is below this threshold. Default is 50 (%), minimum is 0, maximum is 90.
 
 * **fundadb_hash_purge_threshold_pct_max**
 
-  Maximum percentage of memory usage that triggers normal purge. Aggressive purging is performed if memory usage is above this threshold. Default is 90 (%), minimum is 50, maximum is 100.
+	Maximum percentage of memory usage that triggers normal purge. Aggressive purging is performed if memory usage is above this threshold. Default is 90 (%), minimum is 50, maximum is 100.
 
 
 Quick start Tutorial
