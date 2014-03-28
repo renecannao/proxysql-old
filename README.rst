@@ -102,8 +102,9 @@ ProxySQL uses two source of configuration:
 * a built-in database that stores more advanced configurations and uses tables to define multiple attributes and relations between them. Currently, this is implemented as an SQLite3 database
 
 
+
 Configuration file
-------------------
+==================
 
 Configuration file is key-value file , .ini-like config file ( see https://developer.gnome.org/glib/stable/glib-Key-value-file-parser.html for reference ).
 
