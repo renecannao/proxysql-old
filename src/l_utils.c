@@ -160,7 +160,6 @@ void * l_alloc0(size_t size) {
 
 void __l_free(l_sfp *sfp, size_t size, void *p) {
 	if (size>L_SFC_MAX_ELEM_SIZE) {
-		fprintf(stderr,"Freeing %d\n", size);
 		free(p);
 		return;
 	}

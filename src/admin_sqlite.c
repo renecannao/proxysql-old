@@ -453,7 +453,7 @@ void sqlite3_flush_users_mem_to_db(sqlite3 *db, int replace, int active) {
 		memset(buff,0,l);
 		sprintf(buff,a, g_ptr_array_index(glovars.mysql_users_name,i), g_ptr_array_index(glovars.mysql_users_pass,i), active);
 		proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: %s\n",buff);
-		sqlite3_exec_exit_on_failure(sqlite3configdb,buff);
+		sqlite3_exec_exit_on_failure(db,buff);
 		g_free(buff);
 	}
 	pthread_rwlock_unlock(&glovars.rwlock_usernames);
