@@ -18,15 +18,34 @@ Dependencies
 Other than standard libraries, required libraries and header files are:
 
 * libglib2 and libglib2-dev
-* libmysqlclient and libmysqlclient-dev
-* libpcre3 and libpcre3-dev
+* libssl and libssl-dev
+
+ProxySQL also depends from few libraries that are statically linked.
+To download and compile these libraries, run the follows::
+
+  mkdir ProxySQL
+  cd ProxySQL
+  wget https://downloads.mariadb.org/interstitial/mariadb-native-client/Source/mariadb-native-client.tar.gz
+  tar -zxf mariadb-native-client.tar.gz
+  cd mariadb-native-client
+  cmake . && make
+  cd ..
+  wget http://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
+  tar -zxf libdaemon-0.14.tar.gz 
+  cd libdaemon-0.14
+  ./configure && make
+  cd ..
+
+
 
 Compiling
 ~~~~~~~~~
 
-Once download::
-
-  cd src
+After compiling the libraries from the previous section, download and compile ProxySQL running the follows::
+  
+  wget -O proxysql_Hebe.zip https://github.com/renecannao/proxysql/archive/Hebe.zip
+  unzip proxysql_Hebe.zip
+  cd proxysql-Hebe/src
   make
 
 Note that no configure is available yet. You must check for missing dependencies.
@@ -54,89 +73,147 @@ Usage is the follow::
   Application Options:
     --admin-port      Administration port
     --mysql-port      MySQL proxy port
-    -v, --verbose     Verbose level
     -c, --config      Configuration file
 
 
-proxysql listens on 2 different ports:
+proxysql listens on 3 different TCP ports: 2 of them are configurable via command line arguments:
 
 * **--mysql-port** specifies the port that mysql clients should connect to
-* **--admin-port** specifies the administration port : administration module is yet not implemented
+* **--admin-port** specifies the administration port
 
-Other options:
+The 3rd port not configurable via command line is the monitoring port. Note that this module is not completely implemented yet.
 
-* **--verbose** specifies the verbosity level : feature not completely implemented
+Other option(s):
+
 * **--config** specifies the configuration file
 
-The configuration file is mandatory. It defaults to *proxysql.cnf* in the current directory, and if present there is no need to specify it on the command line.
+A configuration file is mandatory.
+If not specified on the command line it defaults to *proxysql.cnf* in the current directory if present, or */etc/proxysql.cnf*.
 Currently there is no strong input validation of the configuration file, and wrong parsing of it can cause proxysql to crash at startup.
-proxysql does not daemonize yet, and it runs in foreground.
+If parsing of config file is successful, proxysql will daemonize
 
 
-Configuration
--------------
+ProxySQL Configuration
+======================
 
-Configuration file is key-value file , .ini-like config file ( see https://developer.gnome.org/glib/stable/glib-Key-value-file-parser.html for referene ).
+ProxySQL uses two source of configuration:
 
-Currently 5 groups are available, but only 4 parsed:
+* a configuration file in key-value format
+* a built-in database that stores more advanced configurations and uses tables to define multiple attributes and relations between them. Currently, this is implemented as an SQLite3 database
+
+
+Configuration file
+------------------
+
+Configuration file is key-value file , .ini-like config file ( see https://developer.gnome.org/glib/stable/glib-Key-value-file-parser.html for reference ).
+
+Currently 7 groups are available:
 
 * **[global]** : generic configuration
+* **[admin]** : configuration options related to admin and monitoring interface
+* **[http]** : configuration options related to HTTP servers . Feature not available yet
 * **[mysql]** : configuration options related to handling of mysql connections
-* **[fundadb]** : configuration options for the internal storage used for caching . Do not edit
-* **[debug]** : configuration options related to debugging . Not enabled yet . Do not edit
+* **[fundadb]** : configuration options for the internal storage used for caching
+* **[debug]** : configuration options related to debugging
 * **[mysql users]** : specify a list of users and their passwords used to connect to mysql servers
 
 
-[global] configuration
-~~~~~~~~~~~~~~~~~~~~~~
+[global] section
+~~~~~~~~~~~~~~~~
 
 * **stack_size**
 
-  Specify the stack size used by every thread created in proxysql , in bytes . Default is 524288 ( 512KB ) , minimum is 65536 ( 64KB ) , and no maximum is defined.
+  Specify the stack size used by every thread created in proxysql , in bytes . Default is 524288 ( 512KB ) , minimum is 65536 ( 64KB ) , and maximum is 33554432 (32MB).
 
-  The default stack_size in Linux is 8MB. Starting hundreds of connections/threads will quickly eat all memory so we need to lower this down to be more memory efficient.
-
-  Latest versions of ProxySQL use threads pool instead of one thread per connection, therefore now the stack size has little memory footprint.
+  Latest versions of ProxySQL use threads pool instead of one thread per connection, therefore the stack size has little memory footprint.
 
 * **net_buffer_size**
 
-  Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each of these buffers. Each connection from proxysql to a mysql server needs a MySQL data stream. Each client connection can have a different number of MySQL data stream associated to it:
+  Each connection to proxysql creates a so called MySQL data stream. Each MySQL data stream has 2 buffers for recv and send. *net_buffer_size* defines the size of each of these buffers. Each connection from proxysql to a mysql server needs a MySQL data stream. Each client connection can have a different number of MySQL data streams associated to it, that can range from just one data stream if no connections are established to mysql servers, to N+1 where N is the number of defined hostgroups.
 
-  - 1 : The client connects to proxysql and this one is able to serve each request from its own cache. No connections are established to mysql server.
-
-  - 2 : The client connects to proxysql and this one needs to connect to a mysql server to serve requests from client.
-
-  - 3 : The client connects to proxysql and this one needs to connect to two mysql servers, a master and a slave.
-
-  That means that each client connection needs 1, 2 or 3 MySQL data streams, for a total of 2, 4 or 6 network buffers. Increasing this variables boost performance in case of large dataset, at the cost of additional memory usage. Default is 8192 (8KB), minimum is 1024 (1KB), and no maximum is defined.
-
-* **proxy_admin_port**
-
-  It defines the administrative port for runtime configuration and statistics.
+  Default is 8192 (8KB), minimum is 1024 (1KB), and maximum is 16777216 (16MB). Increasing this variable can slighly boost performance in case of large dataset, at the cost of additional memory usage.
 
 * **backlog**
 
   Defines the backlog argument of the listen() call. Default is 2000, minimum is 50
 
-* **verbose**
-
-  Defines the verbosity level. Default is 0
-
-* **enable_timers**
-
-  When enabled, some functions trigger an internal timer. To use only for debugging performance. Boolean parameter (0/1) , where 0 is the default (disabled).
-
-* **print_statistics_interval**
-
-  If enable_timers is enabled and verbose >= 10 , a background thread will dump timers information on stderr every *print_statistics_interval* seconds. Default is 60.
-
 * **core_dump_file_size**
 
   Defines the maximum size of a core dump file, to be used to debug crashes. Default is 0 (no core dump).
 
+* **datadir**
+
+  Defines the datadir. Not absolute files paths are relative to *datadir* . Default is */var/run/proxysql* .
+
+* **error_log**
+
+	Path to error log . Default is *proxysql.log*
+
+* **pid_file**
+
+  PID file . Default is *proxysql.pid*
+
+* **restart_on_error**
+
+	When proxysql is executed it forks in 2 processes: an angel process and the proxy itself. If *restart_on_error* is set to 1 , the angel process will restart the proxy if this one dies unexpectedly
+
+* **restart_delay**
+
+  If the proxy process dies unexpectedly and the angel process is configured to restart it (*restart_on_error=1*), this one pauses *restart_delay* seconds before restarting. Default is 5, minimum is 0 and maximum is 600 (10 minutes).
  
-[mysql] configuration
-~~~~~~~~~~~~~~~~~~~~~~
+
+[admin] section
+~~~~~~~~~~~~~~~
+
+* **proxy_admin_pathdb**
+
+  It defines the path of the built-in database that stores advanced configurations. Default is *proxysql.db*
+
+* **proxy_admin_port**
+
+  It defines the administrative port for runtime configuration and statistics. Default is 6032
+
+* **proxy_admin_user**
+
+	It defines the user to connect to the admin interface . Default is *admin* 
+
+* **proxy_admin_password**
+
+	It defines the password to connect to the admin interface . Default is *admin* 
+
+* **proxy_admin_refresh_status_interval**
+
+  ProxySQL doesn't constantly update status variables/tables in the admin interface. These are updates only when read, and up to once every *proxy_admin_refresh_status_interval* seconds. Default is 600 (10 minutes), minimum is 0 and maximum is 3600 (1 hour). 
+
+* **proxy_monitor_port**
+
+  It defines the monitoring port for runtime statistics. Default is 6031 . This module is not completely implemented yet
+
+* **proxy_monitor_user**
+
+	It defines the user to connect to the monitoring interface . Default is *monitor* . This module is not completely implemented yet
+
+* **proxy_monitor_password**
+
+	It defines the password to connect to the monitoring interface . Default is *monitor* . This module is not completely implemented yet
+
+* **proxy_monitor_refresh_status_interval**
+
+  ProxySQL doesn't constantly update status variables/tables in the monitoring interface. These are updates only when read, and up to once every *proxy_monitor_refresh_status_interval* seconds. Default is 10, minimum is 0 and maximum is 3600 (1 hour). This module is not completely implemented yet
+
+
+[http] section
+~~~~~~~~~~~~~~
+
+This module is not implemented yet.
+
+
+[mysql] section
+~~~~~~~~~~~~~~~
+
+* **mysql_threads**
+
+  Early versions of ProxySQL used 1 thread per connection, while recent versions use a pool of threads that handle all the connections. Performance improved by 20% for certain workload and an optimized number of threads. This can also drastically reduces the amount of memory uses by ProxySQL. Further optimizations are expected. Default is *number-of-CPU-cores X 2* , minimum is 2 and maximum is 128 .
 
 * **mysql_default_schema**
 
@@ -146,35 +223,52 @@ Currently 5 groups are available, but only 4 parsed:
 
 * **proxy_mysql_port**
 
-  Specifies the port that mysql clients should connect to. It defaults to 6033.
+  Specifies the port that mysql clients should connect to. Default is 6033.
+
+* **mysql_socket**
+
+  ProxySQL can accept connection also through the Unix Domain socket specified in *mysql_socket* . This socket is usable only if the client and ProxySQL are running on the same server. Benchmark shows that with workloads where all the queries are served from the internal query cache (that is, very fast), Unix Domain socket provides 50% more throughput than TCP socket. Default is */tmp/proxysql.sock*
+
+
+* **mysql_hostgroups**
+
+  ProxySQL groups MySQL backends into hostgroups. *mysql_hostgroups* defines the maximum number of hostgroups. Default is 8, mimimum is 2 (enough for classic read/write split) and maximum is 64 .
 
 * **mysql_poll_timeout**
 
-  Each connection to proxysql is handled by a thread that call poll() on all the file descriptors opened. poll() is called with a timeout of *mysql_poll_timeout* milliseconds. Default is 10000 (10 seconds) and the minimum is 100 (0.1 seconds).
+  Each connection to proxysql is handled by a thread that call poll() on all the file descriptors opened. poll() is called with a timeout of *mysql_poll_timeout* milliseconds. Default is 10000 (10 seconds) and minimum is 100 (0.1 seconds). The same timeout is applied also in the admin interface and in the monitoring interface.
 
 * **mysql_auto_reconnect_enabled**
 
-  If a connection to mysql server is dropped because killed or timed out, it automatically reconnects. This feature is not completed and should not be enabled. Default is 0 (disabled).
+  If a connection to mysql server is dropped because killed or timed out, it automatically reconnects. This feature is very unstable and should not be enabled. Default is 0 (disabled).
 
 * **mysql_query_cache_enabled**
 
-  Enable the internal MySQL query cache for SELECT statements. Boolean parameter (0/1) , where 1 is the default (enabled).
+  Enable the internal query cache that can be used to cache SELECT statements. Boolean parameter (0/1) , and default is 1 (enabled).
 
 * **mysql_query_cache_partitions**
 
-  The internal MySQL query cache is divided in several partitions to reduce contentions. By default 16 partitions are created.
+  The internal query cache is divided in several partitions to reduce contentions. Default is 16, minimum is 1 and maximum is 128.
+
+* **mysql_query_cache_size**
+
+  It defines the size of the internal query cache, if enabled. Default is 1048576 (1MB), so is its minimum. There is no maximum defined.
+
+* **mysql_query_cache_precheck**
+
+  It this option is enabled, the internal query cache is checked for possible resultset for every query even if not configured to be cached. Enabling this option can improved performance if the query cache hit ratio is high, as it prevents the parsing of the queries. Boolean parameter (0/1) , and default is 1 (enabled).
 
 * **mysql_max_query_size**
 
-  A query received from a client can be of any length. Although, to optimize memory utilization and to improve performance, only queries with a length smaller than mysql_max_query_size are analyzed and processed. Any query longer then mysql_max_query_size is forwarded to a mysql servers without being processed. That also means that for large queries the query cache is disabled. Default value for mysql_max_query_size is 1048576 (1MB), and the maximum length is 16777210 (few bytes less than 16MB).
+  A query received from a client can be of any length. Although, to optimize memory utilization and to improve performance, only queries with a length smaller than *mysql_max_query_size* are analyzed and processed. Any query longer than *mysql_max_query_size* is forwarded to a mysql servers without being processed. That also means that for large queries the query cache is disabled. Default value is 1048576 (1MB), and the maximum length is 16777210 (few bytes less than 16MB).
 
 * **mysql_max_resultset_size**
 
-  When the server sends a resultset to proxysql, the resultset is stored internally before being forwarded to the client. mysql_max_resultset_size defines the maximum size of a resultset for being buffered: once a resultset passes this threshold it stops the buffering and triggers a fast forward algorithm. Indirectly defines also the maximum size of a cachable resultset. In future a separate option will be introduced. Default is 1048576 (1MB).
+  When the server sends a resultset to proxysql, the resultset is stored internally before being forwarded to the client. *mysql_max_resultset_size* defines the maximum size of a resultset for being buffered: once a resultset passes this threshold it stops the buffering and triggers a fast forward algorithm. Indirectly, it also defines also the maximum size of a cachable resultset. In future a separate option will be introduced. Default is 1048576 (1MB).
 
 * **mysql_query_cache_default_timeout**
 
-  Every cached resultset has a time to live . *mysql_query_cache_default_timeout* defines the default time to live in case a TTL is not specified for a specific query pattern. Defaults is 1 seconds, causing the entries to expire very quickly. It is recommended to increase the *mysql_query_cache_default_timeout* for better performance. *mysql_query_cache_default_timeout*=0 disables caching for any query not explicity 
+  Every cached resultset has a time to live . *mysql_query_cache_default_timeout* defines the default time to live (in second) for the predefined caching rules when the administrator didn't explicitly configure query rules. Default is 1 seconds.
 
 * **mysql_server_version**
 
@@ -182,31 +276,39 @@ Currently 5 groups are available, but only 4 parsed:
 
 * **mysql_usage_user** and **mysql_usage_password**
 
-  At startup (and in future releases also at regular interval), ProxySQL connects to all the MySQL to verify connectivity and the status of read_only to determine if a server is a master or a slave. *mysql_usage_user* and *mysql_usage_password* define the username and password that ProxySQL uses to connect to MySQL. As the name suggests, only USAGE privilege is required. Defaults are *mysql_usage_user=proxy* and *mysql_usage_password=proxy* .
+  At startup (and in future releases also at regular interval), ProxySQL connects to all the MySQL servers configured to verify connectivity and the status of read_only (this option if used to determine if a server is a master or a slave only during the first automatic configuration: do not rely on this for advanced setup).  *mysql_usage_user* and *mysql_usage_password* define the username and password that ProxySQL uses to connect to MySQL server. As the name suggests, only USAGE privilege is required. Defaults are *mysql_usage_user=proxy* and *mysql_usage_password=proxy* .
 
 * **mysql_servers**
 
   Defines a list of mysql servers to use as backend in the format of hostname:port , separated by ';' . Example : mysql_servers=192.168.1.2:3306;192.168.1.3:3306;192.168.1.4:3306 . No default applies.
 
-* **mysql_use_masters_for_reads**
-
-  Implementing read/write split, ProxySQL uses servers where read_only=OFF to send DML statements, while SELECT statements are sent to servers where read_only=ON . If *mysql_use_masters_for_reads* is set to 1, SELECT statements are send also to servers where read_only=OFF . Unless you have servers with read_only=ON it is recommended to always set *mysql_use_masters_for_reads=1* or SELECT statements won't be processed (that is a bug that needs to be fixed). Default is 1 .
-
 * **mysql_connection_pool_enabled**
 
-  ProxySQL implements its own connection pool to MySQL backend. When a connection is assigned to a client it will be used only by that specific client connection and will be never shared. That is: connections to MySQL are not shared among client connections . It connection pool is enabled, when a client disconnects the connections to the backend are reusable by a new connection. Boolean parameter (0/1) , where 1 is the default (enabled).
+  ProxySQL implements its own connection pool to MySQL backends. Boolean parameter (0/1) , where 1 is the default (enabled).
+
+* **mysql_share_connections**
+
+	When connection pool is enabled, it is also possible to share connections among clients. Boolean parameter (0/1) , where 0 is the default (disabled).
+
+  When this feature is disabled (default) and a connection is assigned to a client, this connection will be used only by that specific client connection and will be never shared. That is: connections to MySQL servers are not shared among client connections . When this feature is enabled, multiple clients can use the same connection to a single backend. This feature is *experimental*. 
 
 * **mysql_wait_timeout**
 
-  If connection pool is enabled ( *mysql_connection_pool_enabled=1* ) , unused connection (not assigned to any client) are automatically dropped after *mysql_wait_timeout* seconds. Default is 8 hours , minimum is 1 second .
+  If connection pool is enabled ( *mysql_connection_pool_enabled=1* ) , unused connection (not assigned to any client) are automatically dropped after *mysql_wait_timeout* seconds. Default is 28800 (8 hours) , minimum is 1 second and maximum is 604800 (1 week). This option *must* be smaller than mysql variable *wait_timeout* .
 
-* **mysql_socket**
+* **mysql_parse_trx_cmds**
 
-  ProxySQL can accept connection also through the Unix Domain socket specified in *mysql_socket* . This socket is usable only if the client and ProxySQL are running on the same server. Benchmark shows that with workload where all the queries are served from the internal query cache, Unix Domain socket provides 50% more throughput than TCP socket. Default is */tmp/proxysql.sock*
+  ProxySQL can filter unnecessary transaction commands if irrelevant. For example, if a connection sends BEGIN or COMMIT twice without any command in between, the second command is filtered. Boolean parameter (0/1) , where 0 is the default (disabled). This feature is absolutely *unstable*.
 
-* **mysql_threads**
+* **mysql_maintenance_timeout**
 
-  Early versions of ProxySQL used 1 thread per connection, while recent versions use a pool of threads that handle all the connections. Performance improved by 20% for certain workload and an optimized number of threads. Further optimizations are expected. Default is *number-of-CPU-cores X 2* , minimum is 2 and maximum is 128 .
+	When a backend server is disabled, only the idle connections are immediately terminated. All the other active connections have up to *mysql_maintenance_timeout* milliseconds to gracefully shutdown before being terminated. Default is 10000 (10 seconds), minimum is 1000 (1 second) and maximum is 60000 (1 minute).
+
+* **mysql_poll_timeout_maintenance**
+
+  When a backend server is disabled, poll() timeout is *mysql_poll_timeout_maintenance* instead of *mysql_poll_timeout*. Also this variable is in milliseconds. Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 1000 (1 second).
+
+
 
 [mysql users] configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -226,28 +328,52 @@ Download and compile
 ~~~~~~~~~~~~~~~~~~~~
 
 These are the simple steps to download and compile ProxySQL::
- 
-  rene@voyager:~$ mkdir proxysql
-  rene@voyager:~$ cd proxysql
-  rene@voyager:~/proxysql$ wget -q https://github.com/renecannao/proxysql/archive/master.zip -O proxysql.zip
-  rene@voyager:~/proxysql$ unzip -q proxysql.zip 
-  rene@voyager:~/proxysql$ cd proxysql-master/src/
-  rene@voyager:~/proxysql/proxysql-master/src$ mkdir obj
-  rene@voyager:~/proxysql/proxysql-master/src$ make
-  gcc -c -o obj/main.o main.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/free_pkts.o free_pkts.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/mem.o mem.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/debug.o debug.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/fundadb_hash.o fundadb_hash.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/global_variables.o global_variables.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/mysql_connpool.o mysql_connpool.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/mysql_protocol.o mysql_protocol.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/mysql_handler.o mysql_handler.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/network.o network.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/queue.o queue.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -c -o obj/threads.o threads.c -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2
-  gcc -o proxysql obj/main.o obj/free_pkts.o obj/mem.o obj/debug.o obj/fundadb_hash.o obj/global_variables.o obj/mysql_connpool.o obj/mysql_protocol.o obj/mysql_handler.o obj/network.o obj/queue.o obj/threads.o -I../include -lpthread -lpcre -ggdb -rdynamic -lcrypto `mysql_config --libs_r --cflags` `pkg-config --libs --cflags glib-2.0` -DPKTALLOC -O2 -lm
+  
+  rene@voyager:~$ mkdir ProxySQL
+  rene@voyager:~$ cd ProxySQL
+  rene@voyager:~/ProxySQL$ wget https://downloads.mariadb.org/interstitial/mariadb-native-client/Source/mariadb-native-client.tar.gz
+  ...
+  rene@voyager:~/ProxySQL$ tar -zxf mariadb-native-client.tar.gz
+  rene@voyager:~/ProxySQL$ cd mariadb-native-client
+  rene@voyager:~/ProxySQL/mariadb-native-client$ cmake . && make
+  ...
+  rene@voyager:~/ProxySQL/mariadb-native-client$ cd ..
+  
+  rene@voyager:~/ProxySQL$ wget http://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
+  ...
+  rene@voyager:~/ProxySQL$ tar -zxf libdaemon-0.14.tar.gz 
+  rene@voyager:~/ProxySQL$ cd libdaemon-0.14
+  rene@voyager:~/ProxySQL/libdaemon-0.14$ ./configure && make
+  ...
+  rene@voyager:~/ProxySQL/libdaemon-0.14$ cd ..
+  rene@voyager:~/ProxySQL$ wget -O proxysql_Hebe.zip https://github.com/renecannao/proxysql/archive/Hebe.zip
+  ...
+  rene@voyager:~/ProxySQL$ unzip proxysql_Hebe.zip
+  ...
+  rene@voyager:~/ProxySQL$ cd proxysql-Hebe/src/
+  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ make
+  gcc -c -o obj/utils.o utils.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/l_utils.o l_utils.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/mysql_session.o mysql_session.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/mysql_data_stream.o mysql_data_stream.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/mysql_backend.o mysql_backend.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/main.o main.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/debug.o debug.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/fundadb_hash.o fundadb_hash.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/global_variables.o global_variables.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/mysql_connpool.o mysql_connpool.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/mysql_protocol.o mysql_protocol.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/mysql_handler.o mysql_handler.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/network.o network.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/threads.o threads.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/rene.o rene.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o obj/rene_sqlite.o rene_sqlite.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
+  gcc -c -o ../sqlite3/sqlite3.o -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG ../sqlite3/sqlite3.c
+  gcc -o proxysql ../../mariadb-native-client/libmysql/libmariadbclient.a ../../libdaemon-0.14/libdaemon/.libs/libdaemon.a ../sqlite3/sqlite3.o obj/utils.o obj/l_utils.o obj/mysql_session.o obj/mysql_data_stream.o obj/mysql_backend.o obj/main.o obj/debug.o obj/fundadb_hash.o obj/global_variables.o obj/mysql_connpool.o obj/mysql_protocol.o obj/mysql_handler.o obj/network.o obj/threads.o obj/rene.o obj/rene_sqlite.o -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -L../../mariadb-native-client/libmysql -L../../libdaemon-0.14/libdaemon/.libs `pkg-config --cflags gthread-2.0` -Wl,-Bstatic -lmariadbclient -ldaemon -Wl,-Bdynamic -lssl -ldl -lpthread -lm `pkg-config --libs gthread-2.0`
+  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ ls -l proxysql
+  -rwxr-xr-x 1 admin admin 2610700 Mar 28 07:35 proxysql
 
+ 
 Congratulations! You have just compiled proxysql!
 
 Create a small replication environment
@@ -306,28 +432,26 @@ The mysqld processes are listening on port 23389 (master) and 23390 and 23391 (s
 Configure ProxySQL
 ~~~~~~~~~~~~~~~~~~
 
-ProxySQL come with an example configuration file, that may not work for your setup. Remove it and create a new one::
+ProxySQL doesn't have an example configuration file. Create a new one named *proxysql.cnf* usin the follow sample::
   
-  vegaicm@voyager:~/proxysql/proxysql-master/src$ rm proxysql.cnf 
-  vegaicm@voyager:~/proxysql/proxysql-master/src$ cat > proxysql.cnf << EOF
-  > [global]
-  > [mysql]
-  > mysql_usage_user=proxy
-  > mysql_usage_password=proxy
-  > mysql_servers=127.0.0.1:23389;127.0.0.1:23390;127.0.0.1:23391
-  > mysql_default_schema=information_schema
-  > mysql_connection_pool_enabled=1
-  > mysql_max_resultset_size=1048576
-  > mysql_max_query_size=1048576
-  > mysql_query_cache_enabled=1
-  > mysql_query_cache_partitions=16
-  > mysql_query_cache_default_timeout=30
-  > [mysql users]
-  > msandbox=msandbox
-  > test=password
-  > EOF
+  [global]
+  datadir=/home/rene/ProxySQL/proxysql-Hebe/src
+  [mysql]
+  mysql_usage_user=proxy
+  mysql_usage_password=proxy
+  mysql_servers=127.0.0.1:23389;127.0.0.1:23390;127.0.0.1:23391
+  mysql_default_schema=information_schema
+  mysql_connection_pool_enabled=1
+  mysql_max_resultset_size=1048576
+  mysql_max_query_size=1048576
+  mysql_query_cache_enabled=1
+  mysql_query_cache_partitions=16
+  mysql_query_cache_default_timeout=30
+  [mysql users]
+  msandbox=msandbox
+  test=password
 
-Note the *[global]* section: it is mandatory even if unused.
+Note the *[global]* section is mandatory even if unused.
 
 Create users on MySQL
 ~~~~~~~~~~~~~~~~~~~~~
@@ -342,17 +466,18 @@ User msandbox is already there, so only users proxy and test needs to be created
   rene@voyager:~$ mysql -h 127.0.0.1 -u root -pmsandbox -P23389 -e "GRANT USAGE ON *.* TO 'proxy'@'127.0.0.1' IDENTIFIED BY 'proxy'";
   rene@voyager:~$ mysql -h 127.0.0.1 -u root -pmsandbox -P23389 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'127.0.0.1' IDENTIFIED BY 'password'";
 
+
 Configure the slaves with read_only=0
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-ProxySQL distinguish masters from slaves only checking the global variables read_only. This means that you *must* configure the slaves with read_only=ON or ProxySQL will send DML to them as well. Note that this make ProxySQL suitable for multi-master environments using clustering solution like NDB and Galera.
+When ProxySQL is executed for the first time (or when there are no built-in database database available), ProxySQL distinguishes masters from slaves only checking the global variables read_only. This means that you *must* configure the slaves with read_only=ON or ProxySQL will send DML to them as well. Note that this make ProxySQL suitable for multi-master environments using clustering solution like NDB and Galera.
 
 Verify the status of read_only on all servers::
   
   rene@voyager:~$ for p in 23389 23390 23391 ; do mysql -h 127.0.0.1 -u root -pmsandbox -P$p -B -N -e "SHOW VARIABLES LIKE 'read_only'" ; done
-  read_only	OFF
-  read_only	OFF
-  read_only	OFF
+  read_only OFF
+  read_only OFF
+  read_only OFF
 
 Change read_only on slaves::
   
@@ -362,22 +487,23 @@ Change read_only on slaves::
 Verify again the status of read_only on all servers::
   
   rene@voyager:~$ for p in 23389 23390 23391 ; do mysql -h 127.0.0.1 -u root -pmsandbox -P$p -B -N -e "SHOW VARIABLES LIKE 'read_only'" ; done
-  read_only	OFF
-  read_only	ON
-  read_only	ON
+  read_only OFF
+  read_only ON
+  read_only ON
+
 
 Start ProxySQL
 ~~~~~~~~~~~~~~
 
-ProxySQL is now ready to be executed. Please note that currently it run only on foreground and it does not daemonize::
+ProxySQL is now ready to be executed::
   
-  rene@voyager:~/proxysql/proxysql-master/src$ ./proxysql 
-  Server 127.0.0.1 port 23389
-  server 127.0.0.1 read_only OFF
-  Server 127.0.0.1 port 23390
-  server 127.0.0.1 read_only ON
-  Server 127.0.0.1 port 23391
-  server 127.0.0.1 read_only ON
+  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ ./proxysql 
+
+Note that ProxySQL will run fork into 2 processes, an angel process and the proxy itself::
+  
+  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ ps aux | grep proxysql
+  rene    31007  0.0  0.0  32072   904 ?        S    08:03   0:00 ./proxysql
+  rene    31008  0.0  0.0 235964  2336 ?        Sl   08:03   0:00 ./proxysql
 
 
 Connect to ProxySQL
@@ -542,3 +668,6 @@ To force a read from master, we must specify FOR UPDATE::
   1 row in set (0.01 sec)
 
 
+
+Default query rules
+===================

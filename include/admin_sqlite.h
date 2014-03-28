@@ -32,6 +32,7 @@
 #define DUMP_RUNTIME_QUERY_CACHE	"DUMP RUNTIME QUERY CACHE"
 #define DUMP_RUNTIME_QUERY_RULES	"DUMP RUNTIME QUERY RULES"
 
+#define CONFIG_SYNC_MEM_TO_DISK		"CONFIG SYNC TO DISK"
 
 struct _admin_sqlite_table_def_t {
 	char *table_name;
@@ -58,6 +59,7 @@ int sqlite3_flush_query_rules_db_to_mem(sqlite3 *);
 int sqlite3_dump_runtime_hostgroups(sqlite3 *);
 int sqlite3_dump_runtime_query_rules(sqlite3 *);
 int sqlite3_dump_runtime_query_cache(sqlite3 *);
+int sqlite3_config_sync_mem_to_disk();
 //int sqlite3_dump_runtime_query_rules();
 //int sqlite3_dump_runtime_query_cache();
 
