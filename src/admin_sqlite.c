@@ -78,6 +78,22 @@ static void __admin_sqlite3__insert_or_ignore_maintable_select_disktable() {
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
 }
 
+static void __admin_sqlite3__insert_or_replace_disktable_select_maintable() {
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = OFF");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.servers SELECT * FROM main.servers");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.hostgroups SELECT * FROM main.hostgroups");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.query_rules SELECT * FROM main.query_rules");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.users SELECT * FROM main.users");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
+}
+
+
+int sqlite3_config_sync_mem_to_disk() {
+	__admin_sqlite3__insert_or_replace_disktable_select_maintable();
+	return 0;
+}
+
+
 void mysql_pkt_err_from_sqlite(pkt *p, const char *s) {
 	int l=strlen(s)+1+6;
 	char *b=malloc(l);

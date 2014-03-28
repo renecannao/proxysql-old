@@ -203,6 +203,14 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}
+		if (strncasecmp(CONFIG_SYNC_MEM_TO_DISK,  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+			int affected_rows=sqlite3_config_sync_mem_to_disk();
+			pkt *ok=mypkt_alloc();
+			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
+			return;
+		}
 
 	}
 	rc=mysql_pkt_to_sqlite_exec(p, sess);
