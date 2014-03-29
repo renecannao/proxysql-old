@@ -15,10 +15,15 @@ Installation
 
 Dependencies
 ~~~~~~~~~~~~
-Other than standard libraries, required libraries and header files are:
+Other than standard libraries, required packages, libraries and header files are:
 
-* libglib2 and libglib2-dev
-* libssl and libssl-dev
+* cmake
+* gcc
+* glibc-devel
+* glibc-headers
+* openssl-devel
+* glib2-devel
+
 
 ProxySQL also depends from few libraries that are statically linked.
 To download and compile these libraries, run the follows::
@@ -28,9 +33,12 @@ To download and compile these libraries, run the follows::
   wget https://downloads.mariadb.org/interstitial/mariadb-native-client/Source/mariadb-native-client.tar.gz
   tar -zxf mariadb-native-client.tar.gz
   cd mariadb-native-client
-  cmake . && make
+  cmake .
   sed -i -e 's/\-DHAVE_OPENSSL//' libmysql/CMakeFiles/mariadbclient.dir/flags.make
   sed -i -e 's/\-DHAVE_OPENSSL//' libmysql/CMakeFiles/libmariadb.dir/flags.make
+  sed -i -e 's/\-D HAVE_COMPRESS//' libmysql/CMakeFiles/mariadbclient.dir/flags.make
+  sed -i -e 's/\-D HAVE_COMPRESS//' libmysql/CMakeFiles/libmariadb.dir/flags.make
+  make
   cd ..
   wget http://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
   tar -zxf libdaemon-0.14.tar.gz 
