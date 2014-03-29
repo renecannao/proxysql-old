@@ -377,11 +377,19 @@ void proxy_scramble(char *to, const char *message, const char *password)
 
 void proxy_compute_sha1_hash_multi(uint8 *digest, const char *buf1, int len1, const char *buf2, int len2) {
 	PROXY_TRACE();
+	/*
 	SHA_CTX sha1_context;
 	SHA1_Init(&sha1_context);
 	SHA1_Update(&sha1_context, buf1, len1);
 	SHA1_Update(&sha1_context, buf2, len2);
 	SHA1_Final(digest, &sha1_context);
+	*/
+	GChecksum *sha1_context=g_checksum_new(G_CHECKSUM_SHA1);
+	g_checksum_update(sha1_context, (const unsigned char *)buf1, len1);
+	g_checksum_update(sha1_context, (const unsigned char *)buf2, len2);
+	size_t s=SHA_DIGEST_LENGTH;
+	g_checksum_get_digest(sha1_context,digest,&s);
+	g_checksum_free(sha1_context);
 }
 
 
@@ -392,10 +400,18 @@ inline void proxy_compute_two_stage_sha1_hash(const char *password, size_t pass_
 
 void proxy_compute_sha1_hash(uint8 *digest, const char *buf, int len) {
 	PROXY_TRACE();
+	/*
 	SHA_CTX sha1_context;
 	SHA1_Init(&sha1_context);
 	SHA1_Update(&sha1_context, buf, len);
 	SHA1_Final(digest, &sha1_context);
+	*/
+	GChecksum *sha1_context=g_checksum_new(G_CHECKSUM_SHA1);
+	g_checksum_update(sha1_context, (const unsigned char *)buf, len);
+	size_t s=SHA_DIGEST_LENGTH;
+	g_checksum_get_digest(sha1_context,digest,&s);
+	g_checksum_free(sha1_context);
+	
 }
 
 

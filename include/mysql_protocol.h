@@ -37,3 +37,16 @@ void myproto_column_count(pkt *, unsigned int , uint64_t);
 void myproto_column_def(pkt *, unsigned int , const char *, const char *, const char *, const char *, const char *, uint32_t , uint8_t, uint16_t , uint8_t);
 void myproto_eof(pkt *, unsigned int , uint16_t , uint16_t);
 void mysql_new_payload_select(pkt *, void *, int);
+
+#ifndef MYSQL_COM_END
+#define MYSQL_COM_END COM_END
+#define MYSQL_COM_QUIT COM_QUIT
+#define MYSQL_COM_INIT_DB COM_INIT_DB
+#define MYSQL_COM_QUERY COM_QUERY
+#define MYSQL_COM_STATISTICS COM_STATISTICS
+#define MYSQL_COM_STMT_PREPARE COM_STMT_PREPARE
+#define MYSQL_COM_STMT_EXECUTE COM_STMT_EXECUTE
+#define MYSQL_COM_STMT_CLOSE COM_STMT_CLOSE
+#define MYSQL_COM_STMT_RESET COM_STMT_RESET
+#define MYSQL_COM_STMT_SEND_LONG_DATA COM_STMT_SEND_LONG_DATA
+#endif

@@ -29,11 +29,13 @@ To download and compile these libraries, run the follows::
   tar -zxf mariadb-native-client.tar.gz
   cd mariadb-native-client
   cmake . && make
+  sudo make install
   cd ..
   wget http://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
   tar -zxf libdaemon-0.14.tar.gz 
   cd libdaemon-0.14
   ./configure && make
+  sudo make install
   cd ..
 
 

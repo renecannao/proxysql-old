@@ -23,10 +23,10 @@
 		void *__b=src_p; \
 		size_t __nbytes = (bytes); \
 		while (__nbytes > 0) { \
-    	byte __x = ((byte *) __b)[0]; \
+    	char __x = ((char *) __b)[0]; \
 			__b += 1; \
 			__nbytes -= 1; \
-			((byte *) __a)[0] = __x; \
+			((char *) __a)[0] = __x; \
 			__a += 1; \
 		} \
 	} while (0)
