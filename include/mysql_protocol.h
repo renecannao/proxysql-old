@@ -38,6 +38,7 @@ void myproto_column_def(pkt *, unsigned int , const char *, const char *, const 
 void myproto_eof(pkt *, unsigned int , uint16_t , uint16_t);
 void mysql_new_payload_select(pkt *, void *, int);
 
+/*
 #ifndef MYSQL_COM_END
 #define MYSQL_COM_END COM_END
 #define MYSQL_COM_QUIT COM_QUIT
@@ -50,3 +51,4 @@ void mysql_new_payload_select(pkt *, void *, int);
 #define MYSQL_COM_STMT_RESET COM_STMT_RESET
 #define MYSQL_COM_STMT_SEND_LONG_DATA COM_STMT_SEND_LONG_DATA
 #endif
+*/
