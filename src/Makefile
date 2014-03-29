@@ -1,5 +1,5 @@
 #MARIADBLIBPATH=../../mariadb-native-client
-#DAEMONPATH=../../libdaemon-0.14
+DAEMONPATH=../../libdaemon-0.14
 GLIB_CFLAGS=`pkg-config --cflags gthread-2.0`
 GLIB_LIB=`pkg-config --libs gthread-2.0`
 ODIR= obj
@@ -7,13 +7,13 @@ LDIR=../lib
 IDIR=../include
 #IDIRS=-I../include -I../sqlite3 -I$(MARIADBLIBPATH)/include -I$(DAEMONPATH) $(GLIB_CFLAGS)
 #LDIRS=-L$(MARIADBLIBPATH)/libmysql -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
-#IDIRS=-I../include -I../sqlite3 `mysql_config --include` -I$(DAEMONPATH) $(GLIB_CFLAGS)
-#LDIRS=`mysql_config --libs_r` -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
-IDIRS=-I../include -I../sqlite3 `mysql_config --include` $(GLIB_CFLAGS)
-LDIRS=`mysql_config --libs_r` $(GLIB_CFLAGS)
+IDIRS=-I../include -I../sqlite3 `mysql_config --include` -I$(DAEMONPATH) $(GLIB_CFLAGS)
+LDIRS=`mysql_config --libs_r` -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
+#IDIRS=-I../include -I../sqlite3 `mysql_config --include` $(GLIB_CFLAGS)
+#LDIRS=`mysql_config --libs_r` $(GLIB_CFLAGS)
 CC=gcc
 #MARIADBAR=$(MARIADBLIBPATH)/libmysql/libmariadbclient.a
-#DAEMONAR=$(DAEMONPATH)/libdaemon/.libs/libdaemon.a
+DAEMONAR=$(DAEMONPATH)/libdaemon/.libs/libdaemon.a
 DEBUG=-ggdb -DDEBUG
 O0=-O0
 O2=-O2
@@ -22,8 +22,8 @@ O3=-O3 -mtune=native
 OPTZ=$(O0)
 CFLAGS=$(IDIRS) -rdynamic $(OPTZ) $(DEBUG)
 #LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -Wl,-Bdynamic -lssl -ldl -lpthread -lm $(GLIB_LIB)
-#LIBS=-Wl,-Bstatic -ldaemon -Wl,-Bdynamic `mysql_config --libs_r` -lssl -ldl -lpthread -lm $(GLIB_LIB)
-LIBS=-ldaemon `mysql_config --libs_r` -lssl -ldl -lpthread -lm $(GLIB_LIB)
+LIBS=-Wl,-Bstatic -ldaemon -Wl,-Bdynamic `mysql_config --libs_r` -lssl -ldl -lpthread -lm $(GLIB_LIB)
+#LIBS=-ldaemon `mysql_config --libs_r` -lssl -ldl -lpthread -lm $(GLIB_LIB)
 SQLITEOBJ=../sqlite3/sqlite3.o
 EXECUTABLE=proxysql
 
@@ -36,10 +36,10 @@ $(ODIR)/%.o: %.c
 
 #proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ) $(MARIADBAR) $(DAEMONAR)
 #	gcc -o $@ $(MARIADBAR) $(DAEMONAR) $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
-#proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ) $(DAEMONAR)
-#	gcc -o $@ $(DAEMONAR) $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
-proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ)
-	gcc -o $@ $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
+proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ) $(DAEMONAR)
+	gcc -o $@ $(DAEMONAR) $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
+#proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ)
+#	gcc -o $@ $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
 
 $(SQLITEOBJ): ../sqlite3/sqlite3.c
 	$(CC) -c -o $@ $(CFLAGS) ../sqlite3/sqlite3.c
