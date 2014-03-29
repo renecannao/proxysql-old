@@ -2,9 +2,11 @@
 #define MIN_FDS_PER_THREAD  1024
 
 
-
+#ifndef L_SFP
+#define L_SFP
 typedef struct _LPtrArray LPtrArray;
 typedef struct _l_super_free_pool_t l_sfp;
+#endif
 typedef struct __fdb_hash_t fdb_hash_t;
 typedef struct __fdb_hashes_group_t fdb_hashes_group_t;
 typedef struct __fdb_hash_entry fdb_hash_entry;
@@ -208,7 +210,6 @@ typedef struct _global_query_rules_t {
 } global_query_rules_t;
 
 
-typedef struct _l_super_free_pool_t l_sfp;
 typedef struct _proxysql_mysql_thread_t {
 	int thread_id;
 //	GPtrArray *QC_rules;   // regex should be thread-safe, use just a global one

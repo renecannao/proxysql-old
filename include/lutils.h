@@ -22,9 +22,11 @@
 #define L_SFC_MEM_BLOCK_SIZE 65536
 typedef struct _l_stack_t l_stack;
 typedef struct _l_super_free_chunk_t l_sfc;
+#ifndef L_SFP
+#define L_SFP
 typedef struct _l_super_free_pool_t l_sfp;
 typedef struct _LPtrArray LPtrArray;
-
+#endif
 extern __thread l_sfp *__thr_sfp;
 
 struct _LPtrArray {
