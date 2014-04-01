@@ -299,7 +299,7 @@ int mysql_check_alive_and_read_only(const char *hostname, uint16_t port) {
 		exit(EXIT_FAILURE);
 	}
 	if (mysql_real_connect(conn, hostname, glovars.mysql_usage_user, glovars.mysql_usage_password, NULL, port, NULL, 0) == NULL) {
-		proxy_error("[ERROR]: server %s:%d not alive: \n", hostname, port, mysql_error(conn));
+		proxy_error("[ERROR]: server %s:%d not alive when trying to connect using %s/%s : %s\n", hostname, port, glovars.mysql_usage_user, glovars.mysql_usage_password, mysql_error(conn));
 		mysql_close(conn);
 		return -1;
 	}
