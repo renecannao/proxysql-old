@@ -160,6 +160,10 @@ Currently 7 groups are available:
 
 	Path to error log . Default is *proxysql.log*
 
+* **debug_log**
+
+	Path to debug log . Default is *debug.log*
+
 * **pid_file**
 
 	PID file . Default is *proxysql.pid*

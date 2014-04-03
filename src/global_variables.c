@@ -9,6 +9,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"global", "datadir", G_OPTION_ARG_STRING, &glovars.proxy_datadir, "Path to datadir", 0, 0, 0, 0, 0, "/var/run/proxysql", NULL, NULL},
 	{"global", "pid_file", G_OPTION_ARG_STRING, &glovars.proxy_pidfile, "Path to pidfile", 0, 0, 0, 0, 0, "proxysql.pid", NULL, NULL},
 	{"global", "error_log", G_OPTION_ARG_STRING, &glovars.proxy_errorlog, "Path to error log", 0, 0, 0, 0, 0, "proxysql.log", NULL, NULL},
+	{"global", "debug_log", G_OPTION_ARG_STRING, &glovars.proxy_debuglog, "Path to debug log", 0, 0, 0, 0, 0, "debug.log", NULL, NULL},
 	{"global", "restart_on_error", G_OPTION_ARG_INT, &glovars.proxy_restart_on_error, "Restart proxysql in case of crash or error", 0, 1 , 0, 0, 1, NULL, NULL, NULL},
 	{"global", "restart_delay", G_OPTION_ARG_INT, &glovars.proxy_restart_delay, "delay between restart", 0, 600 , 0, 0, 5, NULL, NULL, NULL},
 

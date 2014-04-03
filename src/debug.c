@@ -99,6 +99,12 @@ void init_debug_struct() {
 
 #ifdef DEBUG
 void *debug_logger() {
+	FILE *debugfile=fopen(glovars.proxy_debuglog, "a+");
+	if (debugfile==NULL) {
+		fprintf(stderr,"Impossibe to open debug log %s : %s\n", glovars.proxy_debuglog, strerror(errno));
+		exit(EXIT_SUCCESS);
+	}
+	time_t lt=0;
 	while(glovars.shutdown==0) {
 		dbg_msg_t *dbg_msg=g_async_queue_pop(glo_debug->async_queue);
 		if (dbg_msg) {
@@ -107,7 +113,11 @@ void *debug_logger() {
 //  	gettimeofday(&tv, NULL);
 			struct tm *__tm_info=localtime(&dbg_msg->tv.tv_sec);
 			strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
-			fprintf(stderr, "%s:%06d %d:%s:%d:%s(): LVL#%d : %s" , __buffer, (int)dbg_msg->tv.tv_usec, dbg_msg->thr, dbg_msg->file, dbg_msg->line, dbg_msg->func, dbg_msg->verb, dbg_msg->msg);
+			fprintf(debugfile, "%s:%06d %d:%s:%d:%s(): LVL#%d : %s" , __buffer, (int)dbg_msg->tv.tv_usec, dbg_msg->thr, dbg_msg->file, dbg_msg->line, dbg_msg->func, dbg_msg->verb, dbg_msg->msg);
+			if (dbg_msg->tv.tv_sec > lt) {
+				lt=dbg_msg->tv.tv_sec;
+				fflush(debugfile);
+			}
 			//g_free(dbg_msg->file);
 			//g_free(dbg_msg->func);
 	SPIN_LOCK(glo_debug->glock);

@@ -370,6 +370,7 @@ typedef struct _global_variables {
 	char *proxy_admin_pathdb;
 	char *proxy_pidfile;
 	char *proxy_errorlog;
+	char *proxy_debuglog;
 	char *proxy_configfile;
 	int proxy_restart_on_error;
 	int proxy_restart_delay;
