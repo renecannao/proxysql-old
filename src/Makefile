@@ -1,4 +1,4 @@
-MARIADBLIBPATH=../../mariadb-native-client
+MARIADBLIBPATH=../../mariadb_client-2.0.0-src
 DAEMONPATH=../../libdaemon-0.14
 GLIB_CFLAGS=`pkg-config --cflags gthread-2.0`
 GLIB_LIB=`pkg-config --libs gthread-2.0`
@@ -6,9 +6,9 @@ ODIR= obj
 LDIR=../lib
 IDIR=../include
 IDIRS=-I../include -I../sqlite3 -I$(MARIADBLIBPATH)/include -I$(DAEMONPATH) $(GLIB_CFLAGS)
-LDIRS=-L$(MARIADBLIBPATH)/libmysql -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
+LDIRS=-L$(MARIADBLIBPATH)/libmariadb -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
 CC=gcc
-MARIADBAR=$(MARIADBLIBPATH)/libmysql/libmariadbclient.a
+MARIADBAR=$(MARIADBLIBPATH)/libmariadb/libmariadbclient.a
 DAEMONAR=$(DAEMONPATH)/libdaemon/.libs/libdaemon.a
 DEBUG=-ggdb -DDEBUG
 O0=-O0
