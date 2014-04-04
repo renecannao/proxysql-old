@@ -30,14 +30,10 @@ To download and compile these libraries, run the follows::
 
   mkdir ProxySQL
   cd ProxySQL
-  wget -O mariadb_client-2.0.0-src.tar.gz https://downloads.mariadb.org/interstitial/client-native-2.0.0/src/mariadb_client-2.0.0-src.tar.gz
-  tar -zxf mariadb_client-2.0.0-src.tar.gz
-  cd mariadb_client-2.0.0-src
+  wget https://downloads.mariadb.org/interstitial/mariadb-native-client/Source/mariadb-native-client.tar.gz
+  tar -zxf mariadb-native-client.tar.gz
+  cd mariadb-native-client
   cmake .
-  sed -i -e 's/\-DHAVE_OPENSSL//' libmariadb/CMakeFiles/mariadbclient.dir/flags.make
-  sed -i -e 's/\-DHAVE_OPENSSL//' libmariadb/CMakeFiles/libmariadb.dir/flags.make
-  sed -i -e 's/\-D HAVE_COMPRESS//' libmariadb/CMakeFiles/mariadbclient.dir/flags.make
-  sed -i -e 's/\-D HAVE_COMPRESS//' libmariadb/CMakeFiles/libmariadb.dir/flags.make
   make
   cd ..
   wget http://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
