@@ -309,7 +309,7 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 void process_query_stats(mysql_session_t *sess){
 
 	char *s = sess->query_info.query;
-	char *r = (char *)malloc(sess->query_info.query_len + 1);
+	char *r = (char *)g_malloc(sess->query_info.query_len + 1);
 	char *t_r = r;
 	char *t_r_p = r;
 	char *t_s_p = s;
@@ -358,11 +358,11 @@ void process_query_stats(mysql_session_t *sess){
 		*t_r++ = *s++;
 	}
 	*t_r = 0;
-	r_s = (char *)malloc(strlen(r)+1);
+	r_s = (char *)g_malloc(strlen(r)+1);
 
 	// to save memory
 	strcpy(r_s, r);
-	free(r);
+	g_free(r);
 
 	// process query stats
 	if(*r_s){

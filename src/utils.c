@@ -27,7 +27,7 @@ char is_digit(char *from, char *to){
     if(*from < '0' || *from > '9'){
       return 0;
     }
-    *from++;
+    from++;
   }
   return 1;
 }
@@ -37,7 +37,7 @@ char *str2md5(const char *str) {
   int n;
   MD5_CTX c;
   unsigned char digest[16];
-  char *out = (char*)malloc(33);
+  char *out = (char*)g_malloc(33);
   MD5_Init(&c);
   int length = strlen(str);
 
