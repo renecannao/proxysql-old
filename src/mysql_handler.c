@@ -63,7 +63,9 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 		sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
 		sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;	
 		// Added by chan
-		process_query_stats(sess);
+		if (glovars.mysql_query_statistics) {
+			process_query_stats(sess);
+		}
 	} else {
 		sess->query_info.query=NULL;
 		sess->query_info.query_len=0;

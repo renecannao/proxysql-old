@@ -559,6 +559,7 @@ gotofork:
 	g_free(args);
 	pthread_join(thread_cppt, NULL);
 	pthread_join(thread_qct, NULL);
+	pthread_join(thread_qr, NULL);
 finish:
 	daemon_log(LOG_INFO, "Exiting...");
 	daemon_retval_send(255);

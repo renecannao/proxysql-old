@@ -255,20 +255,22 @@ inline void flush_query_stats (gpointer key, gpointer user_data){
 void *qr_report_thread(void *arg){
 	qr_hash_t *ht = arg;
 	while(glovars.shutdown==0) {
-		usleep(5000000);
-		pthread_rwlock_wrlock(&(ht->lock));
-		GHashTable *t_hash = ht->p_hash;
-		ht->p_hash = ht->c_hash;
-		ht->c_hash = t_hash;
-		pthread_rwlock_unlock(&(ht->lock));
+		sleep(glovars.mysql_query_statistics_interval);
+		if (glovars.mysql_query_statistics) {
+			pthread_rwlock_wrlock(&(ht->lock));
+			GHashTable *t_hash = ht->p_hash;
+			ht->p_hash = ht->c_hash;
+			ht->c_hash = t_hash;
+			pthread_rwlock_unlock(&(ht->lock));
 
-		// Print current stats
-		GList *keysList = g_hash_table_get_keys(ht->p_hash);
-		g_list_foreach (keysList, flush_query_stats, NULL);
-		g_list_free(keysList);
+			// Print current stats
+			GList *keysList = g_hash_table_get_keys(ht->p_hash);
+			g_list_foreach (keysList, flush_query_stats, NULL);
+			g_list_free(keysList);
 
-		// Remove all entry in p_hash
-		g_hash_table_remove_all(ht->p_hash);
+			// Remove all entry in p_hash
+			g_hash_table_remove_all(ht->p_hash);
+		}
 	}
 	return NULL;
 }

@@ -321,6 +321,13 @@ This module is not implemented yet.
 
 	When a backend server is disabled, poll() timeout is *mysql_poll_timeout_maintenance* instead of *mysql_poll_timeout*. Also this variable is in milliseconds. Default is 100 (0.1 second), minimum is 100 (0.1 second) and maximum is 1000 (1 second).
 
+* **mysql_query_statistics**
+
+	ProxySQL collects queries statistics when enabled. This option can affect performance. Boolean parameter (0/1) , where 0 is the default (disabled).
+
+* **mysql_query_statistics_interval**
+
+	This option specifies how often (in seconds) ProxySQL dumps query statistics. Default is 10 (seconds), minimum is 5 and maximum is 600 (10 minutes).
 
 
 [mysql users] section

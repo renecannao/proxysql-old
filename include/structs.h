@@ -348,6 +348,8 @@ typedef struct _global_variables {
 	gboolean mysql_auto_reconnect_enabled;
 	gboolean mysql_query_cache_enabled;
 	gboolean mysql_query_cache_precheck;
+	gboolean mysql_query_statistics;
+	gboolean mysql_query_statistics_interval;
 	int mysql_query_cache_partitions;
 	int mysql_parse_trx_cmds;
 	int mysql_share_connections;

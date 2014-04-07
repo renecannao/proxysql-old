@@ -38,6 +38,8 @@ static global_variable_entry_t glo_entries[]= {
 	{"mysql", "mysql_query_cache_size", G_OPTION_ARG_INT64, &glovars.mysql_query_cache_size, "mysql query cache size", 1024*1024, LLONG_MAX, 0, 0, 1024*1024, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_default_timeout", G_OPTION_ARG_INT, &glovars.mysql_query_cache_default_timeout, "default timeout for query cache", 0, 3600*24*365*10, 0, 0, 1, NULL, NULL, NULL},
 	{"mysql", "mysql_query_cache_precheck", G_OPTION_ARG_INT, &glovars.mysql_query_cache_precheck, "enable/disable query cache precheck", 0, 1, 0, 0, 1, NULL, NULL, NULL},
+	{"mysql", "mysql_query_statistics_enabled", G_OPTION_ARG_INT, &glovars.mysql_query_statistics, "enable/disable the tracker for query statistics", 0, 1, 0, 0, 0, NULL, NULL, NULL},
+	{"mysql", "mysql_query_statistics_interval", G_OPTION_ARG_INT, &glovars.mysql_query_statistics_interval, "interval to update query_statistics", 5, 600, 0, 0, 10, NULL, NULL, NULL},
 	{"mysql", "mysql_auto_reconnect_enabled", G_OPTION_ARG_INT, &glovars.mysql_auto_reconnect_enabled, "enable/disable auto-reconnect", 0, 1, 0, 0, 0, NULL, NULL, NULL},
 	{"mysql", "mysql_usage_user", G_OPTION_ARG_STRING, &glovars.mysql_usage_user, "mysql usage user", 0, 0, 0, 0, 0, "proxy", NULL, NULL},
 	{"mysql", "mysql_usage_password", G_OPTION_ARG_STRING, &glovars.mysql_usage_password, "mysql usage password", 0, 0, 0, 0, 0, "proxy", NULL, NULL},
