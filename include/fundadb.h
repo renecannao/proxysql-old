@@ -81,3 +81,28 @@ void *purgeHash_thread(void *);
 long long fdb_hash_init(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 long long fdb_hashes_group_free_mem(fdb_hashes_group_t *);
 int fdb_hashes_group_used_mem_pct(fdb_hashes_group_t *);
+
+
+// Added by chan -------
+struct __qr_hash_t {
+	pthread_rwlock_t lock;
+	GHashTable *c_hash;
+	GHashTable *p_hash;
+	struct __qr_hash_entry *c_ptr_first;
+	struct __qr_hash_entry *p_ptr_first;
+	time_t modify;
+};
+
+struct __qr_hash_entry
+{
+	char *key;
+	char *value;
+	volatile unsigned int exec_cnt;
+};
+
+inline void qr_hash_value_destroy_func(void *);
+void qr_hashes_new(qr_hash_t *);
+void qr_set(char *, char *);
+inline void flush_query_stats (gpointer, gpointer);
+void *qr_report_thread(void *);
+// Added by chan end.

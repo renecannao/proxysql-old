@@ -116,5 +116,11 @@ void term_handler(int);
 long monotonic_time();
 
 
+// Added by chan -------
+void process_query_stats(mysql_session_t *);
+char *str2md5(const char *);
+char is_token(char);
+char is_digit(char *, char *);
+// Added by chan end.
 
 

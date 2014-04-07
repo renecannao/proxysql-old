@@ -32,6 +32,16 @@ void start_background_threads(pthread_attr_t *attra) {
 		r=pthread_create(&thread_qct, &attr, purgeHash_thread, &QC);
 		assert(r==0);
 	}
+
+	// Added by chan
+	printf("=> create new qr_hash\n");
+	qr_hashes_new(&QR_HASH_T);
+	printf("=> end\n");
+
+	r=pthread_create(&thread_qr, &attr, qr_report_thread, &QR_HASH_T);
+	// Added by chan end. 
+
+
 //	pthread_t cppt;
 	r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 	assert(r==0);

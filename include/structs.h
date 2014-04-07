@@ -13,6 +13,12 @@ typedef struct __fdb_hash_entry fdb_hash_entry;
 
 typedef struct _mysql_backend_t mysql_backend_t;
 
+// Added by chan
+typedef struct __qr_hash_t qr_hash_t;
+typedef struct __qr_hash_entry qr_hash_entry;
+// Added by chan end.
+
+
 
 typedef struct __fdb_system_var_t {
     long long hash_purge_time;

@@ -210,3 +210,65 @@ int fdb_hashes_group_used_mem_pct(fdb_hashes_group_t *hg) {
 	int pct=pctf;
 	return pct;
 }
+
+// Added by chan ----------------------------------
+// Destory hash value function
+inline void qr_hash_value_destroy_func(void * hash_entry) {
+	qr_hash_entry *entry= (qr_hash_entry *) hash_entry;
+	free(entry->key);
+	g_free(entry->value);
+	free(entry);
+}
+
+// Create new hash struct
+void qr_hashes_new(qr_hash_t *ht){
+	ht->modify = time(NULL);
+	ht->c_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, qr_hash_value_destroy_func);
+	ht->p_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, qr_hash_value_destroy_func);
+	pthread_rwlock_init(&(ht->lock), NULL);
+}
+
+// Increase executed count - search target with hash key
+void qr_set(char * key, char * value){
+	qr_hash_t *ht = &QR_HASH_T;
+	pthread_rwlock_rdlock(&(ht->lock));
+	qr_hash_entry *entry = g_hash_table_lookup(ht->c_hash, key);
+	if(entry == NULL){
+		entry = g_malloc(sizeof(qr_hash_entry));
+		entry->key = key;
+		entry->value = value;
+		entry->exec_cnt = 0;
+		g_hash_table_insert(ht->c_hash, entry->key, entry);
+	}
+	entry->exec_cnt++;
+	pthread_rwlock_unlock(&(ht->lock));
+}
+
+// Print query stats - needed to write on log file
+inline void flush_query_stats (gpointer key, gpointer user_data){
+	qr_hash_t *ht = &QR_HASH_T;
+	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
+	printf("===>\n%s\n%s\n%d\n", entry->key, entry->value, entry->exec_cnt);
+}
+
+// Report query stat result 
+void *qr_report_thread(void *arg){
+	qr_hash_t *ht = arg;
+	while(glovars.shutdown==0) {
+		usleep(5000000);
+		pthread_rwlock_rdlock(&(ht->lock));
+		GHashTable *t_hash = ht->p_hash;
+		ht->p_hash = ht->c_hash;
+		ht->c_hash = t_hash;
+
+		// Print current stats
+		GList *keysList = g_hash_table_get_keys(ht->p_hash);
+		g_list_foreach (keysList, flush_query_stats, NULL);
+		g_list_free(keysList);
+		pthread_rwlock_unlock(&(ht->lock));
+
+		// Remove all entry in p_hash
+		g_hash_table_remove_all(ht->p_hash);
+	}
+}
+// Added by chan end.

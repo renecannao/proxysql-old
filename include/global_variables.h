@@ -22,6 +22,10 @@ EXTERN global_mysql_servers glomysrvs;
 EXTERN fdb_hashes_group_t QC;
 //EXTERN int QC_version;
 
+// Added by chan -------
+EXTERN qr_hash_t QR_HASH_T;
+// Added by chan end.
+
 EXTERN global_query_rules_t gloQR;
 
 EXTERN long long glotimenew;
@@ -48,7 +52,7 @@ EXTERN debug_level *gdbg_lvl;	// global debug levels
 EXTERN pthread_t thread_qct;
 EXTERN pthread_t thread_cppt;
 EXTERN pthread_t thread_dbg_logger;
-
+EXTERN pthread_t thread_qr;
 
 //EXTERN admin_sqlite_table_def_t *table_defs;
 
