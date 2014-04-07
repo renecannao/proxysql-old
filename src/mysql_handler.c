@@ -244,6 +244,7 @@ MSHGE * mysql_server_random_entry_from_hostgroup__nolock(int hostgroup_id) {
 int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id) {
 	assert(hostgroup_id < glovars.mysql_hostgroups);
 	mysql_backend_t *mybe=NULL;
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Retrieving backend for session %p hostgroup %d\n", sess, hostgroup_id);
 	mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
 	int retries=10;
 	//mysql_backend_t *tmp_mybe=NULL;
@@ -262,6 +263,7 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 		if (mybe->mshge==NULL)
 		{ // FIXME : temporary hack, and memory leak
 			//--mybe->mshge=g_malloc0(sizeof(MSHGE));
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Backend for session %p hostgroup %d has no mshge\n", sess, hostgroup_id);
 			mybe->mshge=mysql_server_random_entry_from_hostgroup__lock(hostgroup_id);
 		}
 		//--mybe->mshge->MSptr=ms;
@@ -271,14 +273,16 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 		}
 	}
 	if (mybe->server_mycpe==NULL) {
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Backend for session %p hostgroup %d has no server_mycpe\n", sess, hostgroup_id);
 		mybe->server_mycpe=mysql_connpool_get_connection(MYSQL_CONNPOOL_LOCAL, &sess->last_mysql_connpool, mybe->mshge->MSptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->mshge->MSptr->port);
 		if (mybe->server_mycpe==NULL) {
 			if (--retries) {
-				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Unable to connect to %s:%d from hostgroup %d, %s retries left\n", ms->MSptr->address, ms->MSptr->port, hostgroup_id, retries);
+				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Unable to connect to %s:%d from hostgroup %d, %s retries left\n", mybe->mshge->MSptr->address, mybe->mshge->MSptr->port, hostgroup_id, retries);
 				mybe->mshge=NULL;
 				goto mysql_session_create_backend_for_hostgroup__label1;
 			}
 			// handle error!!
+			proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "We failed to created a server_mycpe for backend for session %p hostgroup %d, we will generate an error\n", sess, hostgroup_id);
 			authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
 			// this is a severe condition, needs to be handled
 			return -1;

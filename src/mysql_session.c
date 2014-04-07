@@ -33,6 +33,7 @@ static void sync_server_bytes_at_cmd(mysql_session_t *sess) {
 static inline void compute_query_checksum(mysql_session_t *sess) {
 	PROXY_TRACE();
 	if (sess->query_info.query_checksum==NULL) {
+		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 7, "Checksum query on session %p\n", sess);
 		sess->query_info.query_checksum=g_checksum_new(G_CHECKSUM_MD5);
 		g_checksum_update(sess->query_info.query_checksum, (const unsigned char *)sess->query_info.query, sess->query_info.query_len);
 		g_checksum_update(sess->query_info.query_checksum, (const unsigned char *)sess->mysql_username, strlen(sess->mysql_username));
@@ -486,6 +487,7 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 	if ((sess->mysql_schema_cur) && (strcmp(sess->mysql_schema_new, sess->mysql_schema_cur)==0)) {
 		// already on target schema, don't forward
 		PROXY_TRACE();
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Old schemaname (%s) and new schemaname (%s) are identical: no action needed\n", sess->mysql_schema_cur, sess->mysql_schema_new);
 		sess->mysql_query_cache_hit=TRUE;
 		// destroy the client's packet
 		//g_slice_free1(p->length, p->data);
@@ -502,6 +504,34 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		g_free(sess->mysql_schema_new);
 		sess->mysql_schema_new=NULL;
 	} else {
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Old schemaname (%s) and new schemaname (%s) are NOT identical: resetting\n", sess->mysql_schema_cur, sess->mysql_schema_new);
+		sess->last_mysql_connpool=NULL;
+		if ( (sess->server_mybe) && (sess->server_mybe->server_mycpe) &&
+			(sess->server_mybe->mshge) && (sess->server_mybe->mshge->MSptr) &&
+			(sess->server_mybe->server_myds) && (sess->server_mybe->server_myds->fd)) {
+				proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Disconnecting backend for hostgroup 0 : %p\n", sess->server_mybe);
+				sess->server_mybe->bereset(sess->server_mybe, &sess->last_mysql_connpool, 0);
+		}
+		PROXY_TRACE();
+		int j;
+		// start from 1, don't reset hostgroup 0
+		for (j=0; j<glovars.mysql_hostgroups; j++) {
+			proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Disconnecting backend for hostgroup %d : %p\n", j, sess->server_mybe);
+			mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,j);
+			mybe->bereset(mybe, &sess->last_mysql_connpool, 0);
+		}
+		sess->server_mybe=NULL;
+		PROXY_TRACE();
+		sess->mysql_query_cache_hit=TRUE;
+		l_free(p->length, p->data);
+		create_ok_packet(p,1);
+		MY_SESS_ADD_PKT_OUT_CLIENT(p);
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Swapping old schemaname (%s) with new schemaname (%s)\n", sess->mysql_schema_cur, sess->mysql_schema_new);
+		g_free(sess->mysql_schema_cur);
+		sess->mysql_schema_cur=g_strdup(sess->mysql_schema_new);
+		g_free(sess->mysql_schema_new);
+		sess->mysql_schema_new=NULL;
+/*
 		if ( (sess->server_mybe) && (sess->server_mybe->server_mycpe) &&
 				(sess->server_mybe->mshge) && (sess->server_mybe->mshge->MSptr) &&
 				(sess->server_mybe->server_myds) && (sess->server_mybe->server_myds->fd) &&
@@ -527,6 +557,7 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 				mybe->bereset(mybe, &sess->last_mysql_connpool, 0);
 			}
 		}
+*/
 	}
 }
 
@@ -588,6 +619,7 @@ static int active_backend_for_hostgroup(mysql_session_t *sess, int hostgroup_id)
 
 static int process_client_pkts(mysql_session_t *sess) {
 	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Client packets queued: %d\n", sess->client_myds->input.pkts->len);
 	while(sess->client_myds->input.pkts->len) {
 		pkt *p;
 		unsigned char c;
@@ -663,9 +695,11 @@ static int process_client_pkts(mysql_session_t *sess) {
 		}
 		if(sess->mysql_query_cache_hit==FALSE) {
 			if ( sess->client_command != MYSQL_COM_QUERY ) { // if it is not a QUERY , always send to hostgroup 0
+				// arguiable implementation, OK for now
 				sess->query_info.destination_hostgroup=0;
 			}
 			if (active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
+				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p doesn't have a backend for hostgroup %d\n", sess, sess->query_info.destination_hostgroup);
 				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
 			}
 			mysql_backend_t *mybe=l_ptr_array_index(sess->mybes, sess->query_info.destination_hostgroup);
@@ -676,6 +710,7 @@ static int process_client_pkts(mysql_session_t *sess) {
 			}
 			if (mybe->mshge==NULL || mybe->mshge->MSptr==NULL) {
 				// push the packet back to client queue
+				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Pushing back packet\n");
 				queue_back_client_pkt(sess, p);
 				return 0;
 			}
@@ -684,6 +719,8 @@ static int process_client_pkts(mysql_session_t *sess) {
 
 			if (mybe->server_mycpe==NULL) {
 				// handle error!!
+				proxy_error("No mycpe for session backend\n");
+				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "No server_mycpe for session %p backend %p hostgroup %d\n", sess, mybe, sess->query_info.destination_hostgroup);
 				authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
 				return -1;
 			}
@@ -793,6 +830,7 @@ static void inline __mysql_session__initialize_backends(mysql_session_t *sess) {
 	sess->mybes=l_ptr_array_sized_new(glovars.mysql_hostgroups);
 	for (i=0;i<glovars.mysql_hostgroups;i++) {
 		mysql_backend_t *mybe=mysql_backend_new();
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Initialized mysql backend %p for session %p, hostgroup %d\n", sess, mybe, i);
 		l_ptr_array_add(sess->mybes, mybe);
 	}
 }
@@ -800,8 +838,8 @@ static void inline __mysql_session__initialize_backends(mysql_session_t *sess) {
 static void inline __mysql_session__free_backends(mysql_session_t *sess) {
 	int i;
 	for (i=0; i<glovars.mysql_hostgroups; i++) {
-		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Freeing mysql backend %d for session %p\n", i, sess);
 		mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,i);
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Freeing mysql backend %p for session %p, hostgroup %d\n", sess, mybe, i);
 		mybe->bereset(mybe, &sess->last_mysql_connpool, sess->force_close_backends);
 	}
 
@@ -813,6 +851,7 @@ static void inline __mysql_session__free_backends(mysql_session_t *sess) {
 }
 
 static void inline __mysql_session__register_connection(mysql_session_t *sess) {
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "registering session %p\n", sess);
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	g_ptr_array_add(glomysrvs.mysql_connections, sess);
 	glomysrvs.mysql_connections_cur+=1;
@@ -820,6 +859,7 @@ static void inline __mysql_session__register_connection(mysql_session_t *sess) {
 }
 
 static void inline __mysql_session__unregister_connection(mysql_session_t *sess) {
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "un-registering session %p\n", sess);
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
 	g_ptr_array_remove_fast(glomysrvs.mysql_connections, sess);
 	glomysrvs.mysql_connections_cur-=1;

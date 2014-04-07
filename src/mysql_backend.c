@@ -3,7 +3,9 @@
 #define RESET_MYBE_STATS(__mybe) { memset(&__mybe->server_bytes_at_cmd,0,sizeof(bytes_stats)); }
 
 static inline void backend_reset_server_mycpe(mysql_backend_t *mybe, mysql_connpool **mcp, int fc) {
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset server_mycpe for MySQL backend %p\n", mybe);
 	if (mybe->server_mycpe) {
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset server_mycpe %p for MySQL backend %p\n", mybe->server_mycpe, mybe);
 		mysql_connpool_detach_connection(MYSQL_CONNPOOL_LOCAL, mcp, mybe->server_mycpe, fc);
 	}
 	mybe->server_mycpe=NULL;	
@@ -11,7 +13,9 @@ static inline void backend_reset_server_mycpe(mysql_backend_t *mybe, mysql_connp
 
 static inline int backend_reset_server_myds(mysql_backend_t *mybe) {
 	int rc=0;
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset myds for MySQL backend %p\n", mybe);
 	if (mybe->server_myds) {
+		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset myds %p for MySQL backend %p\n", mybe->server_myds, mybe);
 		if (mybe->server_myds->active==FALSE) rc=1;
 		mysql_data_stream_delete(mybe->server_myds);
 		mybe->server_myds=NULL;
@@ -33,6 +37,7 @@ static void backend_reset(mysql_backend_t *mybe, mysql_connpool **mcp, int force
 	mybe->fd=0;
 	int fc=force_close;
 	int rc;
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend %p\n", mybe);
 	if (mybe->mshge && mybe->mshge->MSptr) {
 		// without the IF , this can cause SIGSEGV
 		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend, server %s:%d , fd %d\n", mybe->mshge->MSptr->address, mybe->mshge->MSptr->port, mybe->fd);
@@ -45,6 +50,7 @@ static void backend_reset(mysql_backend_t *mybe, mysql_connpool **mcp, int force
 	if (fc==0 && rc==1) { fc=1; } // close an inactive data stream
 	backend_reset_server_mycpe(mybe, mcp, fc);
 	RESET_MYBE_STATS(mybe);
+	mybe->fd=0;
 	//memset(&mybe->server_bytes_at_cmd,0,sizeof(bytes_stats));
 }
 
@@ -52,6 +58,7 @@ mysql_backend_t *mysql_backend_new() {
 	mysql_backend_t *mybe=g_slice_alloc0(sizeof(mysql_backend_t));
 	mybe->bereset=backend_reset;
 	mybe->bedetach=backend_detach;
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Created new MySQL backend, addr %p\n", mybe);
 	return mybe;
 }
 
