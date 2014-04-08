@@ -1,5 +1,9 @@
 #include "proxysql.h"
 
+static int mysql_session_default_hostgroup(mysql_session_t *sess) {
+	return 0;
+}
+
 static void queue_back_client_pkt(mysql_session_t *sess, pkt *p) {
 	proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "No available backend, queuing back client packet\n");
 	LPtrArray *new_input_pkts=l_ptr_array_sized_new(sess->client_myds->input.pkts->len);
@@ -697,6 +701,9 @@ static int process_client_pkts(mysql_session_t *sess) {
 			if ( sess->client_command != MYSQL_COM_QUERY ) { // if it is not a QUERY , always send to hostgroup 0
 				// arguiable implementation, OK for now
 				sess->query_info.destination_hostgroup=0;
+				//if (sess->default_hostgroup==-1) {
+				//	sess->query_info.destination_hostgroup=sess->default_hostgroup_func(sess);
+				//}
 			}
 			if (active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
 				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p doesn't have a backend for hostgroup %d\n", sess, sess->query_info.destination_hostgroup);
@@ -1018,6 +1025,9 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	sess->close = sess_close;
 	sess->process_authentication_pkt = process_authentication_pkt;
 	sess->handler = session_handler;
+	sess->default_hostgroup=-1;
+	sess->default_hostgroup_version=-1;
+	sess->default_hostgroup_func = mysql_session_default_hostgroup;
 	return sess;
 }
 

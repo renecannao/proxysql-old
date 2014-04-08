@@ -304,6 +304,14 @@ int main(int argc, char **argv) {
 	pid_t pid;
 	int i, rc;
 
+#ifdef DEBUG
+	glo_debug=g_slice_alloc(sizeof(glo_debug_t));
+	glo_debug->glock=0;
+	glo_debug->msg_count=0;
+	glo_debug->async_queue=g_async_queue_new();
+	glo_debug->sfp=l_mem_init();
+#endif
+
 	g_thread_init(NULL);
 
 	mtrace();
@@ -450,14 +458,6 @@ gotofork:
 			//execve(execbin,NULL,NULL);
 		}
 	}
-
-#ifdef DEBUG
-	glo_debug=g_slice_alloc(sizeof(glo_debug_t));
-	glo_debug->glock=0;
-	glo_debug->msg_count=0;
-	glo_debug->async_queue=g_async_queue_new();
-	glo_debug->sfp=l_mem_init();
-#endif
 
 
 	admin_init_sqlite3();

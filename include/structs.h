@@ -215,6 +215,17 @@ typedef struct _global_query_rules_t {
 	GPtrArray *query_rules;
 } global_query_rules_t;
 
+typedef struct _default_hostgroup_t {
+	char *user;
+	char *schema;
+	int hostgroup_id;
+} default_hostgroup_t;
+
+typedef struct _global_default_hostgroups_t {
+	int version;
+	pthread_rwlock_t rwlock;
+	GPtrArray *default_hostgroups;	
+} global_default_hostgroups_t;
 
 typedef struct _proxysql_mysql_thread_t {
 	int thread_id;
@@ -283,7 +294,9 @@ struct _mysql_session_t {
 	char *mysql_username;
 	char *mysql_password;
 	char *mysql_schema_cur;
-	char *mysql_schema_new;	
+	char *mysql_schema_new;
+	int default_hostgroup;
+	int default_hostgroup_version;
 	char scramble_buf[21];
 	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
@@ -305,7 +318,7 @@ struct _mysql_session_t {
 //	private methods
 //	void (*read_from_net_2) (mysql_session_t *);
 //	void (*write_to_net_2) (mysql_session_t *, int);
-
+	int (*default_hostgroup_func) (mysql_session_t *);
 };
 
 
