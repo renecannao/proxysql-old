@@ -123,4 +123,4 @@ char is_token(char);
 char is_digit(char *, char *);
 // Added by chan end.
 
-
+void glo_DefHG_init(global_default_hostgroups_t *);

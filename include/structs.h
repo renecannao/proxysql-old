@@ -216,16 +216,21 @@ typedef struct _global_query_rules_t {
 } global_query_rules_t;
 
 typedef struct _default_hostgroup_t {
-	char *user;
-	char *schema;
+	char *username;
+	char *schemaname;
 	int hostgroup_id;
 } default_hostgroup_t;
 
-typedef struct _global_default_hostgroups_t {
+typedef struct _global_default_hostgroups_t global_default_hostgroups_t;
+
+struct _global_default_hostgroups_t {
 	int version;
 	pthread_rwlock_t rwlock;
 	GPtrArray *default_hostgroups;	
-} global_default_hostgroups_t;
+	void (*add_defHG) (global_default_hostgroups_t *, const unsigned char *, const unsigned char *, int);
+	int (*find_defHG) (global_default_hostgroups_t *, const unsigned char *, const unsigned char *);
+	void (*delete_all) (global_default_hostgroups_t *);
+};
 
 typedef struct _proxysql_mysql_thread_t {
 	int thread_id;

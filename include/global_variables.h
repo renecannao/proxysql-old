@@ -27,6 +27,7 @@ EXTERN qr_hash_t QR_HASH_T;
 // Added by chan end.
 
 EXTERN global_query_rules_t gloQR;
+EXTERN global_default_hostgroups_t gloDefHG;
 
 EXTERN long long glotimenew;
 EXTERN long long glotimeold;

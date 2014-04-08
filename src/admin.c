@@ -139,6 +139,14 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}
+		if (strncasecmp("FLUSH DEFAULT HOSTGROUPS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+			int affected_rows=sqlite3_flush_default_hostgroups_db_to_mem(sqlite3admindb);
+			pkt *ok=mypkt_alloc();
+			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
+			return;
+		}
 		if (strncasecmp("FLUSH HOSTGROUPS",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 			int affected_rows=sqlite3_flush_servers_db_to_mem(sqlite3admindb,0);
 			int warnings=force_remove_servers();
@@ -201,6 +209,13 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
 			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
+			return;
+		}
+		if (strncasecmp(DUMP_RUNTIME_DEFAULT_HOSTGROUPS,  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+			int affected_rows=sqlite3_dump_runtime_default_hostgroups(defaultdb);
+			pkt *ok=mypkt_alloc();
+			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
 			return;
 		}
 		if (strncasecmp(CONFIG_SYNC_MEM_TO_DISK,  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {

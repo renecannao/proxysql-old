@@ -460,6 +460,8 @@ gotofork:
 	}
 
 
+	glo_DefHG_init(&gloDefHG);
+
 	admin_init_sqlite3();
 
 	if (glovars.merge_configfile_db==1) {
@@ -470,7 +472,7 @@ gotofork:
 	sqlite3_flush_debug_levels_db_to_mem(sqlite3admindb);
 	sqlite3_flush_users_db_to_mem(sqlite3admindb);
 	sqlite3_flush_query_rules_db_to_mem(sqlite3admindb);
-
+	sqlite3_flush_default_hostgroups_db_to_mem(sqlite3admindb);
 
 	sqlite3_flush_servers_mem_to_db(sqlite3admindb,0);
 	sqlite3_flush_servers_db_to_mem(sqlite3admindb,1);

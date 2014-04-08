@@ -5,6 +5,7 @@
 #define ADMIN_SQLITE_TABLE_DEBUG_LEVELS "CREATE TABLE debug_levels (module VARCHAR NOT NULL PRIMARY KEY, verbosity INT NOT NULL DEFAULT 0)"
 #define ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES "CREATE TABLE global_variables ( name VARCHAR NOT NULL PRIMARY KEY , value VARCHAR NOT NULL )"
 #define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, active INT NOT NULL DEFAULT 0, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)"
+#define ADMIN_SQLITE_TABLE_DEFAULT_HOSTGROUPS "CREATE TABLE default_hostgroups (username VARCHAR, schemaname VARCHAR, hostgroup_id INT NOT NULL DEFAULT 0, PRIMARY KEY(username, schemaname))"
 
 /*
 #define ADMIN_SQLITE_DUMP_TABLE_SERVER_STATUS "SELECT 'INSERT INTO server_status VALUES (' || quote(status) || ',' || quote(status_desc) || ')' FROM server_status"
@@ -31,6 +32,7 @@
 
 #define DUMP_RUNTIME_QUERY_CACHE	"DUMP RUNTIME QUERY CACHE"
 #define DUMP_RUNTIME_QUERY_RULES	"DUMP RUNTIME QUERY RULES"
+#define DUMP_RUNTIME_DEFAULT_HOSTGROUPS	"DUMP RUNTIME DEFAULT HOSTGROUPS"
 
 #define CONFIG_SYNC_MEM_TO_DISK		"CONFIG SYNC TO DISK"
 
@@ -52,6 +54,7 @@ void sqlite3_flush_debug_levels_mem_to_db(sqlite3 *, int);
 int sqlite3_flush_debug_levels_db_to_mem(sqlite3 *);
 void sqlite3_flush_users_mem_to_db(sqlite3 *, int, int);
 int sqlite3_flush_users_db_to_mem(sqlite3 *);
+int sqlite3_flush_default_hostgroups_db_to_mem(sqlite3 *);
 void admin_init_sqlite3();
 int sqlite3_flush_servers_db_to_mem(sqlite3 *, int);
 void sqlite3_flush_servers_mem_to_db(sqlite3 *, int);
@@ -59,6 +62,7 @@ int sqlite3_flush_query_rules_db_to_mem(sqlite3 *);
 int sqlite3_dump_runtime_hostgroups(sqlite3 *);
 int sqlite3_dump_runtime_query_rules(sqlite3 *);
 int sqlite3_dump_runtime_query_cache(sqlite3 *);
+int sqlite3_dump_runtime_default_hostgroups(sqlite3 *);
 int sqlite3_config_sync_mem_to_disk();
 //int sqlite3_dump_runtime_query_rules();
 //int sqlite3_dump_runtime_query_cache();

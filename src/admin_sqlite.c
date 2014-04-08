@@ -15,6 +15,7 @@ static admin_sqlite_table_def_t table_defs[] =
 	{ "servers" , ADMIN_SQLITE_TABLE_SERVERS },
 	{ "hostgroups" , ADMIN_SQLITE_TABLE_HOSTGROUPS },
 	{ "users" , ADMIN_SQLITE_TABLE_USERS }, 
+	{ "default_hostgroups" , ADMIN_SQLITE_TABLE_DEFAULT_HOSTGROUPS },
 	{ "global_variables" , ADMIN_SQLITE_TABLE_GLOBAL_VARIABLES },
 	{ "debug_levels" , ADMIN_SQLITE_TABLE_DEBUG_LEVELS },
 	{ "query_rules" , ADMIN_SQLITE_TABLE_QUERY_RULES }
@@ -75,6 +76,7 @@ static void __admin_sqlite3__insert_or_ignore_maintable_select_disktable() {
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.hostgroups SELECT * FROM disk.hostgroups");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.query_rules SELECT * FROM disk.query_rules");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.users SELECT * FROM disk.users");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR IGNORE INTO main.default_hostgroups SELECT * FROM disk.default_hostgroups");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
 }
 
@@ -84,6 +86,7 @@ static void __admin_sqlite3__insert_or_replace_disktable_select_maintable() {
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.hostgroups SELECT * FROM main.hostgroups");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.query_rules SELECT * FROM main.query_rules");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.users SELECT * FROM main.users");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.default_hostgroups SELECT * FROM main.default_hostgroups");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
 }
 
@@ -350,6 +353,29 @@ void sqlite3_flush_servers_mem_to_db(sqlite3 *db, int replace) {
 		}
 	}
 	
+}
+
+int sqlite3_flush_default_hostgroups_db_to_mem(sqlite3 *db) {
+//	int i;
+	int rc;
+	int rownum=0;
+	sqlite3_stmt *statement;
+
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Resetting default hostgroups for MySQL\n");
+	pthread_rwlock_wrlock(&gloDefHG.rwlock);
+
+	gloDefHG.delete_all(&gloDefHG);
+	
+	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 4, "Loading default hostgroups\n");
+	rc=sqlite3_prepare_v2(db, "SELECT username, schemaname, hostgroup_id FROM default_hostgroups", -1, &statement, 0); assert(rc==SQLITE_OK);
+	while ((rc=sqlite3_step(statement))==SQLITE_ROW) {
+		rownum++;
+		gloDefHG.add_defHG(&gloDefHG, sqlite3_column_text(statement,0), sqlite3_column_text(statement,1), sqlite3_column_int(statement,2));
+	}
+	gloDefHG.version++;
+	pthread_rwlock_unlock(&gloDefHG.rwlock);	
+	sqlite3_finalize(statement);	
+	return rownum;
 }
 
 
@@ -709,6 +735,34 @@ void admin_init_sqlite3() {
 
 	__admin_sqlite3__validate_data(sqlite3admindb);	
 
+}
+
+int sqlite3_dump_runtime_default_hostgroups(sqlite3 *db) {
+	int i;
+	int rc;
+	int numrow=0;
+	sqlite3_stmt *statement;
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Dropping table runtime_default_hostgroups\n");
+	sqlite3_exec_exit_on_failure(db,"DROP TABLE IF EXISTS runtime_default_hostgroups");
+	proxy_debug(PROXY_DEBUG_SQLITE, 4, "Creating table runtime_default_hostgroups\n");
+	sqlite3_exec_exit_on_failure(db,"CREATE TABLE runtime_default_hostgroups (username VARCHAR, schemaname VARCHAR, hostgroup_id INT NOT NULL, PRIMARY KEY (username, schemaname))");
+	char *query="INSERT INTO runtime_default_hostgroups(username, schemaname, hostgroup_id) VALUES (?1 , ?2, ?3)";
+	rc=sqlite3_prepare_v2(db, query, -1, &statement, 0);
+	assert(rc==SQLITE_OK);
+	pthread_rwlock_rdlock(&gloDefHG.rwlock);
+	for(i=0;i<gloDefHG.default_hostgroups->len;i++) {
+		default_hostgroup_t *dhg=g_ptr_array_index(gloDefHG.default_hostgroups,i);
+		rc=sqlite3_bind_text(statement, 1, dhg->username, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_text(statement, 1, dhg->schemaname, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+		rc=sqlite3_bind_int(statement, 3, dhg->hostgroup_id); assert(rc==SQLITE_OK);
+		rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+		rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+		rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+		numrow++;	
+	}
+	sqlite3_finalize(statement);
+	pthread_rwlock_unlock(&gloDefHG.rwlock);
+	return numrow;
 }
 
 int sqlite3_dump_runtime_query_rules(sqlite3 *db) {

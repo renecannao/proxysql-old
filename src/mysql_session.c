@@ -1,6 +1,11 @@
 #include "proxysql.h"
 
 static int mysql_session_default_hostgroup(mysql_session_t *sess) {
+	//sess->default_hostgroup=-1;
+	pthread_rwlock_rdlock(&gloDefHG.rwlock);
+	sess->default_hostgroup_version=gloDefHG.version;
+	sess->default_hostgroup=gloDefHG.find_defHG(&gloDefHG,(const unsigned char *)sess->mysql_username,(const unsigned char *)sess->mysql_schema_cur);
+	pthread_rwlock_unlock(&gloDefHG.rwlock);
 	return 0;
 }
 
@@ -508,6 +513,8 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		g_free(sess->mysql_schema_new);
 		sess->mysql_schema_new=NULL;
 	} else {
+		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Resetting default_hostgroup from %d to -1 in session %p\n", sess->default_hostgroup, sess);
+		sess->default_hostgroup=-1;
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Old schemaname (%s) and new schemaname (%s) are NOT identical: resetting\n", sess->mysql_schema_cur, sess->mysql_schema_new);
 		sess->last_mysql_connpool=NULL;
 		if ( (sess->server_mybe) && (sess->server_mybe->server_mycpe) &&
@@ -700,10 +707,11 @@ static int process_client_pkts(mysql_session_t *sess) {
 		if(sess->mysql_query_cache_hit==FALSE) {
 			if ( sess->client_command != MYSQL_COM_QUERY ) { // if it is not a QUERY , always send to hostgroup 0
 				// arguiable implementation, OK for now
-				sess->query_info.destination_hostgroup=0;
-				//if (sess->default_hostgroup==-1) {
-				//	sess->query_info.destination_hostgroup=sess->default_hostgroup_func(sess);
-				//}
+				//sess->query_info.destination_hostgroup=0;
+				if ( (sess->default_hostgroup==-1) || (sess->default_hostgroup_version != __sync_fetch_and_add(&gloDefHG.version,0)) ) {
+					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p has default_hostgroup %d version %d, system version %d\n", sess, sess->default_hostgroup, sess->default_hostgroup_version, gloDefHG.version);
+					sess->query_info.destination_hostgroup=sess->default_hostgroup_func(sess);
+				}
 			}
 			if (active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
 				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p doesn't have a backend for hostgroup %d\n", sess, sess->query_info.destination_hostgroup);
@@ -1036,3 +1044,63 @@ void mysql_session_delete(mysql_session_t *sess) {
 	g_free(sess);
 	sess=NULL;
 }
+
+
+
+static void __default_hostgroup__add_defHG(global_default_hostgroups_t *DefHG, const unsigned char *username, const unsigned char *schemaname, int hostgroup_id) {
+	default_hostgroup_t *dhg=g_slice_alloc(sizeof(default_hostgroup_t));
+	dhg->username=g_strdup((const gchar *)username);
+	dhg->username=g_strdup((const gchar *)schemaname);
+	dhg->hostgroup_id=hostgroup_id;
+	g_ptr_array_add(DefHG->default_hostgroups,dhg);
+}
+
+
+static void __default_hostgroup__delete_one(default_hostgroup_t *dhg) {
+	if (dhg->username) g_free(dhg->username);
+	if (dhg->schemaname) g_free(dhg->schemaname);
+	g_slice_free1(sizeof(default_hostgroup_t),dhg);
+}
+
+static void __default_hostgroup__delete_all(global_default_hostgroups_t *DefHG) {
+	while (DefHG->default_hostgroups->len) {
+		default_hostgroup_t *dhg=g_ptr_array_remove_index_fast(DefHG->default_hostgroups,0);
+		__default_hostgroup__delete_one(dhg);
+	}
+}
+
+static int __default_hostgroup__find_defHG(global_default_hostgroups_t *DefHG, const unsigned char *username, const unsigned char *schemaname) {
+	int i;
+	// look for a perfect match
+	for (i=0; i<DefHG->default_hostgroups->len; i++) {
+		default_hostgroup_t *dhg=g_ptr_array_index(DefHG->default_hostgroups,i);
+		if ((g_strcmp0((const gchar *)username,dhg->username)==0) && (g_strcmp0((const gchar *)schemaname,dhg->schemaname)==0)) {
+			return dhg->hostgroup_id;
+		}
+	}
+	// look for a matching schema and NULL user
+	for (i=0; i<DefHG->default_hostgroups->len; i++) {
+		default_hostgroup_t *dhg=g_ptr_array_index(DefHG->default_hostgroups,i);
+		if ((dhg->username==NULL) && (g_strcmp0((const gchar *)schemaname,dhg->schemaname)==0)) {
+			return dhg->hostgroup_id;
+		}
+	}
+	// look for a matching user and NULL schema
+	for (i=0; i<DefHG->default_hostgroups->len; i++) {
+		default_hostgroup_t *dhg=g_ptr_array_index(DefHG->default_hostgroups,i);
+		if ((dhg->schemaname==NULL) && (g_strcmp0((const gchar *)username,dhg->username)==0)) {
+			return dhg->hostgroup_id;
+		}
+	}
+	return 0;	
+}
+
+void glo_DefHG_init(global_default_hostgroups_t *DefHG) {
+	DefHG->version=0;
+	pthread_rwlock_init(&DefHG->rwlock,NULL);
+	DefHG->default_hostgroups=g_ptr_array_new();
+	DefHG->add_defHG=__default_hostgroup__add_defHG;
+	DefHG->find_defHG=__default_hostgroup__find_defHG;
+	DefHG->delete_all=__default_hostgroup__delete_all;
+}
+
