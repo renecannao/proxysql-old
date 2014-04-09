@@ -120,6 +120,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			pkt *ok=mypkt_alloc();
 			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
 			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			if (glovars.admin_sync_disk_on_flush==1) sqlite3_config_sync_mem_to_disk();
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}
@@ -128,6 +129,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			pkt *ok=mypkt_alloc();
 			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
 			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			if (glovars.admin_sync_disk_on_flush==1) sqlite3_config_sync_mem_to_disk();
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}
@@ -136,6 +138,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			pkt *ok=mypkt_alloc();
 			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
 			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			if (glovars.admin_sync_disk_on_flush==1) sqlite3_config_sync_mem_to_disk();
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}
@@ -144,6 +147,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			pkt *ok=mypkt_alloc();
 			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
 			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			if (glovars.admin_sync_disk_on_flush==1) sqlite3_config_sync_mem_to_disk();
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}
@@ -154,6 +158,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 				pkt *ok=mypkt_alloc();
 				myproto_ok_pkt(ok,1,affected_rows,0,2,warnings);
 				MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+				if (glovars.admin_sync_disk_on_flush==1) sqlite3_config_sync_mem_to_disk();
 				//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			} else {
 				// TODO: send some error
@@ -167,6 +172,7 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 			pkt *ok=mypkt_alloc();
 			myproto_ok_pkt(ok,1,0,0,2,0);
 			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			if (glovars.admin_sync_disk_on_shutdown==1) sqlite3_config_sync_mem_to_disk();
 			//l_ptr_array_add(sess->client_myds->output.pkts, ok);
 			return;
 		}

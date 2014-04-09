@@ -212,6 +212,13 @@ Currently 7 groups are available:
 
 	ProxySQL doesn't constantly update status variables/tables in the monitoring interface. These are updates only when read, and up to once every *proxy_monitor_refresh_status_interval* seconds. Default is 10, minimum is 0 and maximum is 3600 (1 hour). This module is not completely implemented yet
 
+* **sync_to_disk_on_flush_command**
+
+	When sync_to_disk_on_flush_command=1 , in-memory configuration is automatically saved on disk after every FLUSH command. Boolean parameter (0/1) , where 1 is the default (enabled). 
+
+* **sync_to_disk_on_shutdown**
+
+	When sync_to_disk_on_shutdown=1 , in-memory configuration is automatically saved on disk when the SHUTDOWN command is executed in the admin interface. Boolean parameter (0/1) , where 1 is the default (enabled). 
 
 [http] section
 ~~~~~~~~~~~~~~

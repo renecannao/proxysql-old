@@ -23,6 +23,8 @@ static global_variable_entry_t glo_entries[]= {
 	{"admin", "proxy_monitor_user", G_OPTION_ARG_STRING, &glovars.proxy_monitor_user, "proxy monitoring user", 0, 0, 0, 0, 0, "monitor", NULL, NULL},
 	{"admin", "proxy_monitor_password", G_OPTION_ARG_STRING, &glovars.proxy_monitor_password, "proxy monitoring password", 0, 0, 0, 0, 0, "monitor", NULL, NULL},
 	{"admin", "proxy_monitor_refresh_status_interval", G_OPTION_ARG_INT, &glovars.proxy_monitor_refresh_status_interval, "interval to update status variables", 0, 3600, 0, 0, 10, NULL, NULL, NULL},
+	{"admin", "sync_to_disk_on_flush_command", G_OPTION_ARG_INT, &glovars.admin_sync_disk_on_flush, "sync configuration to disk after every FLUSH command", 0, 1 , 0, 0, 1, NULL, NULL, NULL},
+	{"admin", "sync_to_disk_on_shutdown", G_OPTION_ARG_INT, &glovars.admin_sync_disk_on_shutdown, "sync configuration to disk during graceful shutdown", 0, 1 , 0, 0, 1, NULL, NULL, NULL},
 
 	{"http", "http_start", G_OPTION_ARG_INT, &glovars.http_start, "start HTTP server", 0, 1 , 0, 0, 0, NULL, NULL, NULL},
 

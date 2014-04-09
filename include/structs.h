@@ -356,6 +356,9 @@ typedef struct _global_variables {
 	int backlog;
 	int verbose;
 	int print_statistics_interval;
+
+	int admin_sync_disk_on_flush;
+	int admin_sync_disk_on_shutdown;
 	
 	int mysql_poll_timeout;
 	int mysql_poll_timeout_maintenance;
