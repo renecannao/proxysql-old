@@ -6,6 +6,10 @@ int listen_on_port(uint16_t port) {
 	int sd;
 	if ( (sd = socket(PF_INET, SOCK_STREAM, 0)) < 0 )
 		PANIC("Socket - TCP");
+	rc = setsockopt(sd, SOL_SOCKET,  SO_REUSEADDR, (char *)&arg_on, sizeof(arg_on));
+	if (rc < 0) {
+		PANIC("setsockopt() failed");
+	}
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = INADDR_ANY;
@@ -14,10 +18,6 @@ int listen_on_port(uint16_t port) {
 	if ( listen(sd, glovars.backlog) != 0 )
 		PANIC("Listen - TCP");
 
-	rc = setsockopt(sd, SOL_SOCKET,  SO_REUSEADDR, (char *)&arg_on, sizeof(arg_on));
-	if (rc < 0) {
-		PANIC("setsockopt() failed");
-	}
 	return sd;
 }
 
