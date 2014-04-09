@@ -55,7 +55,7 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	sess->query_info.flagOUT=0;
 	sess->query_info.rewritten=0;
 	sess->query_info.cache_ttl=0;
-	sess->query_info.destination_hostgroup=0;
+	sess->query_info.destination_hostgroup=-1;	// the destination hostgroup is set to unknown
 	sess->query_info.audit_log=0;
 	sess->query_info.performance_log=0;
 	sess->query_info.mysql_query_cache_hit=0;
@@ -143,8 +143,8 @@ void process_query_rules(mysql_session_t *sess) {
 			sess->query_info.cache_ttl=qr->cache_ttl;
 		}
 		//g_match_info_free(match_info);
-		sess->query_info.destination_hostgroup=0; // default
-		if (qr->destination_hostgroup>0) {
+		//sess->query_info.destination_hostgroup=-1; // default
+		if (qr->destination_hostgroup>=0) {
 			proxy_debug(PROXY_DEBUG_QUERY_CACHE, 5, "query rule %d has changed destination_hostgroup %d\n", qr->rule_id, qr->destination_hostgroup);
 			sess->query_info.destination_hostgroup=qr->destination_hostgroup;
 		}
@@ -176,6 +176,15 @@ void process_query_rules(mysql_session_t *sess) {
 	// if the query is flagged to be cached but mysql_query_cache_enabled=0 , the query needs to be flagged to NOT be cached
 	if (glovars.mysql_query_cache_enabled==FALSE) {
 		sess->query_info.cache_ttl=0;
+	}
+	// if destination_hostgroup didn't change from default (-1) we apply sess->default_hostgroup, setting it first if necessary
+	if (sess->query_info.destination_hostgroup==-1) {
+		if ( (sess->default_hostgroup==-1) || (sess->default_hostgroup_version != __sync_fetch_and_add(&gloDefHG.version,0)) ) {
+			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p has default_hostgroup %d version %d, system version %d\n", sess, sess->default_hostgroup, sess->default_hostgroup_version, gloDefHG.version);
+			sess->query_info.destination_hostgroup=sess->default_hostgroup_func(sess);
+		} else {
+			sess->query_info.destination_hostgroup=sess->default_hostgroup;
+		}
 	}
 }
 
