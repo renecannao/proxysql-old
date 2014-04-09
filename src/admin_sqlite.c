@@ -81,29 +81,29 @@ static void __admin_sqlite3__insert_or_ignore_maintable_select_disktable() {
 }
 
 static void __admin_sqlite3__delete_disktable() {
-	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = OFF");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "DELETE FROM disk.servers");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "DELETE FROM disk.hostgroups");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "DELETE FROM disk.query_rules");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "DELETE FROM disk.users");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "DELETE FROM disk.default_hostgroups");
-	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");	
 }
 
 static void __admin_sqlite3__insert_or_replace_disktable_select_maintable() {
-	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = OFF");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.servers SELECT * FROM main.servers");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.hostgroups SELECT * FROM main.hostgroups");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.query_rules SELECT * FROM main.query_rules");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.users SELECT * FROM main.users");
 	sqlite3_exec_exit_on_failure(sqlite3admindb, "INSERT OR REPLACE INTO disk.default_hostgroups SELECT * FROM main.default_hostgroups");
-	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
 }
 
 
 int sqlite3_config_sync_mem_to_disk() {
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = OFF");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "BEGIN");
 	__admin_sqlite3__delete_disktable();
 	__admin_sqlite3__insert_or_replace_disktable_select_maintable();
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "COMMIT");
+	sqlite3_exec_exit_on_failure(sqlite3admindb, "PRAGMA foreign_keys = ON");
 	return 0;
 }
 
