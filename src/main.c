@@ -304,6 +304,8 @@ int main(int argc, char **argv) {
 	pid_t pid;
 	int i, rc;
 
+	g_thread_init(NULL);
+
 #ifdef DEBUG
 	glo_debug=g_slice_alloc(sizeof(glo_debug_t));
 	glo_debug->glock=0;
@@ -312,7 +314,6 @@ int main(int argc, char **argv) {
 	glo_debug->sfp=l_mem_init();
 #endif
 
-	g_thread_init(NULL);
 
 	mtrace();
 	rc=pthread_key_create(&tsd_key, NULL);
