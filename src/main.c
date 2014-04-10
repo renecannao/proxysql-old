@@ -426,7 +426,10 @@ gotofork:
 			rc=WEXITSTATUS(status);
 			if (rc==0) {
 				proxy_error("Shutdown angel process\n");
-				if (glovars.http_start) system("pkill -f proxysqlHTTPd");
+				if (glovars.http_start) {
+					int rc=system("pkill -f proxysqlHTTPd");
+					assert(rc>=0);
+				}
 				return 0;
 				} else {
 					proxy_error("ProxySQL exited with code %d . Restarting!\n", rc);
@@ -441,7 +444,10 @@ gotofork:
 	if (glovars.http_start) {
 		pid = fork();
 		if (!pid) {
-			system("pkill -f proxysqlHTTPd");
+			{
+				int rc=system("pkill -f proxysqlHTTPd");
+				assert(rc>=0);
+			}
 			sleep(1);
 			//execlp("perl", "perl", "-f", "./proxysqlHTTPd",NULL);
 			char *execbin="./proxysqlHTTPd";
