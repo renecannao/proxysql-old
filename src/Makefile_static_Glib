@@ -28,7 +28,7 @@ O1=-O1
 O3=-O3 -mtune=native
 OPTZ=$(O0)
 CFLAGS=$(IDIRS) -rdynamic $(OPTZ) $(DEBUG)
-LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -lcrypto $(GLIB_LIB) -Wl,-Bdynamic -lssl -ldl -lpthread -lm
+LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -lcrypto $(GLIB_LIB) -Wl,-Bdynamic -lssl -ldl -lpthread -lm -lz
 SQLITEOBJ=../sqlite3/sqlite3.o
 EXECUTABLE=proxysql
 
