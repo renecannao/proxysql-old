@@ -22,6 +22,7 @@ Other than standard libraries, required packages, libraries and header files are
 * glibc-devel
 * glibc-headers
 * openssl-devel
+* openssl-static
 * glib2-devel
 
 
