@@ -9,19 +9,33 @@ my $dbglvl=0;
 my $configfile="";
 
 my %defaults = (
+	datadir => "/var/run/proxysql",
+	error_log => "proxysql.log",
+	debug_log => "debug.log",
+	pid_file => "proxysql.pid",
+	restart_on_error => 1,
+	restart_delay => 5,
 	core_dump_file_size => 0,
 	debug => 0,
 	stack_size => 524288,
+	proxy_admin_pathdb => "proxysql.db",
 	proxy_mysql_port => 6033,
 	proxy_admin_port => 6032,
 	proxy_admin_user => "admin",
 	proxy_admin_password => "admin",
+	proxy_admin_refresh_status_interval => 600,
+	sync_to_disk_on_flush_command => 1,
+	sync_to_disk_on_shutdown => 1,
 	mysql_socket => "/tmp/proxysql.sock",
 	mysql_query_cache_partitions => 16,
+	mysql_query_cache_precheck => 1,
 	mysql_query_cache_default_timeout => 1,
 	mysql_query_cache_size => 67108864 ,
 	mysql_threads => 1,
+	mysql_hostgroups => 8,
 	mysql_poll_timeout => 10000,
+	mysql_maintenance_timeout => 1000,
+	mysql_poll_timeout_maintenance => 100,
 	mysql_max_query_size => 1048576,
 	mysql_max_resultset_size => 1048576,
 	net_buffer_size => 8192,
@@ -30,6 +44,8 @@ my %defaults = (
 	mysql_wait_timeout => 28800 ,
 	mysql_usage_user => "proxy",
 	mysql_usage_password => "proxy",
+	fundadb_hash_purge_threshold_pct_min => 50,
+	fundadb_hash_purge_threshold_pct_max => 90,
 	config_file => "proxysql.cnf"
 );
 my $cpus=`cat /proc/cpuinfo | egrep '^processor' | wc -l`;
@@ -55,14 +71,28 @@ $configfile="
 # Generated using proxysql_interactive_config.pl
 #
 [global]
+datadir=$proxycfg{'datadir'}
 core_dump_file_size=$proxycfg{'core_dump_file_size'}
 debug=$proxycfg{'debug'}
 stack_size=$proxycfg{'stack_size'}
+net_buffer_size=$proxycfg{'net_buffer_size'}
+backlog=$proxycfg{'backlog'}
+error_log=$proxycfg{'error_log'}
+debug_log=$proxycfg{'debug_log'}
+pid_file=$proxycfg{'pid_file'}
+restart_on_error=$proxycfg{'restart_on_error'}
+restart_delay=$proxycfg{'restart_delay'}
+
+
+[admin]
+proxy_admin_pathdb=$proxycfg{'proxy_admin_pathdb'}
 proxy_admin_port=$proxycfg{'proxy_admin_port'}
 proxy_admin_user=$proxycfg{'proxy_admin_user'}
 proxy_admin_password=$proxycfg{'proxy_admin_password'}
-net_buffer_size=$proxycfg{'net_buffer_size'}
-backlog=$proxycfg{'backlog'}
+proxy_admin_refresh_status_interval=$proxycfg{'proxy_admin_refresh_status_interval'}
+sync_to_disk_on_flush_command=$proxycfg{'sync_to_disk_on_flush_command'}
+sync_to_disk_on_shutdown=$proxycfg{'sync_to_disk_on_shutdown'}
+
 
 [mysql]
 mysql_threads=$proxycfg{'mysql_threads'}
@@ -71,7 +101,11 @@ mysql_socket=$proxycfg{'mysql_socket'}
 mysql_query_cache_partitions=$proxycfg{'mysql_query_cache_partitions'}
 mysql_query_cache_default_timeout=$proxycfg{'mysql_query_cache_default_timeout'}
 mysql_query_cache_size=$proxycfg{'mysql_query_cache_size'}
+mysql_query_cache_precheck=$proxycfg{'mysql_query_cache_precheck'}
+mysql_hostgroups=$proxycfg{'mysql_hostgroups'}
 mysql_poll_timeout=$proxycfg{'mysql_poll_timeout'}
+mysql_maintenance_timeout=$proxycfg{'mysql_maintenance_timeout'}
+mysql_poll_timeout_maintenance=$proxycfg{'mysql_poll_timeout_maintenance'}
 mysql_max_query_size=$proxycfg{'mysql_max_query_size'}
 mysql_max_resultset_size=$proxycfg{'mysql_max_resultset_size'}
 mysql_connection_pool_enabled=$proxycfg{'mysql_connection_pool_enabled'}
@@ -80,6 +114,11 @@ mysql_servers=$proxycfg{'mysql_servers'}
 mysql_usage_user=$proxycfg{'mysql_usage_user'}
 mysql_usage_password=$proxycfg{'mysql_usage_password'}
 $proxycfg{'mysql_users'}
+
+[fundadb]
+fundadb_hash_purge_threshold_pct_min=$proxycfg{'fundadb_hash_purge_threshold_pct_min'}
+fundadb_hash_purge_threshold_pct_max=$proxycfg{'fundadb_hash_purge_threshold_pct_max'}
+
 [debug]
 debug_generic=$dbglvl
 debug_net=$dbglvl
@@ -100,7 +139,12 @@ print "
 Generic options:
 - core_dump_file_size : maximum size of core dump in case of crash
 - stack_size : stack size allocated for each thread
-- error_log : log file for error messages (not implemented yet)
+- datadir : default directory for ProxySQL files, like error log, debug log, internal db
+- error_log : log file for error messages
+- debug_log : log file for debug messages
+- pid_file : PID file
+- restart_on_error : defines if proxysql is automatically restarted on crash or critical error
+- restart_delay : limits the frequency of automatic restarts
 
 ";
 do {
@@ -117,6 +161,48 @@ do {
 	if ( ( $input =~ /^\d+$/ ) && ( $input >= 65536 ) && ( $input <= 8388608) ) { $proxycfg{'stack_size'}=$input }
 	if ( $input =~ /^$/ ) { $proxycfg{'stack_size'}=$defaults{'stack_size'} }
 } until (defined $proxycfg{'stack_size'});
+{
+	print "\tdatadir [$defaults{'datadir'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( $input =~ /^$/ ) { $proxycfg{'datadir'}=$defaults{'datadir'} }
+	else { $proxycfg{'datadir'}=$input; }
+};
+{
+	print "\terror_log [$defaults{'error_log'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( $input =~ /^$/ ) { $proxycfg{'error_log'}=$defaults{'error_log'} }
+	else { $proxycfg{'error_log'}=$input; }
+};
+{
+	print "\tdebug_log [$defaults{'debug_log'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( $input =~ /^$/ ) { $proxycfg{'debug_log'}=$defaults{'debug_log'} }
+	else { $proxycfg{'debug_log'}=$input; }
+};
+{
+	print "\tpid_file [$defaults{'pid_file'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( $input =~ /^$/ ) { $proxycfg{'pid_file'}=$defaults{'pid_file'} }
+	else { $proxycfg{'pid_file'}=$input; }
+};
+do {
+	print "\trestart_on_error (0-1) [$defaults{'restart_on_error'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input <= 1 ) ) { $proxycfg{'restart_on_error'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'restart_on_error'}=$defaults{'restart_on_error'} }
+} until (defined $proxycfg{'restart_on_error'});
+do {
+	print "\trestart_delay (0-600) [$defaults{'restart_delay'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input <= 600 ) ) { $proxycfg{'restart_delay'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'restart_delay'}=$defaults{'restart_delay'} }
+} until (defined $proxycfg{'restart_delay'});
 }
 
 sub conf_sockets {
@@ -149,11 +235,20 @@ print "
 ProxySQL uses an admin interface for runtime configuration and to export statistics.
 Such interface uses the MySQL protocol and can be used by any MySQL client.
 Options:
+- proxy_admin_pathdb : path to the built-in database file that stores advanced configuration
 - proxy_admin_port : TCP socket for Administration : default is proxy_mysql_port-1 (6032)
 - proxy_admin_user : username for authentication ( this is not a mysql user )
 - proxy_admin_password : password for the user specified in proxy_admin_user
+- proxy_admin_refresh_status_interval : how often internal statistics are updated
 
 ";
+{
+  print "\tproxy_admin_pathdb [$defaults{'proxy_admin_pathdb'}]: ";
+  my $input = <STDIN>;
+  chomp $input;
+  if ( $input =~ /^$/ ) { $proxycfg{'proxy_admin_pathdb'}=$defaults{'proxy_admin_pathdb'} }
+  else { $proxycfg{'proxy_admin_pathdb'}=$input; }
+};
 $defaults{'proxy_admin_port'}=$proxycfg{'proxy_mysql_port'}-1;
 do {
 	print "\tproxy_admin_port [$defaults{'proxy_admin_port'}]: ";
@@ -176,6 +271,14 @@ do {
 	if ( $input =~ /^$/ ) { $proxycfg{'proxy_admin_password'}=$defaults{'proxy_admin_password'} }
 	else { $proxycfg{'proxy_admin_password'}=$input; }
 };
+do {
+	print "\tproxy_admin_refresh_status_interval (0-3600) [$defaults{'proxy_admin_refresh_status_interval'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input <= 3600 ) ) { $proxycfg{'proxy_admin_refresh_status_interval'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'proxy_admin_refresh_status_interval'}=$defaults{'proxy_admin_refresh_status_interval'} }
+} until (defined $proxycfg{'proxy_admin_refresh_status_interval'});
+
 }
 
 sub conf_query_cache {
@@ -186,6 +289,7 @@ Query cache is configured through:
 - mysql_query_cache_partitions : defines the number of partitions, reducing contention
 - mysql_query_cache_default_timeout : defaults TTL for queries without explicit TTL
 - mysql_query_cache_size : total amount of memory allocable for query cache
+- mysql_query_cache_precheck : check the query cache before processing the query
 
 ";
 do {
@@ -209,6 +313,13 @@ do {
 	if ( ( $input =~ /^\d+$/ ) && ( $input >= 1048576 ) && ( $input <= 10737418240 ) ) { $proxycfg{'mysql_query_cache_size'}=$input }
 	if ( $input =~ /^$/ ) { $proxycfg{'mysql_query_cache_size'}=$defaults{'mysql_query_cache_size'} }
 } until (defined $proxycfg{'mysql_query_cache_size'});
+do {
+	print "\tmysql_query_cache_precheck (0-1) [$defaults{'mysql_query_cache_precheck'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input <= 1 ) ) { $proxycfg{'mysql_query_cache_precheck'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'mysql_query_cache_precheck'}=$defaults{'mysql_query_cache_precheck'} }
+} until (defined $proxycfg{'mysql_query_cache_precheck'});
 }
 
 
@@ -217,21 +328,29 @@ print "
 
 Several options define the network behaviour of ProxySQL:
 - mysql_threads : defines how many threads will process MySQL traffic
+- mysql_hostgroups : number of possible hostgroups configurable as backends
 - mysql_poll_timeout : poll() timeout (millisecond)
 - mysql_max_query_size : maximum length of a query to be analyzed
 - mysql_max_resultset_size : maximum size of resultset for caching and buffering
 - net_buffer_size : internal buffer for network I/O
 - backlog : listen() backlog
-
+- mysql_maintenance_timeout : timeout (millisecond) before terminating connections to servers in maintenance
+- mysql_poll_timeout_maintenance : poll() timeout (millisecond) during maintenance
 ";
-
 do {
 	print "\tmysql_threads (1-128) [$defaults{'mysql_threads'}]: ";
 	my $input = <STDIN>;
 	chomp $input;
-	if ( ( $input =~ /^\d+$/ ) && ( $input <= 128 ) ) { $proxycfg{'mysql_threads'}=$input }
+	if ( ( $input =~ /^\d+$/ ) && ( $input >= 1 ) && ( $input <= 128 ) ) { $proxycfg{'mysql_threads'}=$input }
 	if ( $input =~ /^$/ ) { $proxycfg{'mysql_threads'}=$defaults{'mysql_threads'} }
 } until (defined $proxycfg{'mysql_threads'});
+do {
+  print "\tmysql_hostgroups (2-64) [$defaults{'mysql_hostgroups'}]: ";
+  my $input = <STDIN>;
+  chomp $input;
+  if ( ( $input =~ /^\d+$/ ) && ( $input >= 2 ) && ( $input <= 64 ) ) { $proxycfg{'mysql_hostgroups'}=$input }
+  if ( $input =~ /^$/ ) { $proxycfg{''}=$defaults{'mysql_hostgroups'} }
+} until (defined $proxycfg{'mysql_hostgroups'});
 do {
 	print "\tmysql_poll_timeout (100-1000000) [$defaults{'mysql_poll_timeout'}]: ";
 	my $input = <STDIN>;
@@ -268,6 +387,20 @@ do {
 	if ( ( $input =~ /^\d+$/ ) && ( $input >= 50 ) && ( $input <= 10000 ) ) { $proxycfg{'backlog'}=$input }
 	if ( $input =~ /^$/ ) { $proxycfg{'backlog'}=$defaults{'backlog'} }
 } until (defined $proxycfg{'backlog'});
+do {
+	print "\tmysql_maintenance_timeout (100-60000) [$defaults{'mysql_maintenance_timeout'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input >= 100 ) && ( $input <= 60000 ) ) { $proxycfg{'mysql_maintenance_timeout'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'mysql_maintenance_timeout'}=$defaults{'mysql_maintenance_timeout'} }
+} until (defined $proxycfg{'mysql_maintenance_timeout'});
+do {
+	print "\tmysql_poll_timeout_maintenance (100-1000) [$defaults{'mysql_poll_timeout_maintenance'}]: ";
+	my $input = <STDIN>;
+	chomp $input;
+	if ( ( $input =~ /^\d+$/ ) && ( $input >= 100 ) && ( $input <= 1000 ) ) { $proxycfg{'mysql_poll_timeout_maintenance'}=$input }
+	if ( $input =~ /^$/ ) { $proxycfg{'mysql_poll_timeout_maintenance'}=$defaults{'mysql_poll_timeout_maintenance'} }
+} until (defined $proxycfg{'mysql_poll_timeout_maintenance'});
 }
 
 
