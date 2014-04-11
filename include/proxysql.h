@@ -119,8 +119,14 @@ long monotonic_time();
 // Added by chan -------
 void process_query_stats(mysql_session_t *);
 char *str2md5(const char *);
+/*
 char is_token(char);
 char is_digit(char *, char *);
+char is_digit_char(char);
+char is_space_char(char);
+char is_token_char(char);
+char is_digit_string(char *, char *);
+*/
 // Added by chan end.
 
 void glo_DefHG_init(global_default_hostgroups_t *);

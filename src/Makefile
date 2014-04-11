@@ -21,7 +21,7 @@ LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -lcrypto -Wl,-Bdynamic -lssl -ldl -lp
 SQLITEOBJ=../sqlite3/sqlite3.o
 EXECUTABLE=proxysql
 
-_OBJ = utils.o l_utils.o mysql_session.o mysql_data_stream.o mysql_backend.o main.o debug.o fundadb_hash.o global_variables.o mysql_connpool.o mysql_protocol.o mysql_handler.o network.o threads.o admin.o admin_sqlite.o
+_OBJ = tokenizer.o utils.o l_utils.o mysql_session.o mysql_data_stream.o mysql_backend.o main.o debug.o fundadb_hash.o global_variables.o mysql_connpool.o mysql_protocol.o mysql_handler.o network.o threads.o admin.o admin_sqlite.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 $(ODIR)/%.o: %.c

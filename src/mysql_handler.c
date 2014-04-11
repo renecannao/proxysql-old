@@ -61,7 +61,7 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	sess->query_info.mysql_query_cache_hit=0;
 	if (p) {
 		sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
-		sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;	
+		sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;
 		// Added by chan
 		if (glovars.mysql_query_statistics) {
 			process_query_stats(sess);
@@ -123,7 +123,7 @@ void process_query_rules(mysql_session_t *sess) {
 				continue;
 			}
 			sess->query_info.rewritten=1;
-			if (sess->query_info.query_checksum) { 
+			if (sess->query_info.query_checksum) {
 				g_checksum_free(sess->query_info.query_checksum); // remove checksum, as it may needs to be computed again
 				sess->query_info.query_checksum=NULL;
 			}
@@ -229,7 +229,7 @@ void mysql_server_entry_add_hostgroup(mysql_server *MSptr, int hostgroup_id) {
 	MSHGE *ms;
 	ms=g_malloc0(sizeof(MSHGE));
 	ms->MSptr=MSptr;
-	g_ptr_array_add(hg,ms);	
+	g_ptr_array_add(hg,ms);
 }
 
 MSHGE * mysql_server_random_entry_from_hostgroup__lock(int hostgroup_id) {
@@ -314,71 +314,3 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new connection for sess %p , hostgroup %d , fd %d\n", sess , hostgroup_id , mybe->fd);
 	return 1;
 }
-
-
-// Added by chan
-void process_query_stats(mysql_session_t *sess){
-
-	char *s = sess->query_info.query;
-	char *r = (char *)g_malloc(sess->query_info.query_len + 1);
-	char *t_r = r;
-	char *t_r_p = r;
-	char *t_s_p = s;
-	char *r_s = NULL;
-	char prev_str = 0;
-	char v_char = 0;
-	char is_string = 0;
-	char is_comment = 0;
-
-	int i = 0;
-	//replace digit & string to '?'
-	while(i++ < sess->query_info.query_len){
-		if(is_token(*s) || i == sess->query_info.query_len){
-			if(!is_comment && s > sess->query_info.query && prev_str == '/' && *s == '*'){
-				is_comment = 1;
-			}else if(is_comment){
-				if(prev_str == '*' && *s == '/'){
-					is_comment = 0;
-				}
-			}else if(!is_string && (*s == '\'' || *s == '"')){
-				is_string = 1;
-				v_char = *s;
-				t_r_p = t_r + sizeof(char);
-			}else if(is_string){
-				if(*s == '\\' && prev_str == '\\'){
-					t_s_p = s + sizeof(char);
-					prev_str = 0;
-					*t_r++ = *s++;
-					continue;
-				}
-				if(*s == v_char && prev_str != '\\'){
-					is_string = 0;
-					t_r = t_r_p;
-					*t_r++ = '?';
-				}
-			}else if(!is_string && is_digit(t_s_p, i == sess->query_info.query_len ? s + sizeof(char) : s)){
-				t_r -= (s - t_s_p);
-				*t_r++ = '?';
-				if(i == sess->query_info.query_len)
-					break;
-			}
-			t_s_p = s + sizeof(char);
-		}
-
-		prev_str = *s;
-		*t_r++ = *s++;
-	}
-	*t_r = 0;
-	r_s = (char *)g_malloc(strlen(r)+1);
-
-	// to save memory
-	strcpy(r_s, r);
-	g_free(r);
-
-	// process query stats
-	if(*r_s){
-		char *md5 = str2md5(r_s);
-		qr_set(md5, r_s);
-	}
-}
-// Added by chan end.
