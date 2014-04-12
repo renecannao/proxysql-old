@@ -12,6 +12,7 @@ static gint proxy_mysql_port = 0;
 //static gchar *config_file="proxysql.cnf";
 static gchar *config_file=NULL;
 static gint verbose = -1;
+static gboolean foreground = 0;
 
 pthread_key_t tsd_key;
 
@@ -22,6 +23,7 @@ static GOptionEntry entries[] =
   { "admin-port", 0, 0, G_OPTION_ARG_INT, &proxy_admin_port, "Administration port", NULL },
   { "mysql-port", 0, 0, G_OPTION_ARG_INT, &proxy_mysql_port, "MySQL proxy port", NULL },
   { "verbose", 'v', 0, G_OPTION_ARG_INT, &verbose, "Verbose level", NULL },
+  { "foreground", 'f', 0, G_OPTION_ARG_NONE, &foreground, "Run in foreground", NULL },
   { "debug", 'd', 0, G_OPTION_ARG_INT, &gdbg, "debug", NULL },
   { "config", 'c', 0, G_OPTION_ARG_FILENAME, &config_file, "Configuration file", NULL },
   { NULL }
@@ -321,84 +323,86 @@ int main(int argc, char **argv) {
 	// parse all the arguments and the config file
 	main_opts(entries, &argc, &argv, &config_file);
 
-	daemon_pid_file_ident=glovars.proxy_pidfile;
-	daemon_log_ident=daemon_ident_from_argv0(argv[0]);
 
-	rc=chdir(glovars.proxy_datadir);
-	if (rc) {
-		daemon_log(LOG_ERR, "Could not chdir into datadir: %s . Error: %s", glovars.proxy_datadir, strerror(errno));
-		return EXIT_FAILURE;
-	}
-
-
-	daemon_pid_file_proc=proxysql_pid_file;
+	if (foreground==0) {
+		daemon_pid_file_ident=glovars.proxy_pidfile;
+		daemon_log_ident=daemon_ident_from_argv0(argv[0]);
 	
-	pid=daemon_pid_file_is_running();
-	if (pid>=0) {
-		daemon_log(LOG_ERR, "Daemon already running on PID file %u", pid);
-		return EXIT_FAILURE;
-	}
-	if (daemon_retval_init() < 0) {
-		daemon_log(LOG_ERR, "Failed to create pipe.");
-		return EXIT_FAILURE;
-	}
-
-
-/* Do the fork */
-	if ((pid = daemon_fork()) < 0) {
-		/* Exit on error */
-		daemon_retval_done();
-		return EXIT_FAILURE;
-
-	} else if (pid) { /* The parent */
-		int ret;
-		/* Wait for 20 seconds for the return value passed from the daemon process */
-		if ((ret = daemon_retval_wait(20)) < 0) {
-			daemon_log(LOG_ERR, "Could not recieve return value from daemon process: %s", strerror(errno));
-			return EXIT_FAILURE;
-		}
-
-		if (ret) {
-			daemon_log(LOG_ERR, "Daemon returned %i as return value.", ret);
-		}
-		return ret;
-	} else { /* The daemon */
-
-		/* Close FDs */
-		if (daemon_close_all(-1) < 0) {
-			daemon_log(LOG_ERR, "Failed to close all file descriptors: %s", strerror(errno));
-
-			/* Send the error condition to the parent process */
-			daemon_retval_send(1);
-			goto finish;
-		}
-
 		rc=chdir(glovars.proxy_datadir);
 		if (rc) {
 			daemon_log(LOG_ERR, "Could not chdir into datadir: %s . Error: %s", glovars.proxy_datadir, strerror(errno));
 			return EXIT_FAILURE;
 		}
-		/* Create the PID file */
-		if (daemon_pid_file_create() < 0) {
-			daemon_log(LOG_ERR, "Could not create PID file (%s).", strerror(errno));
-			daemon_retval_send(2);
-			goto finish;
-		}
-
-
-
-		/* Send OK to parent process */
-		daemon_retval_send(0);
-		errfd=open(glovars.proxy_errorlog, O_WRONLY | O_APPEND | O_CREAT , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-		assert(errfd>0);
-		dup2(errfd, STDERR_FILENO);
-		close(errfd);
-
-		proxy_error("Starting ProxySQL\n");
-		daemon_log(LOG_INFO, "Sucessfully started");
+	
+	
+		daemon_pid_file_proc=proxysql_pid_file;
 		
+		pid=daemon_pid_file_is_running();
+		if (pid>=0) {
+			daemon_log(LOG_ERR, "Daemon already running on PID file %u", pid);
+			return EXIT_FAILURE;
+		}
+		if (daemon_retval_init() < 0) {
+			daemon_log(LOG_ERR, "Failed to create pipe.");
+			return EXIT_FAILURE;
+		}
+	
+	
+	/* Do the fork */
+		if ((pid = daemon_fork()) < 0) {
+			/* Exit on error */
+			daemon_retval_done();
+			return EXIT_FAILURE;
+	
+		} else if (pid) { /* The parent */
+			int ret;
+			/* Wait for 20 seconds for the return value passed from the daemon process */
+			if ((ret = daemon_retval_wait(20)) < 0) {
+				daemon_log(LOG_ERR, "Could not recieve return value from daemon process: %s", strerror(errno));
+				return EXIT_FAILURE;
+			}
+	
+			if (ret) {
+				daemon_log(LOG_ERR, "Daemon returned %i as return value.", ret);
+			}
+			return ret;
+		} else { /* The daemon */
+	
+			/* Close FDs */
+			if (daemon_close_all(-1) < 0) {
+				daemon_log(LOG_ERR, "Failed to close all file descriptors: %s", strerror(errno));
+	
+				/* Send the error condition to the parent process */
+				daemon_retval_send(1);
+				goto finish;
+			}
+	
+			rc=chdir(glovars.proxy_datadir);
+			if (rc) {
+				daemon_log(LOG_ERR, "Could not chdir into datadir: %s . Error: %s", glovars.proxy_datadir, strerror(errno));
+				return EXIT_FAILURE;
+			}
+			/* Create the PID file */
+			if (daemon_pid_file_create() < 0) {
+				daemon_log(LOG_ERR, "Could not create PID file (%s).", strerror(errno));
+				daemon_retval_send(2);
+				goto finish;
+			}
+	
+	
+	
+			/* Send OK to parent process */
+			daemon_retval_send(0);
+			errfd=open(glovars.proxy_errorlog, O_WRONLY | O_APPEND | O_CREAT , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+			assert(errfd>0);
+			dup2(errfd, STDERR_FILENO);
+			close(errfd);
+	
+			proxy_error("Starting ProxySQL\n");
+			daemon_log(LOG_INFO, "Sucessfully started");
+			
+		}
 	}
-
 	laststart=0;
 	if (glovars.proxy_restart_on_error) {
 gotofork:
