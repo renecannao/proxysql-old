@@ -400,47 +400,48 @@ int main(int argc, char **argv) {
 	}
 
 	laststart=0;
+	if (glovars.proxy_restart_on_error) {
 gotofork:
-	if (laststart) {
-		proxy_error("Angel process is waiting %d seconds before starting a new ProxySQL process\n", glovars.proxy_restart_delay);
-		sleep(glovars.proxy_restart_delay);
-	}
-	laststart=time(NULL);
-	pid = fork();
-	if (pid < 0) {
-		proxy_error("[FATAL]: Error in fork()\n");
-		return EXIT_FAILURE;
-	}
-	
-	if (pid) {
-		int status;
-		proxy_error("Angel process started ProxySQL process %d\n", pid);
-		rc=waitpid(pid, &status, 0);
-		if (rc==-1) {
-			perror("waitpid");
-			//proxy_error("[FATAL]: waitpid: %s\n", perror("waitpid"));
+		if (laststart) {
+			proxy_error("Angel process is waiting %d seconds before starting a new ProxySQL process\n", glovars.proxy_restart_delay);
+			sleep(glovars.proxy_restart_delay);
+		}
+		laststart=time(NULL);
+		pid = fork();
+		if (pid < 0) {
+			proxy_error("[FATAL]: Error in fork()\n");
 			return EXIT_FAILURE;
 		}
-		rc=WIFEXITED(status);
-		if (rc) { // client exit()ed
-			rc=WEXITSTATUS(status);
-			if (rc==0) {
-				proxy_error("Shutdown angel process\n");
-				if (glovars.http_start) {
-					int rc=system("pkill -f proxysqlHTTPd");
-					assert(rc>=0);
-				}
-				return 0;
-				} else {
-					proxy_error("ProxySQL exited with code %d . Restarting!\n", rc);
-					goto gotofork;
-				}
-		} else {
-			proxy_error("ProxySQL crashed. Restarting!\n");
-			goto gotofork;
+		
+		if (pid) {
+			int status;
+			proxy_error("Angel process started ProxySQL process %d\n", pid);
+			rc=waitpid(pid, &status, 0);
+			if (rc==-1) {
+				perror("waitpid");
+				//proxy_error("[FATAL]: waitpid: %s\n", perror("waitpid"));
+				return EXIT_FAILURE;
+			}
+			rc=WIFEXITED(status);
+			if (rc) { // client exit()ed
+				rc=WEXITSTATUS(status);
+				if (rc==0) {
+					proxy_error("Shutdown angel process\n");
+					if (glovars.http_start) {
+						int rc=system("pkill -f proxysqlHTTPd");
+						assert(rc>=0);
+					}
+					return 0;
+					} else {
+						proxy_error("ProxySQL exited with code %d . Restarting!\n", rc);
+						goto gotofork;
+					}
+			} else {
+				proxy_error("ProxySQL crashed. Restarting!\n");
+				goto gotofork;
+			}
 		}
 	}
-
 	if (glovars.http_start) {
 		pid = fork();
 		if (!pid) {
