@@ -38,7 +38,7 @@ int listen_on_unix(char *path) {
 		PANIC("Bind - Unix");
 	if ( listen(sd, glovars.backlog) != 0 )
 		PANIC("Listen - Unix");
-
+	r=fchmod(sd, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
 	return sd;
 }
 

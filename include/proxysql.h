@@ -20,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <netdb.h>
 #include <sys/syscall.h>
+#include <sys/stat.h>
 
 #include <signal.h>
 #include <errno.h>

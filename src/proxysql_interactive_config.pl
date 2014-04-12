@@ -90,8 +90,8 @@ proxy_admin_port=$proxycfg{'proxy_admin_port'}
 proxy_admin_user=$proxycfg{'proxy_admin_user'}
 proxy_admin_password=$proxycfg{'proxy_admin_password'}
 proxy_admin_refresh_status_interval=$proxycfg{'proxy_admin_refresh_status_interval'}
-sync_to_disk_on_flush_command=$proxycfg{'sync_to_disk_on_flush_command'}
-sync_to_disk_on_shutdown=$proxycfg{'sync_to_disk_on_shutdown'}
+sync_to_disk_on_flush_command=$defaults{'sync_to_disk_on_flush_command'}
+sync_to_disk_on_shutdown=$defaults{'sync_to_disk_on_shutdown'}
 
 
 [mysql]
@@ -116,8 +116,8 @@ mysql_usage_password=$proxycfg{'mysql_usage_password'}
 $proxycfg{'mysql_users'}
 
 [fundadb]
-fundadb_hash_purge_threshold_pct_min=$proxycfg{'fundadb_hash_purge_threshold_pct_min'}
-fundadb_hash_purge_threshold_pct_max=$proxycfg{'fundadb_hash_purge_threshold_pct_max'}
+fundadb_hash_purge_threshold_pct_min=$defaults{'fundadb_hash_purge_threshold_pct_min'}
+fundadb_hash_purge_threshold_pct_max=$defaults{'fundadb_hash_purge_threshold_pct_max'}
 
 [debug]
 debug_generic=$dbglvl
@@ -349,7 +349,7 @@ do {
   my $input = <STDIN>;
   chomp $input;
   if ( ( $input =~ /^\d+$/ ) && ( $input >= 2 ) && ( $input <= 64 ) ) { $proxycfg{'mysql_hostgroups'}=$input }
-  if ( $input =~ /^$/ ) { $proxycfg{''}=$defaults{'mysql_hostgroups'} }
+  if ( $input =~ /^$/ ) { $proxycfg{'mysql_hostgroups'}=$defaults{'mysql_hostgroups'} }
 } until (defined $proxycfg{'mysql_hostgroups'});
 do {
 	print "\tmysql_poll_timeout (100-1000000) [$defaults{'mysql_poll_timeout'}]: ";

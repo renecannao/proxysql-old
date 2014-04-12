@@ -63,6 +63,17 @@ Install
 
 **make install** is not available yet.
 
+You can manually install proxysql running the follows::
+
+  cp proxysql /usr/bin
+  mkdir /var/run/proxysql
+
+
+Interactive configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After compiling, run *./proxysql_interactive_config.pl* that will guide you in the creation of the first configuration file.
+Once completed, copy the configuration file in /etc/proxysql.cnf .
 
 
 Usage
