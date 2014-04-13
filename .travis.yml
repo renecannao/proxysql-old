@@ -1,0 +1,12 @@
+language: c
+
+compiler: gcc
+
+script:
+  - cd src && make
+
+notification:
+  email: false
+
+git:
+  depth: 1
