@@ -260,6 +260,7 @@ struct _mysql_backend_t {
 	// attributes
 	int fd;
 	MSHGE *mshge;
+	mysql_connpool *last_mysql_connpool;
 	mysql_data_stream_t *server_myds;
 	mysql_cp_entry_t *server_mycpe;
 	bytes_stats server_bytes_at_cmd;
@@ -292,7 +293,7 @@ struct _mysql_session_t {
 //	mysql_data_stream_t *server_myds;
 //	mysql_cp_entry_t *server_mycpe;
 	mysql_backend_t *server_mybe;
-	mysql_connpool *last_mysql_connpool;
+//	mysql_connpool *last_mysql_connpool;
 	LPtrArray *mybes;
 
 //	mysql_cp_entry_t *idle_server_mycpe;

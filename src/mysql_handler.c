@@ -287,7 +287,7 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 	}
 	if (mybe->server_mycpe==NULL) {
 		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Backend for session %p hostgroup %d has no server_mycpe\n", sess, hostgroup_id);
-		mybe->server_mycpe=mysql_connpool_get_connection(MYSQL_CONNPOOL_LOCAL, &sess->last_mysql_connpool, mybe->mshge->MSptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->mshge->MSptr->port);
+		mybe->server_mycpe=mysql_connpool_get_connection(MYSQL_CONNPOOL_LOCAL, &mybe->last_mysql_connpool, mybe->mshge->MSptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, mybe->mshge->MSptr->port);
 		if (mybe->server_mycpe==NULL) {
 			if (--retries) {
 				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Unable to connect to %s:%d from hostgroup %d, %s retries left\n", mybe->mshge->MSptr->address, mybe->mshge->MSptr->port, hostgroup_id, retries);

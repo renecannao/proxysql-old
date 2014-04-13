@@ -24,6 +24,7 @@ static inline int backend_reset_server_myds(mysql_backend_t *mybe) {
 }
 
 static void backend_detach(mysql_backend_t *mybe, mysql_connpool **mcp, int fc) {
+	mybe->last_mysql_connpool=NULL;
 	if (glovars.mysql_share_connections==0) {
 		return;
 	}
@@ -37,6 +38,7 @@ static void backend_reset(mysql_backend_t *mybe, mysql_connpool **mcp, int force
 	mybe->fd=0;
 	int fc=force_close;
 	int rc;
+	mybe->last_mysql_connpool=NULL;
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Reset MySQL backend %p\n", mybe);
 	if (mybe->mshge && mybe->mshge->MSptr) {
 		// without the IF , this can cause SIGSEGV
@@ -58,6 +60,7 @@ mysql_backend_t *mysql_backend_new() {
 	mysql_backend_t *mybe=g_slice_alloc0(sizeof(mysql_backend_t));
 	mybe->bereset=backend_reset;
 	mybe->bedetach=backend_detach;
+	mybe->last_mysql_connpool=NULL;
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Created new MySQL backend, addr %p\n", mybe);
 	return mybe;
 }

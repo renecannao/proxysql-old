@@ -84,7 +84,7 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 				mysql_close(sess->server_mybe->server_mycpe->conn);  // drop the connection
 				sess->server_mybe->server_mycpe=NULL;
 			}
-			mycpe=mysql_connpool_get_connection(MYSQL_CONNPOOL_LOCAL, &sess->last_mysql_connpool, sess->server_mybe->mshge->MSptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_mybe->mshge->MSptr->port);   // re-establish a new connection	
+//			mycpe=mysql_connpool_get_connection(MYSQL_CONNPOOL_LOCAL, &sess->last_mysql_connpool, sess->server_mybe->mshge->MSptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_mybe->mshge->MSptr->port);   // re-establish a new connection	--- FIXME: bugged
 			// try it
 			if (mycpe) {
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Obtained mysql connection on fd %d\n", mycpe->conn->net.fd);
@@ -282,7 +282,7 @@ void mysql_connpool_detach_connection(int cp_scope, mysql_connpool **mcp_ref, my
 	mysql_con=mc->conn;
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Detaching connection for %s %s %s %d, fd %d\n", mc->conn->host, mc->conn->user, mc->conn->db, mc->conn->port, mc->conn->net.fd);
 	mysql_connpool *mcp=NULL;
-	if (*mcp_ref) {
+	if (*mcp_ref==NULL) {
 		mcp=mysql_connpool_find_or_create(cp, mysql_con->host, mysql_con->user, mysql_con->passwd, mysql_con->db, mysql_con->port);
 	} else {
 		mcp=*mcp_ref;
@@ -302,7 +302,7 @@ void mysql_connpool_detach_connection(int cp_scope, mysql_connpool **mcp_ref, my
 			g_ptr_array_add(mcp->free_conns,mc);
 		}	
 	}
-	*mcp_ref=mcp;
+//	*mcp_ref=mcp;
 }
 
 

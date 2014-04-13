@@ -89,7 +89,9 @@ static inline void server_COM_STATISTICS(mysql_session_t *sess, pkt *p) {
 }
 
 static inline void server_COM_INIT_DB(mysql_session_t *sess, pkt *p, enum MySQL_response_type r) {
-	sess->last_mysql_connpool=NULL;
+	if (sess->server_mybe) {
+		sess->server_mybe->last_mysql_connpool=NULL;
+	}
 	if (r==OK_Packet) {
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got OK on COM_INIT_DB for schema %s\n", sess->mysql_schema_new);
 		if (sess->mysql_schema_cur) {
@@ -129,7 +131,7 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 								mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,i);
 								//    mybe->reset(mybe, sess->force_close_backends);  // commented for multiplexing
 								if (ACTIVE_TRANSACTION(sess)==0) {
-									mybe->bedetach(mybe, &sess->last_mysql_connpool, 0);
+									mybe->bedetach(mybe, &mybe->last_mysql_connpool, 0);
 								}
 								//glomybepools.detach(mybe, i, sess->force_close_backends);
 								//sess->server_mybe=NULL;
@@ -166,7 +168,7 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 								mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,i);
 								//    mybe->reset(mybe, sess->force_close_backends);  // commented for multiplexing
 								if (ACTIVE_TRANSACTION(sess)==0) {
-									mybe->bedetach(mybe, &sess->last_mysql_connpool, 0);
+									mybe->bedetach(mybe, &mybe->last_mysql_connpool, 0);
 								}
 								//glomybepools.detach(mybe, i, sess->force_close_backends);
 								//sess->server_mybe=NULL;
@@ -516,12 +518,13 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Resetting default_hostgroup from %d to -1 in session %p\n", sess->default_hostgroup, sess);
 		sess->default_hostgroup=-1;
 		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Old schemaname (%s) and new schemaname (%s) are NOT identical: resetting\n", sess->mysql_schema_cur, sess->mysql_schema_new);
-		sess->last_mysql_connpool=NULL;
+		//sess->last_mysql_connpool=NULL;
 		if ( (sess->server_mybe) && (sess->server_mybe->server_mycpe) &&
 			(sess->server_mybe->mshge) && (sess->server_mybe->mshge->MSptr) &&
 			(sess->server_mybe->server_myds) && (sess->server_mybe->server_myds->fd)) {
 				proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Disconnecting backend for hostgroup 0 : %p\n", sess->server_mybe);
-				sess->server_mybe->bereset(sess->server_mybe, &sess->last_mysql_connpool, 0);
+				sess->server_mybe->last_mysql_connpool=NULL;
+				sess->server_mybe->bereset(sess->server_mybe, &sess->server_mybe->last_mysql_connpool, 0);
 		}
 		PROXY_TRACE();
 		int j;
@@ -529,7 +532,8 @@ static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 		for (j=0; j<glovars.mysql_hostgroups; j++) {
 			proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Disconnecting backend for hostgroup %d : %p\n", j, sess->server_mybe);
 			mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,j);
-			mybe->bereset(mybe, &sess->last_mysql_connpool, 0);
+			mybe->last_mysql_connpool=NULL;
+			mybe->bereset(mybe, &mybe->last_mysql_connpool, 0);
 		}
 		sess->server_mybe=NULL;
 		PROXY_TRACE();
@@ -753,7 +757,7 @@ static int process_client_pkts(mysql_session_t *sess) {
 				// disconnect the backend and get a new one
 				proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "MySQL server %s:%d is OFFLINE_SOFT, disconnect\n", mybe->mshge->MSptr->address, mybe->mshge->MSptr->port);
 				//reset_mysql_backend(mybe,0);
-				mybe->bereset(mybe, &sess->last_mysql_connpool, 0);
+				mybe->bereset(mybe, &mybe->last_mysql_connpool, 0);
 				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
 				if (mybe->mshge->MSptr==NULL) {
 					// FIXME
@@ -794,13 +798,13 @@ static int remove_all_backends_offline_soft(mysql_session_t *sess) {
 					if (mybe==sess->server_mybe) {
 						proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 3, "Removing inactive backend from session %p , backend %p , hostgroup %d , server %s:%d\n", sess, mybe, j, mybe->mshge->MSptr->address, mybe->mshge->MSptr->port);
 						//reset_mysql_backend(mybe,0);
-						mybe->bereset(mybe, &sess->last_mysql_connpool, 0);
+						mybe->bereset(mybe, &mybe->last_mysql_connpool, 0);
 					} else {
 						if (sess->server_bytes_at_cmd.bytes_sent==sess->server_mybe->server_myds->bytes_info.bytes_sent) {
 							if (sess->server_bytes_at_cmd.bytes_recv==sess->server_mybe->server_myds->bytes_info.bytes_recv) {
 								//reset_mysql_backend(mybe,0);
 								proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 3, "Removing active(current) backend from session %p , backend %p , hostgroup %d , server %s:%d\n", sess, mybe, j, mybe->mshge->MSptr->address, mybe->mshge->MSptr->port);
-								mybe->bereset(mybe, &sess->last_mysql_connpool, 0);
+								mybe->bereset(mybe, &mybe->last_mysql_connpool, 0);
 								//sess->server_myds=NULL;
 								//sess->server_mycpe=NULL;
 							}
@@ -855,7 +859,7 @@ static void inline __mysql_session__free_backends(mysql_session_t *sess) {
 	for (i=0; i<glovars.mysql_hostgroups; i++) {
 		mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,i);
 		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 6, "Freeing mysql backend %p for session %p, hostgroup %d\n", sess, mybe, i);
-		mybe->bereset(mybe, &sess->last_mysql_connpool, sess->force_close_backends);
+		mybe->bereset(mybe, &mybe->last_mysql_connpool, sess->force_close_backends);
 	}
 
 	while (sess->mybes->len) {
@@ -997,7 +1001,7 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	sess->mysql_password=NULL;
 	sess->mysql_schema_cur=NULL;
 	sess->mysql_schema_new=NULL;
-	sess->last_mysql_connpool=NULL;
+	//sess->last_mysql_connpool=NULL;
 	sess->server_bytes_at_cmd.bytes_sent=0;
 	sess->server_bytes_at_cmd.bytes_recv=0;
 
