@@ -316,6 +316,15 @@ int main(int argc, char **argv) {
 	glo_debug->sfp=l_mem_init();
 #endif
 
+#ifdef PROXYMEMTRACK
+	__mem_l_alloc_size=0;
+	__mem_l_alloc_count=0;
+	__mem_l_free_size=0;
+	__mem_l_free_count=0;
+	__mem_l_memalign_size=0;
+	__mem_l_memalign_count=0;
+#endif
+
 
 	mtrace();
 	rc=pthread_key_create(&tsd_key, NULL);

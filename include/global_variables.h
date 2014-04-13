@@ -12,6 +12,15 @@
 EXTERN glo_debug_t *glo_debug;
 #endif
 
+#ifdef PROXYMEMTRACK
+EXTERN long long __mem_l_alloc_size;
+EXTERN long long __mem_l_alloc_count;
+EXTERN long long __mem_l_free_size;
+EXTERN long long __mem_l_free_count;
+EXTERN long long __mem_l_memalign_size;
+EXTERN long long __mem_l_memalign_count;
+#endif
+
 //EXTERN static pthread_key_t tsd_key;
 extern __thread l_sfp *__thr_sfp;
 extern __thread myConnPools __thr_myconnpool;

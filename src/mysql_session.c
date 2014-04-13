@@ -863,8 +863,8 @@ static void inline __mysql_session__free_backends(mysql_session_t *sess) {
 	}
 
 	while (sess->mybes->len) {
-		/*mysql_backend_t *mybe=*/l_ptr_array_remove_index_fast(sess->mybes,0); // commented to avoid compiler warning
-//		mysql_backend_delete(mybe);  // commented for multiplexing
+		mysql_backend_t *mybe=l_ptr_array_remove_index_fast(sess->mybes,0); // commented to avoid compiler warning
+		mysql_backend_delete(mybe);  // commented for multiplexing
 	}
 	l_ptr_array_free1(sess->mybes);
 }

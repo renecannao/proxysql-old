@@ -4,6 +4,17 @@
 #include "lutils.h"
 #include <stdio.h>
 
+#ifdef PROXYMEMTRACK
+extern long long __mem_l_alloc_size;
+extern long long __mem_l_alloc_count;
+extern long long __mem_l_free_size;
+extern long long __mem_l_free_count;
+extern long long __mem_l_memalign_size;
+extern long long __mem_l_memalign_count;
+#endif
+
+
+
 static unsigned int l_near_pow_2 (int n) {
 	unsigned int i = 1;
 	while (i < n) i <<= 1;
@@ -22,6 +33,10 @@ static void * __x_memalign(size_t size) {
 	void *m;
 	rc=posix_memalign(&m, sysconf(_SC_PAGESIZE), size);
 	assert(rc==0);
+#ifdef PROXYMEMTRACK
+	__sync_fetch_and_add(&__mem_l_memalign_size,size);
+	__sync_fetch_and_add(&__mem_l_memalign_count,1);
+#endif
 	return m;
 }
 
@@ -123,6 +138,10 @@ void * __l_alloc(l_sfp *sfp, size_t size) {
 	if (size>L_SFC_MAX_ELEM_SIZE) {
 		return __x_malloc(size);
 	}
+#ifdef PROXYMEMTRACK
+	__sync_fetch_and_add(&__mem_l_alloc_size,size);
+	__sync_fetch_and_add(&__mem_l_alloc_count,1);
+#endif
 	void *p;
 	int i;
 	i=L_SFP_ARRAY_LEN-1;
@@ -163,6 +182,10 @@ void __l_free(l_sfp *sfp, size_t size, void *p) {
 		free(p);
 		return;
 	}
+#ifdef PROXYMEMTRACK
+	__sync_fetch_and_add(&__mem_l_free_size,size);
+	__sync_fetch_and_add(&__mem_l_free_count,1);
+#endif
 	int i;
 	for (i=L_SFP_ARRAY_LEN-1 ; i>=0 ; i-- ) {
 		if (size*2>sfp->sfc[i].elem_size || i==0) {
