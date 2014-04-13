@@ -33,6 +33,9 @@
 #binary
 proxysql
 
+#core
+core
+
 #config
 proxysql.cnf*
 
