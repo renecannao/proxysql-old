@@ -131,7 +131,9 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 								mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,i);
 								//    mybe->reset(mybe, sess->force_close_backends);  // commented for multiplexing
 								if (ACTIVE_TRANSACTION(sess)==0) {
-									mybe->bedetach(mybe, &mybe->last_mysql_connpool, 0);
+									if (glovars.mysql_share_connections==1) {
+										mybe->bedetach(mybe, &mybe->last_mysql_connpool, 0);
+									}
 								}
 								//glomybepools.detach(mybe, i, sess->force_close_backends);
 								//sess->server_mybe=NULL;
@@ -168,7 +170,9 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 								mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,i);
 								//    mybe->reset(mybe, sess->force_close_backends);  // commented for multiplexing
 								if (ACTIVE_TRANSACTION(sess)==0) {
-									mybe->bedetach(mybe, &mybe->last_mysql_connpool, 0);
+									if (glovars.mysql_share_connections==1) {
+										mybe->bedetach(mybe, &mybe->last_mysql_connpool, 0);
+									}
 								}
 								//glomybepools.detach(mybe, i, sess->force_close_backends);
 								//sess->server_mybe=NULL;

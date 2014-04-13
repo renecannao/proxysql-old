@@ -25,9 +25,10 @@ static inline int backend_reset_server_myds(mysql_backend_t *mybe) {
 
 static void backend_detach(mysql_backend_t *mybe, mysql_connpool **mcp, int fc) {
 	mybe->last_mysql_connpool=NULL;
+	/* for optimization, the calling function should check that
 	if (glovars.mysql_share_connections==0) {
 		return;
-	}
+	} */
 	if (mybe->server_mycpe && mybe->server_mycpe->reusable) {
 		proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 7, "Detach MySQL backend, server %s:%d , fd %d\n", mybe->mshge->MSptr->address, mybe->mshge->MSptr->port, mybe->fd);
 		backend_reset_server_mycpe(mybe, mcp, fc);
