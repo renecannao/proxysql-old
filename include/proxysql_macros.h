@@ -40,13 +40,13 @@
 
 #define queue_init(q,s) { \
 	q->size=s; \
-	q->buffer=g_slice_alloc0(q->size); \
+	q->buffer=l_alloc(q->size); \
 	q->head=0; \
 	q->tail=0; \
 }
 
 #define queue_destroy(q) { \
-	g_slice_free1(q->size,q->buffer); \
+	l_free(q->size,q->buffer); \
 }
 
 #define queue_zero(q) { \
