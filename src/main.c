@@ -12,7 +12,7 @@ static gint proxy_mysql_port = 0;
 //static gchar *config_file="proxysql.cnf";
 static gchar *config_file=NULL;
 static gint verbose = -1;
-static gboolean foreground = 0;
+gboolean foreground = 0;
 
 pthread_key_t tsd_key;
 

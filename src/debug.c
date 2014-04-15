@@ -1,6 +1,8 @@
 #include "proxysql.h"
 
 
+extern gboolean foreground;
+
 void crash_handler(int sig) {
 	void *arr[20];
 	size_t s;
@@ -28,9 +30,16 @@ void proxy_debug_func(enum debug_module module, int verbosity, const char *fmt, 
 #ifdef DEBUG
 void proxy_debug_func(enum debug_module module, int verbosity, int thr, const char *__file, int __line, const char *__func, const char *fmt, ...) {
 	assert(module<PROXY_DEBUG_UNKNOWN);
-	//char debugbuff[DEBUG_MSG_MAXSIZE];
 	if (gdbg_lvl[module].verbosity < verbosity) return;
-	//fprintf(stderr, "%d:%s:%d:%s(): LVL#%d : %s" , thr, __file, __line, __func, verbosity, debugbuff);
+	if (foreground) {
+		char debugbuff[DEBUG_MSG_MAXSIZE];
+		va_list ap;
+		va_start(ap, fmt);
+		vsnprintf(debugbuff, DEBUG_MSG_MAXSIZE,fmt,ap);
+		va_end(ap);
+		fprintf(stderr, "%d:%s:%d:%s(): LVL#%d : %s" , thr, __file, __line, __func, verbosity, debugbuff);
+		return;
+	}
 	//dbg_msg_t *dbg_msg=g_slice_alloc(sizeof(dbg_msg_t));
 	SPIN_LOCK(glo_debug->glock);
 	//dbg_msg_t *dbg_msg=g_malloc(sizeof(dbg_msg_t));

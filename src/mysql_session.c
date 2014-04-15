@@ -719,8 +719,12 @@ static int process_client_pkts(mysql_session_t *sess) {
 				if ( (sess->default_hostgroup==-1) || (sess->default_hostgroup_version != __sync_fetch_and_add(&gloDefHG.version,0)) ) {
 					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p has default_hostgroup %d version %d, system version %d\n", sess, sess->default_hostgroup, sess->default_hostgroup_version, gloDefHG.version);
 					sess->query_info.destination_hostgroup=sess->default_hostgroup_func(sess);
+				} else {
+					sess->query_info.destination_hostgroup=sess->default_hostgroup;
 				}
 			}
+			assert(sess->query_info.destination_hostgroup!=-1);
+
 			if (active_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup)==0) {
 				proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Session %p doesn't have a backend for hostgroup %d\n", sess, sess->query_info.destination_hostgroup);
 				mysql_session_create_backend_for_hostgroup(sess, sess->query_info.destination_hostgroup);
