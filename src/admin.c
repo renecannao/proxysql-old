@@ -115,6 +115,13 @@ inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 		return;
 	}
 	if (sess->admin==1) {  // in the admin module, not in the monitoring module
+		if (strncasecmp("FLUSH QUERY CACHE",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
+			int affected_rows=fdb_truncate_all(&QC);
+			pkt *ok=mypkt_alloc();
+			myproto_ok_pkt(ok,1,affected_rows,0,2,0);
+			MY_SESS_ADD_PKT_OUT_CLIENT(ok);
+			return;
+		}
 		if (strncasecmp("FLUSH DEBUG",  p->data+sizeof(mysql_hdr)+1, p->length-sizeof(mysql_hdr)-1)==0) {
 			int affected_rows=sqlite3_flush_debug_levels_db_to_mem(sqlite3admindb);
 			pkt *ok=mypkt_alloc();

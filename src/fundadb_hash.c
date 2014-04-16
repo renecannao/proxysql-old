@@ -143,6 +143,21 @@ void fdb_hashes_new(fdb_hashes_group_t *hg, size_t size, unsigned int hash_expir
 }
 
 
+long long fdb_truncate_all(fdb_hashes_group_t *hg) {
+	unsigned char i;
+	long long totsize=0;
+	for (i=0; i<hg->size; i++) {
+		pthread_rwlock_wrlock(&hg->fdb_hashes[i]->lock);
+	}
+	for (i=0; i<hg->size; i++) {
+		totsize+=g_hash_table_size(hg->fdb_hashes[i]->hash);
+		g_hash_table_remove_all(hg->fdb_hashes[i]->hash);
+	}
+	for (i=0; i<hg->size; i++) {	
+		pthread_rwlock_unlock(&hg->fdb_hashes[i]->lock);
+	}
+	return totsize;
+}
 
 void *purgeHash_thread(void *arg) {
 	long long min_idx=0;

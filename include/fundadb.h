@@ -77,6 +77,7 @@ gboolean fdb_set(fdb_hashes_group_t * , void *, unsigned int , void *, unsigned 
 long long fdb_del(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 inline void hash_value_destroy_func(void *);
 void fdb_hashes_new(fdb_hashes_group_t *, size_t, unsigned int, unsigned long long);
+long long fdb_truncate_all(fdb_hashes_group_t *);
 void *purgeHash_thread(void *);
 long long fdb_hash_init(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error);
 long long fdb_hashes_group_free_mem(fdb_hashes_group_t *);
