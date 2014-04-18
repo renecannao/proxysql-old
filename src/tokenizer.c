@@ -304,10 +304,15 @@ void process_query_stats(mysql_session_t *sess){
 	*p_r = 0;
 
 	// process query stats
+	// last changed at 20140418 - by chan
 	if(*r){
 		// to save memory usage
-		char *r2 = g_strdup(r);
+		int slen = len + strlen(sess->mysql_username) + strlen(sess->mysql_schema_cur)+ SIZECHAR + 2;
+		char *r2 = (char *) g_malloc(slen);
+
+		snprintf(r2, slen, "%s\t%s\t%s", sess->mysql_username, sess->mysql_schema_cur, r);
 		g_free(r);
+
 		char *md5 = str2md5(r2);
 		proxy_debug(PROXY_DEBUG_GENERIC, 1,  "%s => %s\n", md5, r2);
 		qr_set(md5, r2);

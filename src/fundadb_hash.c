@@ -244,6 +244,7 @@ void qr_hashes_new(qr_hash_t *ht){
 }
 
 // Increase executed count - search target with hash key
+// last changed at 20140418 - by chan
 void qr_set(char * key, char * value){
 	qr_hash_t *ht = &QR_HASH_T;
 	pthread_rwlock_wrlock(&(ht->lock));
@@ -254,23 +255,35 @@ void qr_set(char * key, char * value){
 		entry->value = value;
 		entry->exec_cnt = 0;
 		g_hash_table_insert(ht->c_hash, entry->key, entry);
+	}else{
+		// free duplicated key and value
+		// added by chan
+		g_free(key);
+		g_free(value);
 	}
 	entry->exec_cnt++;
 	pthread_rwlock_unlock(&(ht->lock));
 }
 
 // Print query stats - needed to write on log file
+// last changed at 20140418 - by chan
 inline void flush_query_stats (gpointer key, gpointer user_data){
 	qr_hash_t *ht = &QR_HASH_T;
 	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
-	fprintf(stderr, "===>\n%s\n%s\n%d\n", entry->key, entry->value, entry->exec_cnt);
+	fprintf(stderr, "%s\t%d\t%s\n", entry->key, entry->exec_cnt, entry->value);
 }
 
 // Report query stat result 
+// last changed at 20140418 - by chan
 void *qr_report_thread(void *arg){
 	qr_hash_t *ht = arg;
 	while(glovars.shutdown==0) {
 		sleep(glovars.mysql_query_statistics_interval);
+		char __buffer[25];
+		time_t curtime = time (NULL);
+		struct tm *__tm_info=localtime(&curtime);
+		strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
+		fprintf(stderr, "%s\n", __buffer);
 		if (glovars.mysql_query_statistics) {
 			pthread_rwlock_wrlock(&(ht->lock));
 			GHashTable *t_hash = ht->p_hash;
