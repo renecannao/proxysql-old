@@ -13,15 +13,6 @@ extern long long __mem_l_memalign_size;
 extern long long __mem_l_memalign_count;
 #endif
 
-static inline uint32_t _log2(const uint32_t x) {
-	uint32_t y;
-	asm ( "\tbsr %1, %0\n"
-      : "=r"(y)
-      : "r" (x)
-	);
-	return y;
-}
-
 static unsigned int l_near_pow_2 (int n) {
 	unsigned int i = 1;
 	while (i < n) i <<= 1;
@@ -174,22 +165,26 @@ void * __l_alloc(l_sfp *sfp, size_t size) {
 #endif
 	void *p;
 	int i;
-	i=_log2(size)-3;
-	if (i<0) i=0;
-	p=l_stack_pop(&sfp->sfc[i].stack);
-	if (p) {
-		return p;
+	for (i=L_SFP_ARRAY_LEN-1 ; i>=0 ; i-- ) {
+		if (size*2>sfp->sfc[i].elem_size || i==0) {
+			p=l_stack_pop(&sfp->sfc[i].stack);
+			if (p) {
+				return p;
+			}
+			void *m=__x_memalign(L_SFC_MEM_BLOCK_SIZE);
+			__add_mem_block(&sfp->sfc[i],m);
+			__push_mem_block(&sfp->sfc[i],m);
+			sfp->sfc[i].alloc_cnt+=L_SFC_MEM_BLOCK_SIZE/sfp->sfc[i].elem_size;
+			sfp->sfc[i].free_cnt+=L_SFC_MEM_BLOCK_SIZE/sfp->sfc[i].elem_size;
+			p=l_stack_pop(&sfp->sfc[i].stack);
+			return p;
+		}
 	}
-	void *m=__x_memalign(L_SFC_MEM_BLOCK_SIZE);
-	__add_mem_block(&sfp->sfc[i],m);
-	__push_mem_block(&sfp->sfc[i],m);
-	sfp->sfc[i].alloc_cnt+=L_SFC_MEM_BLOCK_SIZE/sfp->sfc[i].elem_size;
-	sfp->sfc[i].free_cnt+=L_SFC_MEM_BLOCK_SIZE/sfp->sfc[i].elem_size;
-	p=l_stack_pop(&sfp->sfc[i].stack);
-	return p;
+	return NULL;
 }
 
 void * l_alloc(size_t size) {
+//	return malloc(size);
 	return __l_alloc(__thr_sfp,size);
 }
 
@@ -285,21 +280,24 @@ void __l_free(l_sfp *sfp, size_t size, void *p) {
 	__sync_fetch_and_add(&__mem_l_free_count,1);
 #endif
 	int i;
-	i=_log2(size)-3;
-	if (i<0) i=0;
-	l_stack_push(&sfp->sfc[i].stack,p);
-	sfp->sfc[i].free_cnt++;
-	sfp->sfc[i].__mem_l_free_count++;
+	for (i=L_SFP_ARRAY_LEN-1 ; i>=0 ; i-- ) {
+		if (size*2>sfp->sfc[i].elem_size || i==0) {
+			l_stack_push(&sfp->sfc[i].stack,p);
+			sfp->sfc[i].free_cnt++;
+			sfp->sfc[i].__mem_l_free_count++;
 /*
-	if ((sfp->sfc[i].__mem_l_free_count%(L_SFC_MEM_BLOCK_SIZE)==0) && (sfp->sfc[i].blocks_cnt>16) && (sfp->sfc[i].free_cnt > sfp->sfc[i].alloc_cnt * 990/1000)) {
-		compact_mem(&sfp->sfc[i]);
-		fprintf(stderr,"%d\n",(int)sfp->sfc[i].__mem_l_free_count);
-		sfp->sfc[i].__mem_l_free_count=0;
-	}
+			if ((sfp->sfc[i].__mem_l_free_count%(L_SFC_MEM_BLOCK_SIZE)==0) && (sfp->sfc[i].blocks_cnt>16) && (sfp->sfc[i].free_cnt > sfp->sfc[i].alloc_cnt * 990/1000)) {
+				compact_mem(&sfp->sfc[i]);
+				fprintf(stderr,"%d\n",(int)sfp->sfc[i].__mem_l_free_count);
+				sfp->sfc[i].__mem_l_free_count=0;
+			}
 */
-	return;
+			return;
+		}
+	}
 }
 
 void l_free(size_t size, void *p) {
+//	free(p);
 	__l_free(__thr_sfp,size,p);
 }
