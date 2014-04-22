@@ -14,12 +14,10 @@
 #define l_ptr_array_free1(array) { if (array->pdata) l_free(sizeof(void *)*array->size,array->pdata); l_free(sizeof(LPtrArray),array); }
 
 
-#define L_SFC_MIN_ELEM_SIZE	16
-#define L_SFC_MID_ELEM_SIZE	256
-#define L_SFC_MAX_ELEM_SIZE	8192
-#define L_SFP_ARRAY_MID	5
-#define L_SFP_ARRAY_LEN	10
-#define L_SFC_MEM_BLOCK_SIZE 65536
+#define L_SFC_MIN_ELEM_SIZE	8
+#define L_SFC_MAX_ELEM_SIZE	32
+#define L_SFP_ARRAY_LEN	3
+#define L_SFC_MEM_BLOCK_SIZE 262144
 typedef struct _l_stack_t l_stack;
 typedef struct _l_super_free_chunk_t l_sfc;
 #ifndef L_SFP
@@ -45,6 +43,10 @@ struct _l_super_free_chunk_t {
 	void **mem_blocks;
 	size_t elem_size;
 	size_t blocks_cnt;
+	size_t alloc_cnt;
+	size_t free_cnt;
+	size_t __mem_l_free_count;
+
 };
 
 struct _l_super_free_pool_t {
