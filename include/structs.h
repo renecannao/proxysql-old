@@ -275,7 +275,7 @@ struct __change_user_info_t {
 	char *mysql_username;
 	char *mysql_schema;
 	char scramble_buf[21];
-}
+};
 
 struct _mysql_session_t {
 	proxy_mysql_thread_t *handler_thread;
@@ -407,6 +407,8 @@ typedef struct _global_variables {
 	char *mysql_socket;
 	char *proxy_datadir;
 	char *proxy_admin_pathdb;
+	char *persistent_statistics_pathdb;
+	char *debug_pathdb;
 	char *proxy_pidfile;
 	char *proxy_errorlog;
 	char *proxy_debuglog;

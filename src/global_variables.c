@@ -26,6 +26,9 @@ static global_variable_entry_t glo_entries[]= {
 	{"admin", "sync_to_disk_on_flush_command", G_OPTION_ARG_INT, &glovars.admin_sync_disk_on_flush, "sync configuration to disk after every FLUSH command", 0, 1 , 0, 0, 1, NULL, NULL, NULL},
 	{"admin", "sync_to_disk_on_shutdown", G_OPTION_ARG_INT, &glovars.admin_sync_disk_on_shutdown, "sync configuration to disk during graceful shutdown", 0, 1 , 0, 0, 1, NULL, NULL, NULL},
 
+	{"admin", "persistent_statistics_pathdb", G_OPTION_ARG_STRING, &glovars.persistent_statistics_pathdb, "Path to internal DB used for persistent statistics", 0, 0, 0, 0, 0, "querystats.db", NULL, NULL},
+	{"admin", "debug_pathdb", G_OPTION_ARG_STRING, &glovars.debug_pathdb, "Path to internal DB used for debugging logging", 0, 0, 0, 0, 0, "debug.db", NULL, NULL},
+
 	{"http", "http_start", G_OPTION_ARG_INT, &glovars.http_start, "start HTTP server", 0, 1 , 0, 0, 0, NULL, NULL, NULL},
 
 	{"mysql", "proxy_mysql_port", G_OPTION_ARG_INT, &glovars.proxy_mysql_port, "mysql port", 0, 65535, 0, 0, 6033, NULL, NULL, NULL},

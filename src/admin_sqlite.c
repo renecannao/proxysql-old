@@ -671,10 +671,38 @@ void admin_init_sqlite3() {
 		assert(i==0);
 	}
 
+	// create sqlite3statsdb DB
+	i = sqlite3_open_v2(glovars.persistent_statistics_pathdb, &sqlite3statsdb, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX , NULL);
+	if(i){
+		proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Error on sqlite3_open(): %s\n", sqlite3_errmsg(sqlite3statsdb));
+		assert(i==0);
+	}
+
+	// create sqlite3debugdb DB
+	i = sqlite3_open_v2(glovars.debug_pathdb, &sqlite3debugdb, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX , NULL);
+	if(i){
+		proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Error on sqlite3_open(): %s\n", sqlite3_errmsg(sqlite3debugdb));
+		assert(i==0);
+	}
+
+
+
 	// apply PRAGMAs to sqlite3configdb
 	for (i=0;i<4;i++) {
 		proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: %s\n", s[i]);
 		sqlite3_exec_exit_on_failure(sqlite3configdb, s[i]);
+	}
+
+	// apply PRAGMAs to sqlite3statsdb
+	for (i=0;i<4;i++) {
+		proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: %s\n", s[i]);
+		sqlite3_exec_exit_on_failure(sqlite3statsdb, s[i]);
+	}
+
+	// apply PRAGMAs to sqlite3debugdb
+	for (i=0;i<4;i++) {
+		proxy_debug(PROXY_DEBUG_SQLITE, 3, "SQLITE: %s\n", s[i]);
+		sqlite3_exec_exit_on_failure(sqlite3debugdb, s[i]);
 	}
 
 	// set DBs as never updated

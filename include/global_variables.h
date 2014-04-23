@@ -49,6 +49,8 @@ EXTERN shared_trash_stack_t myds_pool;
 EXTERN sqlite3 *sqlite3configdb;
 EXTERN sqlite3 *sqlite3admindb;
 EXTERN sqlite3 *sqlite3monitordb;
+EXTERN sqlite3 *sqlite3statsdb;
+EXTERN sqlite3 *sqlite3debugdb;
 
 EXTERN time_t sqlite3admindb_lastupdate;
 EXTERN time_t sqlite3monitordb_lastupdate;
