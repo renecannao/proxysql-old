@@ -279,12 +279,12 @@ void *qr_report_thread(void *arg){
 	qr_hash_t *ht = arg;
 	while(glovars.shutdown==0) {
 		sleep(glovars.mysql_query_statistics_interval);
-		char __buffer[25];
-		time_t curtime = time (NULL);
-		struct tm *__tm_info=localtime(&curtime);
-		strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
-		fprintf(stderr, "%s\n", __buffer);
 		if (glovars.mysql_query_statistics) {
+			char __buffer[25];
+			time_t curtime = time (NULL);
+			struct tm *__tm_info=localtime(&curtime);
+			strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
+			fprintf(stderr, "%s\n", __buffer);
 			pthread_rwlock_wrlock(&(ht->lock));
 			GHashTable *t_hash = ht->p_hash;
 			ht->p_hash = ht->c_hash;

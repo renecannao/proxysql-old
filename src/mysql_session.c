@@ -489,6 +489,17 @@ static inline void client_COM_STATISTICS(mysql_session_t *sess) {
 	}
 }
 
+
+static inline void client_COM_CHANGE_USER(mysql_session_t *sess, pkt *p) {
+	if (sess->admin>0) {
+	// we shouldn't forward this if we are in admin mode
+		PROXY_TRACE();
+		sess->healthy=0;
+		return;
+	}
+	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got COM_CHANGE_USER packet\n");
+}
+
 static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
 	if (sess->admin>0) {
 	// we shouldn't forward this if we are in admin mode
@@ -685,6 +696,8 @@ static int process_client_pkts(mysql_session_t *sess) {
 					admin_COM_QUERY(sess, p);
 				}
 				break;
+			case MYSQL_COM_CHANGE_USER:
+				client_COM_CHANGE_USER(sess, p);
 			default:
 				if (sess->admin>0) {
 					// we received an unknown packet

@@ -269,6 +269,14 @@ struct _mysql_backend_t {
 	void (*bereset) (mysql_backend_t *, mysql_connpool **, int);
 };
 
+typedef struct __change_user_info_t change_user_info_t;
+
+struct __change_user_info_t {
+	char *mysql_username;
+	char *mysql_schema;
+	char scramble_buf[21];
+}
+
 struct _mysql_session_t {
 	proxy_mysql_thread_t *handler_thread;
 	int healthy;
@@ -304,6 +312,7 @@ struct _mysql_session_t {
 	int default_hostgroup;
 	int default_hostgroup_version;
 	char scramble_buf[21];
+	change_user_info_t *change_user;
 	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
 	int net_failure;
