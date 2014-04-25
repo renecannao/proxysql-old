@@ -24,7 +24,8 @@ Other than standard libraries, required packages, libraries and header files are
 * openssl-devel
 * openssl-static
 * glib2-devel
-
+* zlib-devel
+* libffi-devel
 
 ProxySQL also depends from few libraries that are statically linked.
 To download and compile these libraries, run the follows::
@@ -46,6 +47,12 @@ To download and compile these libraries, run the follows::
   tar -jxf jemalloc-3.6.0.tar.bz2
   cd jemalloc-3.6.0
   ./configure && make
+  cd ..
+  wget http://ftp.gnome.org/pub/gnome/sources/glib/2.40/glib-2.40.0.tar.xz
+  tar -xJf glib-2.40.0.tar.xz
+  cd glib-2.40.0
+  ./configure --enable-static
+  make
   cd ..
 
 

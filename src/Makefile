@@ -1,15 +1,28 @@
+## Use this to compile glib 2.40 statically
+
+#wget http://ftp.gnome.org/pub/gnome/sources/glib/2.40/glib-2.40.0.tar.xz
+#tar -xJf glib-2.40.0.tar.xz
+#cd glib-2.40.0
+#./configure --enable-static
+#make
+#cd ..
+
 MARIADBLIBPATH=../../mariadb-native-client
 DAEMONPATH=../../libdaemon-0.14
-GLIB_CFLAGS=`pkg-config --cflags gthread-2.0`
-GLIB_LIB=`pkg-config --libs gthread-2.0`
+GLIBPATH=../../glib-2.40.0
+JEMALLOCPATH=../../jemalloc-3.6.0
+GLIB_CFLAGS=-pthread -I$(GLIBPATH) -I$(GLIBPATH)/glib -L$(GLIBPATH)/glib/.libs -L$(GLIBPATH)/gthread/.libs
+GLIB_LIB=-pthread -lgthread-2.0 -lglib-2.0
 ODIR= obj
 LDIR=../lib
 IDIR=../include
-IDIRS=-I../include -I../sqlite3 -I$(MARIADBLIBPATH)/include -I$(DAEMONPATH) $(GLIB_CFLAGS)
-LDIRS=-L$(MARIADBLIBPATH)/libmysql -L$(DAEMONPATH)/libdaemon/.libs $(GLIB_CFLAGS)
+IDIRS=-I../include -I../sqlite3 -I$(MARIADBLIBPATH)/include -I$(DAEMONPATH) -I$(JEMALLOCPATH)/include $(GLIB_CFLAGS)
+LDIRS=-L$(MARIADBLIBPATH)/libmysql -L$(DAEMONPATH)/libdaemon/.libs -L$(JEMALLOCPATH)/lib $(GLIB_CFLAGS)
 CC=gcc
 MARIADBAR=$(MARIADBLIBPATH)/libmysql/libmariadbclient.a
 DAEMONAR=$(DAEMONPATH)/libdaemon/.libs/libdaemon.a
+GLIBAR=$(GLIBPATH)/glib/.libs/libglib-2.0.a $(GLIBPATH)/gthread/.libs/libgthread-2.0.a
+JEMALLOCAR=$(JEMALLOCPATH)/lib/libjemalloc.a
 DEBUG=-ggdb -DDEBUG
 O0=-O0
 O2=-O2
@@ -17,7 +30,7 @@ O1=-O1
 O3=-O3 -mtune=native
 OPTZ=$(O0)
 CFLAGS=$(IDIRS) -rdynamic $(OPTZ) $(DEBUG)
-LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -lcrypto -Wl,-Bdynamic -lssl -ldl -lpthread -lm -lz $(GLIB_LIB)
+LIBS=-Wl,-Bstatic -lmariadbclient -ldaemon -ljemalloc -lssl -lcrypto $(GLIB_LIB) -Wl,-Bdynamic -lkrb5 -ldl -lpthread -lm -lz -lrt
 SQLITEOBJ=../sqlite3/sqlite3.o
 EXECUTABLE=proxysql
 
@@ -28,8 +41,8 @@ $(ODIR)/%.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS) -Wall
 
 
-proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ) $(MARIADBAR) $(DAEMONAR)
-	gcc -o $@ $(MARIADBAR) $(DAEMONAR) $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
+proxysql: $(ODIR) $(OBJ) $(SQLITEOBJ) $(MARIADBAR) $(DAEMONAR) $(GLIBAR) $(JEMALLOCAR)
+	gcc -o $@ $(MARIADBAR) $(DAEMONAR) $(GLIBAR) $(SQLITEOBJ) $(OBJ) $(CFLAGS) $(LDIRS) $(LIBS)
 
 $(SQLITEOBJ): ../sqlite3/sqlite3.c
 	$(CC) -c -o $@ $(CFLAGS) ../sqlite3/sqlite3.c
