@@ -285,13 +285,13 @@ void __l_free(l_sfp *sfp, size_t size, void *p) {
 			l_stack_push(&sfp->sfc[i].stack,p);
 			sfp->sfc[i].free_cnt++;
 			sfp->sfc[i].__mem_l_free_count++;
-/*
+
 			if ((sfp->sfc[i].__mem_l_free_count%(L_SFC_MEM_BLOCK_SIZE)==0) && (sfp->sfc[i].blocks_cnt>16) && (sfp->sfc[i].free_cnt > sfp->sfc[i].alloc_cnt * 990/1000)) {
 				compact_mem(&sfp->sfc[i]);
 				fprintf(stderr,"%d\n",(int)sfp->sfc[i].__mem_l_free_count);
 				sfp->sfc[i].__mem_l_free_count=0;
 			}
-*/
+
 			return;
 		}
 	}
