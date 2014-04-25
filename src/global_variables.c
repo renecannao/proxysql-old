@@ -14,11 +14,13 @@ static global_variable_entry_t glo_entries[]= {
 	{"global", "restart_delay", G_OPTION_ARG_INT, &glovars.proxy_restart_delay, "delay between restart", 0, 600 , 0, 0, 5, NULL, NULL, NULL},
 
 	{"admin", "proxy_admin_pathdb", G_OPTION_ARG_STRING, &glovars.proxy_admin_pathdb, "Path to internal DB for ProxySQL", 0, 0, 0, 0, 0, "proxysql.db", NULL, NULL},
+	{"admin", "proxy_admin_bind", G_OPTION_ARG_STRING, &glovars.proxy_admin_bind, "admin bind IP address", 0, 0, 0, 0, 0, "0.0.0.0", NULL, NULL},
 	{"admin", "proxy_admin_port", G_OPTION_ARG_INT, &glovars.proxy_admin_port, "administrative port", 0, 65535, 0, 0, 6032, NULL, NULL, NULL},
 	{"admin", "proxy_admin_user", G_OPTION_ARG_STRING, &glovars.proxy_admin_user, "proxy admin user", 0, 0, 0, 0, 0, "admin", NULL, NULL},
 	{"admin", "proxy_admin_password", G_OPTION_ARG_STRING, &glovars.proxy_admin_password, "proxy admin password", 0, 0, 0, 0, 0, "admin", NULL, NULL},
 	{"admin", "proxy_admin_refresh_status_interval", G_OPTION_ARG_INT, &glovars.proxy_admin_refresh_status_interval, "interval to update status variables", 0, 3600, 0, 0, 600, NULL, NULL, NULL},
 
+	{"admin", "proxy_monitor_bind", G_OPTION_ARG_STRING, &glovars.proxy_monitor_bind, "monitor bind IP address", 0, 0, 0, 0, 0, "0.0.0.0", NULL, NULL},
 	{"admin", "proxy_monitor_port", G_OPTION_ARG_INT, &glovars.proxy_monitor_port, "monitoring port", 0, 65535, 0, 0, 6031, NULL, NULL, NULL},
 	{"admin", "proxy_monitor_user", G_OPTION_ARG_STRING, &glovars.proxy_monitor_user, "proxy monitoring user", 0, 0, 0, 0, 0, "monitor", NULL, NULL},
 	{"admin", "proxy_monitor_password", G_OPTION_ARG_STRING, &glovars.proxy_monitor_password, "proxy monitoring password", 0, 0, 0, 0, 0, "monitor", NULL, NULL},
@@ -31,6 +33,7 @@ static global_variable_entry_t glo_entries[]= {
 
 	{"http", "http_start", G_OPTION_ARG_INT, &glovars.http_start, "start HTTP server", 0, 1 , 0, 0, 0, NULL, NULL, NULL},
 
+	{"mysql", "proxy_mysql_bind", G_OPTION_ARG_STRING, &glovars.proxy_mysql_bind, "mysql bind IP address", 0, 0, 0, 0, 0, "0.0.0.0", NULL, NULL},
 	{"mysql", "proxy_mysql_port", G_OPTION_ARG_INT, &glovars.proxy_mysql_port, "mysql port", 0, 65535, 0, 0, 6033, NULL, NULL, NULL},
 	{"mysql", "mysql_server_version", G_OPTION_ARG_STRING, &glovars.mysql_server_version, "mysql server version", 0, 0, 0, 0, 0, "5.1.30", NULL, NULL},
 	{"mysql", "mysql_socket", G_OPTION_ARG_STRING, &glovars.mysql_socket, "mysql socket", 0, 0, 0, 0, 0, "/tmp/proxysql.sock", NULL, NULL},

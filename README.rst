@@ -204,6 +204,10 @@ Currently 7 groups are available:
 
 	It defines the path of the built-in database that stores advanced configurations. Default is *proxysql.db*
 
+* **proxy_admin_bind**
+
+	It defines the IP address that the admin interface will bind to. Default is *0.0.0.0*
+
 * **proxy_admin_port**
 
 	It defines the administrative port for runtime configuration and statistics. Default is 6032
@@ -219,6 +223,10 @@ Currently 7 groups are available:
 * **proxy_admin_refresh_status_interval**
 
 	ProxySQL doesn't constantly update status variables/tables in the admin interface. These are updates only when read, and up to once every *proxy_admin_refresh_status_interval* seconds. Default is 600 (10 minutes), minimum is 0 and maximum is 3600 (1 hour). 
+
+* **proxy_monitor_bind**
+
+	It defines the IP address that the monitor interface will bind to. Default is *0.0.0.0*
 
 * **proxy_monitor_port**
 
@@ -262,6 +270,10 @@ This module is not implemented yet.
 	Each connection *requires* a default schema (database). If a client connects without specifying a schema, mysql_default_schema is applied. It defaults to *information_schema*.
 
 	If you're using mostly one database, specifying a default schema (database) *could* save a request for each new connection.
+
+* **proxy_mysql_bind**
+
+	It defines the IP address that the mysql interface will bind to. Default is *0.0.0.0*
 
 * **proxy_mysql_port**
 

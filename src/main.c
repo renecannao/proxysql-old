@@ -521,9 +521,9 @@ gotofork:
 
 
 	proxy_error("Opening Sockets\n");
-	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
-	listen_tcp_admin_fd=listen_on_port((uint16_t)glovars.proxy_admin_port);
-	listen_tcp_monitor_fd=listen_on_port((uint16_t)glovars.proxy_monitor_port);
+	listen_tcp_fd=listen_on_port(glovars.proxy_mysql_bind, (uint16_t)glovars.proxy_mysql_port);
+	listen_tcp_admin_fd=listen_on_port(glovars.proxy_admin_bind, (uint16_t)glovars.proxy_admin_port);
+	listen_tcp_monitor_fd=listen_on_port(glovars.proxy_monitor_bind, (uint16_t)glovars.proxy_monitor_port);
 	listen_unix_fd=listen_on_unix(glovars.mysql_socket);
 	ioctl_FIONBIO(listen_tcp_fd, 1);
 	ioctl_FIONBIO(listen_tcp_admin_fd, 1);

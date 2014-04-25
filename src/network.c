@@ -1,6 +1,6 @@
 #include "proxysql.h"
 
-int listen_on_port(uint16_t port) {
+int listen_on_port(char *ip, uint16_t port) {
     int rc, arg_on=1;
 	struct sockaddr_in addr;
 	int sd;
@@ -12,7 +12,7 @@ int listen_on_port(uint16_t port) {
 	}
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
-	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_addr.s_addr = inet_addr(ip);
 	if ( bind(sd, (struct sockaddr*)&addr, sizeof(addr)) != 0 )
 		PANIC("Bind - TCP");
 	if ( listen(sd, glovars.backlog) != 0 )

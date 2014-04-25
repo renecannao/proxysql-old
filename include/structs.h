@@ -357,6 +357,9 @@ typedef struct _global_variables {
 
 	gint core_dump_file_size;
 	int stack_size;
+	char *proxy_mysql_bind;
+	char *proxy_admin_bind;
+	char *proxy_monitor_bind;
 	gint proxy_mysql_port;
 	gint proxy_admin_port;
 	gint proxy_monitor_port;
