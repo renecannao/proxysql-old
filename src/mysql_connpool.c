@@ -64,6 +64,9 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 		return FALSE;
 	}
 
+	// FIXME: temporary workaround for issue #57
+	return FALSE;
+
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Entering reconnect_server_on_shut_fd\n");
 	mysql_cp_entry_t *mycpe=NULL;
 	if (
