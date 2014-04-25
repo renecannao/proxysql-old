@@ -13,11 +13,14 @@ int listen_on_port(char *ip, uint16_t port) {
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = inet_addr(ip);
-	if ( bind(sd, (struct sockaddr*)&addr, sizeof(addr)) != 0 )
-		PANIC("Bind - TCP");
-	if ( listen(sd, glovars.backlog) != 0 )
-		PANIC("Listen - TCP");
-
+	if ( bind(sd, (struct sockaddr*)&addr, sizeof(addr)) != 0 ) {
+		proxy_error("Error on Bind , address %s:%d\n", ip, port);
+		exit(EXIT_FAILURE);
+	}
+	if ( listen(sd, glovars.backlog) != 0 ) {
+		proxy_error("Error on Listen , address %s:%d\n", ip, port);
+		exit(EXIT_FAILURE);
+	}
 	return sd;
 }
 
