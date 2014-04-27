@@ -602,6 +602,10 @@ finish:
 
 #ifdef DEBUG
 	pthread_join(thread_dbg_logger, NULL);
+	l_mem_destroy(glo_debug->sfp);	
+	g_async_queue_unref(glo_debug->async_queue);
+	g_slice_free1(sizeof(glo_debug_t),glo_debug);
+	
 #endif
 
 	for (i=0; i<glovars.mysql_threads+2+4; i++) {
