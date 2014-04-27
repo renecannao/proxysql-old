@@ -295,6 +295,8 @@ void *mysql_thread(void *arg) {
 			fds=fds_tmp;
 		}
 	}
+	g_free(fds);
+	l_mem_destroy(__thr_sfp);
 	return NULL;
 }
 
@@ -547,10 +549,11 @@ gotofork:
 	}	
 
 
+	void **stackspts=g_malloc0(sizeof(void *)*(glovars.mysql_threads+2+4));
 //	start background threads:
 //	- mysql QC purger ( purgeHash_thread )
 //	- mysql connection pool purger ( mysql_connpool_purge_thread )
-	start_background_threads(&attr);
+	start_background_threads(&attr, stackspts);
 
 
 	init_proxyipc();
@@ -558,7 +561,6 @@ gotofork:
 	// Note: glovars.mysql_threads+1 threads are created. The +2 is for the admin and monitoring module 
 	glo_mysql_thrarr=g_malloc0(sizeof(pthread_t)*(glovars.mysql_threads+2));
 	int *args=g_malloc0(sizeof(int)*(glovars.mysql_threads+2));
-
 	// while all other threads are detachable, the mysql connections handlers are not
 //	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	for (i=0; i< glovars.mysql_threads+2; i++) {
@@ -567,6 +569,7 @@ gotofork:
 		void *sp;
 		rc=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 		assert(rc==0);
+		stackspts[i]=sp;
 		rc = pthread_attr_setstack(&attr, sp, glovars.stack_size);
 		assert(rc==0);
 		rc=pthread_create(&glo_mysql_thrarr[i], &attr, mysql_thread , &args[i]);
@@ -580,15 +583,30 @@ gotofork:
 	}
 	g_free(glo_mysql_thrarr);
 	g_free(args);
+
 	pthread_join(thread_cppt, NULL);
 	pthread_join(thread_qct, NULL);
 	pthread_join(thread_qr, NULL);
+
+	sqlite3_close_v2(sqlite3configdb);
+	sqlite3_close_v2(sqlite3admindb);
+	sqlite3_close_v2(sqlite3monitordb);
+	sqlite3_close_v2(sqlite3debugdb);
+	sqlite3_close_v2(sqlite3statsdb);
+
 finish:
 	daemon_log(LOG_INFO, "Exiting...");
 	daemon_retval_send(255);
 	daemon_signal_done();
 	daemon_pid_file_remove();
 
+#ifdef DEBUG
+	pthread_join(thread_dbg_logger, NULL);
+#endif
 
+	for (i=0; i<glovars.mysql_threads+2+4; i++) {
+		free(stackspts[i]);
+	}
+	g_free(stackspts);
 	return 0;
 }

@@ -6,7 +6,7 @@ void set_thread_attr(pthread_attr_t *attr, size_t stacksize) {
 //	int ss;
 }
 
-void start_background_threads(pthread_attr_t *attra) {
+void start_background_threads(pthread_attr_t *attra, void **stackspts) {
 	pthread_attr_t attr;
 
 	int r;
@@ -16,6 +16,7 @@ void start_background_threads(pthread_attr_t *attra) {
 #ifdef DEBUG
 		r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 		assert(r==0);
+		stackspts[glovars.mysql_threads+2+0]=sp;
 		r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
 		assert(r==0);
 	r=pthread_create(&thread_dbg_logger, &attr, debug_logger , NULL);
@@ -27,6 +28,7 @@ void start_background_threads(pthread_attr_t *attra) {
 //		pthread_t qct;
 		r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 		assert(r==0);
+		stackspts[glovars.mysql_threads+2+1]=sp;
 		r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
 		assert(r==0);
 		r=pthread_create(&thread_qct, &attr, purgeHash_thread, &QC);
@@ -40,6 +42,7 @@ void start_background_threads(pthread_attr_t *attra) {
 
 	r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 	assert(r==0);
+	stackspts[glovars.mysql_threads+2+2]=sp;
 	r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
 	assert(r==0);
 	r=pthread_create(&thread_qr, &attr, qr_report_thread, &QR_HASH_T);
@@ -50,6 +53,7 @@ void start_background_threads(pthread_attr_t *attra) {
 //	pthread_t cppt;
 	r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 	assert(r==0);
+	stackspts[glovars.mysql_threads+2+3]=sp;
 	r=pthread_attr_setstack(&attr, sp, glovars.stack_size);
 	assert(r==0);
 	r=pthread_create(&thread_cppt, &attr, mysql_connpool_purge_thread , NULL);

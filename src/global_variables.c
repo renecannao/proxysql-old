@@ -178,6 +178,8 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 
 	g_key_file_free(keyfile);
 	glovars.proxy_configfile=config_file;
+
+	g_option_context_free(context);
 }
 
 

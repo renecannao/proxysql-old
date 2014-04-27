@@ -144,7 +144,17 @@ l_sfp * l_mem_init() {
 	return s;
 }
 
-
+void l_mem_destroy(l_sfp *s) {
+	int i,j;
+	for (i=0; i<L_SFP_ARRAY_LEN; i++) {
+		for (j=0;j<s->sfc[i].blocks_cnt;j++) {
+			free(s->sfc[i].mem_blocks[j]);
+		}
+		if (s->sfc[i].mem_blocks) {
+			free(s->sfc[i].mem_blocks);
+		}
+	}
+}
 static inline void __push_mem_block(l_sfc *sfc, void *m) {
 	int j;
 	void *n;

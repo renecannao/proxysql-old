@@ -595,6 +595,7 @@ static int __admin_sqlite3__check_table_structure(sqlite3 *db, char *table_name,
 		count+=sqlite3_column_int(statement,0);
 	}
 	sqlite3_finalize(statement);
+	g_free(buff);
 	return count;
 }
 

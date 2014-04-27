@@ -98,7 +98,7 @@ void mysql_backend_delete(mysql_backend_t *);
 void glomybepools_init();
 
 void set_thread_attr(pthread_attr_t *, size_t);
-void start_background_threads(pthread_attr_t *);
+void start_background_threads(pthread_attr_t *, void **);
 void init_proxyipc();
 mysql_data_stream_t * mysql_data_stream_new(mysql_session_t *, mysql_backend_t *);
 void mysql_data_stream_delete(mysql_data_stream_t *);

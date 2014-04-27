@@ -67,6 +67,7 @@ static inline void * l_stack_pop (l_stack **s) {
 }
 
 l_sfp * l_mem_init();
+void l_mem_destroy(l_sfp *);
 //void * l_alloc(l_sfp *, size_t);
 //void * l_alloc0(l_sfp *, size_t);
 //void l_free(l_sfp *, size_t, void *);

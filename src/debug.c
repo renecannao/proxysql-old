@@ -115,7 +115,7 @@ void *debug_logger() {
 	}
 	time_t lt=0;
 	while(glovars.shutdown==0) {
-		dbg_msg_t *dbg_msg=g_async_queue_pop(glo_debug->async_queue);
+		dbg_msg_t *dbg_msg=g_async_queue_timeout_pop(glo_debug->async_queue,1000000);
 		if (dbg_msg) {
 			char __buffer[25];
 //		struct timeval tv;
