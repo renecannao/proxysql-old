@@ -102,6 +102,8 @@ struct __qr_hash_entry
 	char *query_digest_text;
 	char *query_digest_md5;
 	int hostgroup_id;
+	char *username;
+	char *schemaname;
 	char *mysql_server_address;
 	long query_time;
 	int mysql_server_port;

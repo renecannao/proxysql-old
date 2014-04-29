@@ -273,7 +273,7 @@ void flush_query_stats (gpointer key, gpointer user_data){
 	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
 	//fprintf(stderr, "%s\t%d\t%p\n", entry->key, entry->exec_cnt, entry->value);
 	//fprintf(stderr, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t%d\n" , entry->exec_cnt, entry->key, key, entry->query_digest_md5, entry->query_digest_text, entry->hostgroup_id, entry->mysql_server_address, entry->mysql_server_port);
-	proxy_debug(PROXY_DEBUG_QUERY_STATISTICS, 4, "%d\t%s\t%s\t%d\t%s\t%d\t%ld\n" , entry->exec_cnt, entry->query_digest_md5, entry->query_digest_text, entry->hostgroup_id, ( entry->mysql_server_address ? entry->mysql_server_address : "NULL" ) , entry->mysql_server_port, entry->query_time);
+	proxy_debug(PROXY_DEBUG_QUERY_STATISTICS, 4, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t%d\t%ld\n" , entry->exec_cnt, entry->username, entry->schemaname, entry->query_digest_md5, entry->query_digest_text, entry->hostgroup_id, ( entry->mysql_server_address ? entry->mysql_server_address : "NULL" ) , entry->mysql_server_port, entry->query_time);
 }
 
 // Report query stat result 

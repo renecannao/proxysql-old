@@ -74,6 +74,8 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 			//process_query_stats(sess);
 			sess->query_info.query_stats->query_digest_text=mysql_query_digest(sess);
 			sess->query_info.query_stats->query_digest_md5=str2md5(sess->query_info.query_stats->query_digest_text);
+			sess->query_info.query_stats->username=g_strdup(sess->mysql_username);
+			sess->query_info.query_stats->schemaname=g_strdup(sess->mysql_schema_cur);
 		}
 	} else {
 		sess->query_info.query=NULL;

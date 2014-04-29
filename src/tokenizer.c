@@ -337,6 +337,10 @@ void cleanup_query_stats(qr_hash_entry *query_stats) {
 		g_free(query_stats->query_digest_text);
 	if (query_stats->query_digest_md5)
 		g_free(query_stats->query_digest_md5);
+	if (query_stats->username)
+		g_free(query_stats->username);
+	if (query_stats->schemaname)
+		g_free(query_stats->schemaname);
 	g_free(query_stats);
 }
 
@@ -350,10 +354,12 @@ static void __generate_qr_hash_entry__key(qr_hash_entry *entry) {
 		i+=strlen(entry->mysql_server_address);
 		sa=entry->mysql_server_address;
 	}
+	i+=strlen(entry->username);
+	i+=strlen(entry->schemaname);
 	i+=5; //length port
-	i+=3*strlen("__")+5; //spacers + extra buffer
+	i+=5*strlen("__")+5; //spacers + extra buffer
 	entry->key=g_malloc0(i);
-	sprintf(entry->key,"%s__%d__%s__%d",entry->query_digest_md5,entry->hostgroup_id, sa, entry->mysql_server_port);
+	sprintf(entry->key,"%s__%s__%s__%d__%s__%d",entry->query_digest_md5, entry->username, entry->schemaname, entry->hostgroup_id, sa, entry->mysql_server_port);
 }
 
 void query_statistics_set(mysql_session_t *sess) {

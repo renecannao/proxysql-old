@@ -1084,7 +1084,7 @@ void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
 	sqlite3_stmt *statement;
 	qr_hash_t *ht = &QR_HASH_T;
 	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
-	char *query="INSERT INTO query_stats (timestamp, query_digest_md5, query_digest_text, hostgroup_id, server_address, server_port, query_time, exec_cnt) VALUES (?1 , ?2 , ?3 , ?4 , ?5 , ?6 , ?7 , ?8)";
+	char *query="INSERT INTO query_stats (timestamp, query_digest_md5, query_digest_text, username, schemaname, hostgroup_id, server_address, server_port, query_time, exec_cnt) VALUES (?1 , ?2 , ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10)";
 	rc=sqlite3_prepare_v2(db, query, -1, &statement, 0);
 	assert(rc==SQLITE_OK);
 //      for (i=0;i<glomysrvs.servers->len;i++) {
@@ -1095,11 +1095,13 @@ void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
 	rc=sqlite3_bind_int(statement, 1, (curtime)); assert(rc==SQLITE_OK);
 	rc=sqlite3_bind_text(statement, 2, entry->query_digest_md5, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
 	rc=sqlite3_bind_text(statement, 3, entry->query_digest_text, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
-	rc=sqlite3_bind_int(statement, 4, entry->hostgroup_id); assert(rc==SQLITE_OK);
-	rc=sqlite3_bind_text(statement, 5, entry->mysql_server_address, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
-	rc=sqlite3_bind_int(statement, 6, entry->mysql_server_port); assert(rc==SQLITE_OK);
-	rc=sqlite3_bind_int(statement, 7, entry->query_time); assert(rc==SQLITE_OK);
-	rc=sqlite3_bind_int(statement, 8, entry->exec_cnt); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 4, entry->username, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 5, entry->schemaname, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 6, entry->hostgroup_id); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 7, entry->mysql_server_address, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 8, entry->mysql_server_port); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 9, entry->query_time); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 10, entry->exec_cnt); assert(rc==SQLITE_OK);
 	rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
 	rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
 	rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
