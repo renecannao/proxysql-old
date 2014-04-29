@@ -27,6 +27,12 @@ void mysql_data_stream_delete(mysql_data_stream_t *my) {
 //		g_slice_free1(sizeof(pkt), my->output.mypkt);
 	}
 */
+	if(my->input.mypkt) {
+		l_free(my->input.mypkt->length, my->input.mypkt->data);
+	}
+	if(my->output.mypkt) {
+		l_free(my->output.mypkt->length, my->output.mypkt->data);
+	}
 	while (my->input.pkts->len) {
 		p=l_ptr_array_remove_index(my->input.pkts, 0);
 		mypkt_free1(p);
@@ -120,7 +126,9 @@ static int array2buffer(mysql_data_stream_t *myds) {
 		if (myds->output.pkts->len) {
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "%s\n", "Removing a packet from array");
 			if (myds->output.mypkt) {
-				mypkt_free0(myds->output.mypkt);	
+				//mypkt_free0(myds->output.mypkt);
+				mypkt_free1(myds->output.mypkt);
+				myds->output.mypkt=NULL;
 			}
 			myds->output.mypkt=l_ptr_array_remove_index(myds->output.pkts, 0);
 		} else {
@@ -136,7 +144,11 @@ static int array2buffer(mysql_data_stream_t *myds) {
 	if (myds->output.partial==myds->output.mypkt->length) {
 		//g_slice_free1(myds->output.mypkt->length, myds->output.mypkt->data);
 		//l_free(thrLD->sfp,myds->output.mypkt->length, myds->output.mypkt->data);
-		l_free(myds->output.mypkt->length, myds->output.mypkt->data);
+		if (myds->output.mypkt) {
+			//l_free(myds->output.mypkt->length, myds->output.mypkt->data);
+			mypkt_free1(myds->output.mypkt);
+			myds->output.mypkt=NULL;
+		}
 		proxy_debug(PROXY_DEBUG_PKT_ARRAY, 5, "Packet completely written into send buffer\n");
 		myds->output.partial=0;
 		myds->pkts_sent+=1;

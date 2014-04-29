@@ -22,6 +22,11 @@ static admin_sqlite_table_def_t table_defs[] =
 };
 
 
+static admin_sqlite_table_def_t table_defs_statsdb[] =
+{
+	{ "query_stats", STATSDB_QUERY_STATS }
+};
+
 static void __admin_sqlite3__validate_data(sqlite3 *db) {
 	char *query;
 	sqlite3_stmt *statement;
@@ -560,7 +565,7 @@ static void __admin_sqlite3__fill_table__server_status(sqlite3 *db) {
 }
 
 static void __admin_sqlite3__fill_table__debug_levels(sqlite3 *db) {
-	sqlite3_exec_exit_on_failure(db,"DELETE FROM debug_levels WHERE module NOT IN ('debug_generic','debug_net','debug_pkt_array','debug_poll','debug_mysql_com','debug_mysql_server','debug_mysql_connection','debug_mysql_rw_split','debug_mysql_auth','debug_memory','debug_admin','debug_sqlite','debug_ipc','debug_query_cache')");
+	sqlite3_exec_exit_on_failure(db,"DELETE FROM debug_levels WHERE module NOT IN ('debug_generic','debug_net','debug_pkt_array','debug_poll','debug_mysql_com','debug_mysql_server','debug_mysql_connection','debug_mysql_rw_split','debug_mysql_auth','debug_memory','debug_admin','debug_sqlite','debug_ipc','debug_query_cache','debug_query_statistics')");
 	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_generic',0)");
 	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_net',0)");
 	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_pkt_array',0)");
@@ -575,6 +580,7 @@ static void __admin_sqlite3__fill_table__debug_levels(sqlite3 *db) {
 	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_sqlite',0)");
 	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_ipc',0)");
 	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_query_cache',0)");
+	sqlite3_exec_exit_on_failure(db,"INSERT OR IGNORE INTO debug_levels VALUES ('debug_query_statistics',0)");
 }
 
 static int __admin_sqlite3__check_table_structure(sqlite3 *db, char *table_name, char *table_def) {
@@ -627,6 +633,20 @@ static void __admin_sqlite3__check_and_build_standard_tables(sqlite3 *db) {
 	sqlite3_exec_exit_on_failure(db, "PRAGMA foreign_keys = ON");
 }
 
+static void __admin_sqlite3__check_and_build_statsdb_tables(sqlite3 *db) {
+	int i;
+	sqlite3_exec_exit_on_failure(db, "PRAGMA foreign_keys = OFF");
+	for (i=0;i<sizeof(table_defs_statsdb)/sizeof(admin_sqlite_table_def_t);i++) {
+		admin_sqlite_table_def_t *table_def=table_defs_statsdb+i;
+		proxy_debug(PROXY_DEBUG_SQLITE, 6, "SQLITE: checking definition of table %s against \"%s\"\n" , table_def->table_name , table_def->table_def);
+		int match=__admin_sqlite3__check_table_structure(db, table_def->table_name , table_def->table_def);
+		if (match==0) {
+			proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Table %s does not exist or is corrupted. Creating!\n", table_def->table_name);
+			__admin_sqlite3__build_table_structure(db, table_def->table_name , table_def->table_def);
+		}
+	}
+	sqlite3_exec_exit_on_failure(db, "PRAGMA foreign_keys = ON");
+}
 void admin_init_sqlite3() {
 	int i;
 	char *s[4];
@@ -735,6 +755,8 @@ void admin_init_sqlite3() {
 	__admin_sqlite3__check_and_build_standard_tables(sqlite3admindb);
 	__admin_sqlite3__check_and_build_standard_tables(sqlite3monitordb);
 
+	__admin_sqlite3__check_and_build_statsdb_tables(sqlite3statsdb);
+
 	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA foreign_keys = OFF");
 	__admin_sqlite3__fill_table__server_status(sqlite3configdb);
 	__admin_sqlite3__fill_table__debug_levels(sqlite3configdb);
@@ -765,9 +787,15 @@ void admin_init_sqlite3() {
 		const char *a="ATTACH DATABASE '%s' AS disk";
 		char *cmd=g_malloc0(strlen(a)+strlen(glovars.proxy_admin_pathdb)+5);
 		sprintf(cmd,a,glovars.proxy_admin_pathdb);
-		//fprintf(stderr,"%s\n", cmd);
 		sqlite3_exec_exit_on_failure(sqlite3admindb, cmd);
-		g_free(cmd);	
+		g_free(cmd);
+	}
+	{
+		const char *a="ATTACH DATABASE '%s' AS statsdb";
+		char *cmd=g_malloc0(strlen(a)+strlen(glovars.persistent_statistics_pathdb)+5);
+		sprintf(cmd,a,glovars.persistent_statistics_pathdb);
+		sqlite3_exec_exit_on_failure(sqlite3admindb, cmd);
+		g_free(cmd);
 	}
 
 
@@ -1045,4 +1073,36 @@ int sqlite3_dump_runtime_query_cache(sqlite3 *db) {
 	numrow++;
 	sqlite3_finalize(statement);
 	return numrow;
+}
+
+
+
+void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
+	int rc;
+	//int i;
+	sqlite3 *db=sqlite3statsdb;
+	sqlite3_stmt *statement;
+	qr_hash_t *ht = &QR_HASH_T;
+	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
+	char *query="INSERT INTO query_stats (timestamp, query_digest_md5, query_digest_text, hostgroup_id, server_address, server_port, query_time, exec_cnt) VALUES (?1 , ?2 , ?3 , ?4 , ?5 , ?6 , ?7 , ?8)";
+	rc=sqlite3_prepare_v2(db, query, -1, &statement, 0);
+	assert(rc==SQLITE_OK);
+//      for (i=0;i<glomysrvs.servers->len;i++) {
+//        mysql_server *ms=g_ptr_array_index(glomysrvs.servers,i);
+//        if (ms->status==MYSQL_SERVER_STATUS_ONLINE) {
+//          if (ms->read_only==0 || ms->read_only==1) {
+	int curtime=*(time_t *)user_data;
+	rc=sqlite3_bind_int(statement, 1, (curtime)); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 2, entry->query_digest_md5, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 3, entry->query_digest_text, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 4, entry->hostgroup_id); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 5, entry->mysql_server_address, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 6, entry->mysql_server_port); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 7, entry->query_time); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 8, entry->exec_cnt); assert(rc==SQLITE_OK);
+	rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+	rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+	rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+
+	sqlite3_finalize(statement);
 }

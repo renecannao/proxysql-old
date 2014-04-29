@@ -29,6 +29,7 @@
 //#define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0, audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, caching_ttl INT NOT NULL DEFAULT 0)"
 //#define ADMIN_SQLITE_TABLE_QUERY_RULES "CREATE TABLE query_rules (rule_id INT NOT NULL PRIMARY KEY, username VARCHAR, schemaname VARCHAR, flagIN INT NOT NULL DEFAULT 0, match_pattern VARCHAR NOT NULL, negate_match_pattern INT NOT NULL DEFAULT 0, flagOUT INT NOT NULL DEFAULT 0, replace_pattern VARCHAR, destination_hostgroup INT NOT NULL DEFAULT 0 REFERENCES hostgroups(hostgroup_id), audit_log INT NOT NULL DEFAULT 0, performance_log INT NOT NULL DEFAULT 0, cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_tag INT NOT NULL DEFAULT 0, invalidate_cache_pattern VARCHAR, cache_ttl INT NOT NULL DEFAULT 0)"
 
+#define STATSDB_QUERY_STATS "CREATE TABLE query_stats (timestamp INT NOT NULL, query_digest_md5 TEXT NOT NULL, query_digest_text TEXT NOT NULL, hostgroup_id INT, server_address TEXT, server_port INT, query_time INT NOT NULL, exec_cnt INT NOT NULL, PRIMARY KEY(timestamp, query_digest_md5, hostgroup_id, server_address, server_port) )"
 
 #define DUMP_RUNTIME_QUERY_CACHE	"DUMP RUNTIME QUERY CACHE"
 #define DUMP_RUNTIME_QUERY_RULES	"DUMP RUNTIME QUERY RULES"
@@ -64,6 +65,7 @@ int sqlite3_dump_runtime_query_rules(sqlite3 *);
 int sqlite3_dump_runtime_query_cache(sqlite3 *);
 int sqlite3_dump_runtime_default_hostgroups(sqlite3 *);
 int sqlite3_config_sync_mem_to_disk();
+void __sqlite3_statsdb__flush_query_stats(gpointer, gpointer);
 //int sqlite3_dump_runtime_query_rules();
 //int sqlite3_dump_runtime_query_cache();
 

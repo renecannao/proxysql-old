@@ -229,10 +229,11 @@ int fdb_hashes_group_used_mem_pct(fdb_hashes_group_t *hg) {
 // Added by chan ----------------------------------
 // Destory hash value function
 inline void qr_hash_value_destroy_func(void * hash_entry) {
-	qr_hash_entry *entry= (qr_hash_entry *) hash_entry;
+	cleanup_query_stats(hash_entry);
+/*	qr_hash_entry *entry= (qr_hash_entry *) hash_entry;
 	g_free(entry->key);
 	g_free(entry->value);
-	g_free(entry);
+	g_free(entry);*/
 }
 
 // Create new hash struct
@@ -252,7 +253,7 @@ void qr_set(char * key, char * value){
 	if(entry == NULL){
 		entry = g_malloc(sizeof(qr_hash_entry));
 		entry->key = key;
-		entry->value = value;
+		//FIXME: entry->value = value;
 		entry->exec_cnt = 0;
 		g_hash_table_insert(ht->c_hash, entry->key, entry);
 	}else{
@@ -267,10 +268,12 @@ void qr_set(char * key, char * value){
 
 // Print query stats - needed to write on log file
 // last changed at 20140418 - by chan
-inline void flush_query_stats (gpointer key, gpointer user_data){
+void flush_query_stats (gpointer key, gpointer user_data){
 	qr_hash_t *ht = &QR_HASH_T;
 	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
-	fprintf(stderr, "%s\t%d\t%s\n", entry->key, entry->exec_cnt, entry->value);
+	//fprintf(stderr, "%s\t%d\t%p\n", entry->key, entry->exec_cnt, entry->value);
+	//fprintf(stderr, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t%d\n" , entry->exec_cnt, entry->key, key, entry->query_digest_md5, entry->query_digest_text, entry->hostgroup_id, entry->mysql_server_address, entry->mysql_server_port);
+	proxy_debug(PROXY_DEBUG_QUERY_STATISTICS, 4, "%d\t%s\t%s\t%d\t%s\t%d\t%ld\n" , entry->exec_cnt, entry->query_digest_md5, entry->query_digest_text, entry->hostgroup_id, ( entry->mysql_server_address ? entry->mysql_server_address : "NULL" ) , entry->mysql_server_port, entry->query_time);
 }
 
 // Report query stat result 
@@ -284,7 +287,8 @@ void *qr_report_thread(void *arg){
 			time_t curtime = time (NULL);
 			struct tm *__tm_info=localtime(&curtime);
 			strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
-			fprintf(stderr, "%s\n", __buffer);
+			//fprintf(stderr, "%s\n", __buffer);
+			proxy_debug(PROXY_DEBUG_QUERY_STATISTICS, 7, "Reporting queries\n");
 			pthread_rwlock_wrlock(&(ht->lock));
 			GHashTable *t_hash = ht->p_hash;
 			ht->p_hash = ht->c_hash;
@@ -293,7 +297,10 @@ void *qr_report_thread(void *arg){
 
 			// Print current stats
 			GList *keysList = g_hash_table_get_keys(ht->p_hash);
+#ifdef DEBUG
 			g_list_foreach (keysList, flush_query_stats, NULL);
+#endif
+			g_list_foreach (keysList, __sqlite3_statsdb__flush_query_stats, &curtime);
 			g_list_free(keysList);
 
 			// Remove all entry in p_hash

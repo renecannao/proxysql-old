@@ -308,7 +308,7 @@ int main(int argc, char **argv) {
 	pid_t pid;
 	int i, rc;
 
-	g_thread_init(NULL);
+	//g_thread_init(NULL);
 
 #ifdef DEBUG
 	glo_debug=g_slice_alloc(sizeof(glo_debug_t));
@@ -585,7 +585,9 @@ gotofork:
 	g_free(args);
 
 	pthread_join(thread_cppt, NULL);
-	pthread_join(thread_qct, NULL);
+	if (glovars.mysql_query_cache_enabled==TRUE) {
+		pthread_join(thread_qct, NULL);
+	}
 	pthread_join(thread_qr, NULL);
 
 	sqlite3_close_v2(sqlite3configdb);
@@ -609,7 +611,9 @@ finish:
 #endif
 
 	for (i=0; i<glovars.mysql_threads+2+4; i++) {
-		free(stackspts[i]);
+		if (stackspts[i]) {
+			free(stackspts[i]);
+		}
 	}
 	g_free(stackspts);
 	return 0;

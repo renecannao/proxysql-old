@@ -97,8 +97,14 @@ struct __qr_hash_t {
 struct __qr_hash_entry
 {
 	char *key;
-	char *value;
+	struct __qr_hash_entry *value;
 	volatile unsigned int exec_cnt;
+	char *query_digest_text;
+	char *query_digest_md5;
+	int hostgroup_id;
+	char *mysql_server_address;
+	long query_time;
+	int mysql_server_port;
 };
 
 inline void qr_hash_value_destroy_func(void *);

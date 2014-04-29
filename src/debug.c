@@ -98,6 +98,7 @@ void init_debug_struct() {
 	gdbg_lvl[PROXY_DEBUG_SQLITE].name="debug_sqlite";
 	gdbg_lvl[PROXY_DEBUG_IPC].name="debug_ipc";
 	gdbg_lvl[PROXY_DEBUG_QUERY_CACHE].name="debug_query_cache";
+	gdbg_lvl[PROXY_DEBUG_QUERY_STATISTICS].name="debug_query_statistics";
 
 	for (i=0;i<PROXY_DEBUG_UNKNOWN;i++) {
 		// if this happen, the above table is not populated correctly

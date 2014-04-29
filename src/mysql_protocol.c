@@ -46,11 +46,14 @@ char *user_password(char *username, int admin) {
 
 
 inline uint16_t status_flags(pkt *p) {
-	int offset=1+sizeof(mysql_hdr);
+	int offset;
 	enum MySQL_response_type c;
 	c=mysql_response(p);
 	unsigned long v;
-	uint16_t status=0;
+	uint16_t status;
+	status=0;
+	offset=1+sizeof(mysql_hdr);
+	v=0;
 	if (c==OK_Packet) {
 		// affected rows
 		//memcpy(&v,p->data+offset,sizeof(unsigned long));

@@ -13,6 +13,8 @@ extern long long __mem_l_memalign_size;
 extern long long __mem_l_memalign_count;
 #endif
 
+extern __thread l_sfp *__thr_sfp;
+
 static unsigned int l_near_pow_2 (int n) {
 	unsigned int i = 1;
 	while (i < n) i <<= 1;
@@ -138,6 +140,8 @@ l_sfp * l_mem_init() {
 		s->sfc[i].stack=NULL;
 		s->sfc[i].mem_blocks=NULL;
 		s->sfc[i].elem_size=L_SFC_MIN_ELEM_SIZE * (1 << i) ;
+		s->sfc[i].alloc_cnt=0;
+		s->sfc[i].free_cnt=0;
 		s->sfc[i].blocks_cnt=0;
 		s->sfc[i].__mem_l_free_count=0;
 	}
@@ -175,7 +179,10 @@ void * __l_alloc(l_sfp *sfp, size_t size) {
 #endif
 	void *p;
 	int i;
-	for (i=L_SFP_ARRAY_LEN-1 ; i>=0 ; i-- ) {
+	i=L_SFP_ARRAY_LEN-1;
+	if (size<=L_SFC_MID_ELEM_SIZE)
+		i=L_SFP_ARRAY_MID-1;
+	for ( ; i>=0 ; i-- ) {
 		if (size*2>sfp->sfc[i].elem_size || i==0) {
 			p=l_stack_pop(&sfp->sfc[i].stack);
 			if (p) {
@@ -290,7 +297,10 @@ void __l_free(l_sfp *sfp, size_t size, void *p) {
 	__sync_fetch_and_add(&__mem_l_free_count,1);
 #endif
 	int i;
-	for (i=L_SFP_ARRAY_LEN-1 ; i>=0 ; i-- ) {
+	i=L_SFP_ARRAY_LEN-1;
+	if (size<=L_SFC_MID_ELEM_SIZE)
+		i=L_SFP_ARRAY_MID-1;
+	for ( ; i>=0 ; i-- ) {
 		if (size*2>sfp->sfc[i].elem_size || i==0) {
 			l_stack_push(&sfp->sfc[i].stack,p);
 			sfp->sfc[i].free_cnt++;

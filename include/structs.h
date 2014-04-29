@@ -253,6 +253,7 @@ typedef struct _mysql_query_metadata_t {
 	char *query;
 	int prepared_statement;
 	int query_len;
+	qr_hash_entry *query_stats;
 } mysql_query_metadata_t ;
 
 
@@ -513,6 +514,7 @@ enum debug_module {
 	PROXY_DEBUG_SQLITE,
 	PROXY_DEBUG_IPC,
 	PROXY_DEBUG_QUERY_CACHE,
+	PROXY_DEBUG_QUERY_STATISTICS,
 	PROXY_DEBUG_UNKNOWN
 };
 

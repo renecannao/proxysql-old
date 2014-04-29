@@ -65,6 +65,9 @@ static int get_result_from_mysql_query_cache(mysql_session_t *sess, pkt *p) {
 		sess->mysql_query_cache_hit=TRUE;
 		sess->query_to_cache=FALSE;	// query already in cache
 		mypkt_free1(p);
+		if (glovars.mysql_query_statistics) {
+			query_statistics_set(sess);
+		}
 		return 0;
 	}
 	PROXY_TRACE();
@@ -220,7 +223,9 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 					if (sess->resultset_progress==RESULTSET_COMPLETED) {
 		PROXY_TRACE();
 						sess->resultset_progress=RESULTSET_WAITING;
-
+						if (glovars.mysql_query_statistics) {
+							query_statistics_set(sess);
+						}
 						// we have processed a complete result set, sync sess->server_bytes_at_cmd for auto-reconnect
 						sync_server_bytes_at_cmd(sess);
 
@@ -275,6 +280,9 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 							while (sess->resultset->len) {
 								p=l_ptr_array_remove_index(sess->resultset, sess->resultset->len-1);
 							}
+							//if (glovars.mysql_query_statistics) {
+							//	query_statistics_set(sess);
+							//}
 						} else {
 							proxy_debug(PROXY_DEBUG_MYSQL_COM, 4, "Query %s was too large ( %d bytes, min %d ) and wasn't stored\n", g_checksum_get_string(sess->query_info.query_checksum), sess->resultset_size , glovars.mysql_max_resultset_size );
 						}
@@ -794,6 +802,13 @@ static int process_client_pkts(mysql_session_t *sess) {
 				sess->server_fd=mybe->fd;
 				//sess->server_mycpe=mybe->server_mycpe;
 				//sess->server_ptr=mybe->server_ptr;
+				if (glovars.mysql_query_statistics) {
+					if (sess->query_info.query_stats) {
+						sess->query_info.query_stats->hostgroup_id=sess->query_info.destination_hostgroup;
+						sess->query_info.query_stats->mysql_server_address=g_strdup(mybe->mshge->MSptr->address);
+						sess->query_info.query_stats->mysql_server_port=mybe->mshge->MSptr->port;
+					}
+				}
 				sync_server_bytes_at_cmd(sess);
 				MY_SESS_ADD_PKT_OUT_SERVER(p);
 				//l_ptr_array_add(sess->server_mybe->server_myds->output.pkts, p);
@@ -801,6 +816,7 @@ static int process_client_pkts(mysql_session_t *sess) {
 				// we should never reach here, sanity check
 				assert(0);
 			}
+		} else { //sess->mysql_query_cache_hit==TRUE
 		}
 	}
 	return 0;
@@ -911,8 +927,8 @@ static void sess_close(mysql_session_t *sess) {
 //	int i;
 	//proxy_mysql_thread_t *thrLD=pthread_getspecific(tsd_key);
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Closing connection on client fd %d (myds %d , sess %p)\n", sess->client_fd, sess->client_myds->fd, sess);
-	mysql_data_stream_delete(sess->client_myds);
 	if (sess->client_myds->fd) { sess->client_myds->shut_hard(sess->client_myds); }
+	mysql_data_stream_delete(sess->client_myds);
 
 	__mysql_session__drop_resultset(sess);
 	__mysql_session__free_user_pass_schema(sess);
@@ -1112,7 +1128,7 @@ static int __default_hostgroup__find_defHG(global_default_hostgroups_t *DefHG, c
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Looking for a match in DefHG for user NULL and schema %s\n", schemaname);
 	for (i=0; i<DefHG->default_hostgroups->len; i++) {
 		default_hostgroup_t *dhg=g_ptr_array_index(DefHG->default_hostgroups,i);
-		if ((dhg->username==NULL) && (g_strcmp0((const gchar *)schemaname,dhg->schemaname)==0)) {
+		if ((dhg->username==NULL) && (dhg->schemaname) && (g_strcmp0((const gchar *)schemaname,dhg->schemaname)==0)) {
 			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Found for a match in DefHG for user NULL and schema %s: hostgroup_id %d\n", schemaname, dhg->hostgroup_id);
 			return dhg->hostgroup_id;
 		}
@@ -1121,7 +1137,7 @@ static int __default_hostgroup__find_defHG(global_default_hostgroups_t *DefHG, c
 	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Looking for a match in DefHG for user %s and schema NULL\n", username);
 	for (i=0; i<DefHG->default_hostgroups->len; i++) {
 		default_hostgroup_t *dhg=g_ptr_array_index(DefHG->default_hostgroups,i);
-		if ((dhg->schemaname==NULL) && (g_strcmp0((const gchar *)username,dhg->username)==0)) {
+		if ((dhg->schemaname==NULL) && (dhg->username) && (g_strcmp0((const gchar *)username,dhg->username)==0)) {
 			proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 7, "Found for a match in DefHG for user %s and schema NULL: hostgroup_id %d\n", username, dhg->hostgroup_id);
 			return dhg->hostgroup_id;
 		}

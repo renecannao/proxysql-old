@@ -59,12 +59,21 @@ void init_query_metadata(mysql_session_t *sess, pkt *p) {
 	sess->query_info.audit_log=0;
 	sess->query_info.performance_log=0;
 	sess->query_info.mysql_query_cache_hit=0;
+	if (sess->query_info.query_stats) {
+		// If we hit here, the query statistics were disabled while being processed or this session is being closed.
+		// We need to clean up
+		cleanup_query_stats(sess->query_info.query_stats);
+	}
 	if (p) {
 		sess->query_info.query=p->data+sizeof(mysql_hdr)+1;
 		sess->query_info.query_len=p->length-sizeof(mysql_hdr)-1;
 		// Added by chan
 		if (glovars.mysql_query_statistics) {
-			process_query_stats(sess);
+			sess->query_info.query_stats=g_malloc0(sizeof(qr_hash_entry));
+			sess->query_info.query_stats->query_time=monotonic_time();
+			//process_query_stats(sess);
+			sess->query_info.query_stats->query_digest_text=mysql_query_digest(sess);
+			sess->query_info.query_stats->query_digest_md5=str2md5(sess->query_info.query_stats->query_digest_text);
 		}
 	} else {
 		sess->query_info.query=NULL;

@@ -123,7 +123,8 @@ char *str2md5(const char *str) {
 
 
 // Added by chan
-void process_query_stats(mysql_session_t *sess){
+//void process_query_stats(mysql_session_t *sess){
+char *mysql_query_digest(mysql_session_t *sess){
 	char *s = sess->query_info.query;
 	int len = sess->query_info.query_len;
 	
@@ -305,6 +306,11 @@ void process_query_stats(mysql_session_t *sess){
 
 	// process query stats
 	// last changed at 20140418 - by chan
+	return r;
+}
+
+
+/*
 	if(*r){
 		// to save memory usage
 		int slen = len + strlen(sess->mysql_username) + strlen(sess->mysql_schema_cur)+ SIZECHAR + 2;
@@ -318,4 +324,59 @@ void process_query_stats(mysql_session_t *sess){
 		qr_set(md5, r2);
 	}
 }
+*/
 // Added by chan end.
+
+
+void cleanup_query_stats(qr_hash_entry *query_stats) {
+	if (query_stats->key)
+		g_free(query_stats->key);
+	if (query_stats->mysql_server_address)
+		g_free(query_stats->mysql_server_address);
+	if (query_stats->query_digest_text)
+		g_free(query_stats->query_digest_text);
+	if (query_stats->query_digest_md5)
+		g_free(query_stats->query_digest_md5);
+	g_free(query_stats);
+}
+
+
+static void __generate_qr_hash_entry__key(qr_hash_entry *entry) {
+	int i;
+	char *sa="";
+	i=strlen(entry->query_digest_md5);
+	i+=3; //length hostgroup_id
+	if (entry->mysql_server_address) {
+		i+=strlen(entry->mysql_server_address);
+		sa=entry->mysql_server_address;
+	}
+	i+=5; //length port
+	i+=3*strlen("__")+5; //spacers + extra buffer
+	entry->key=g_malloc0(i);
+	sprintf(entry->key,"%s__%d__%s__%d",entry->query_digest_md5,entry->hostgroup_id, sa, entry->mysql_server_port);
+}
+
+void query_statistics_set(mysql_session_t *sess) {
+	// FIXME: placeholder
+	qr_hash_entry *query_stats=sess->query_info.query_stats;
+	__generate_qr_hash_entry__key(query_stats);
+	query_stats->value=query_stats;
+	query_stats->exec_cnt=1;
+	qr_hash_t *ht = &QR_HASH_T;
+	long total_time=monotonic_time()-query_stats->query_time;
+	query_stats->query_time=total_time;
+	pthread_rwlock_wrlock(&(ht->lock));
+	qr_hash_entry *entry = g_hash_table_lookup(ht->c_hash, query_stats->key);
+	if(entry == NULL){
+		g_hash_table_insert(ht->c_hash, query_stats->key, query_stats);
+//		fprintf(stderr, "INSERTING %p\t%p\t%d\t%s\t%s\t%s\t%d\t%s\t%d\n" , query_stats->key, query_stats, query_stats->exec_cnt, query_stats->key, query_stats->query_digest_md5, query_stats->query_digest_text, query_stats->hostgroup_id, query_stats->mysql_server_address, query_stats->mysql_server_port);
+	}else{
+		cleanup_query_stats(query_stats);
+		entry->exec_cnt++;
+		entry->query_time+=total_time;
+//		fprintf(stderr, "REPLACING %p\t%p\t%d\t%s\t%s\t%s\t%d\t%s\t%d\n" , entry->key, entry, entry->exec_cnt, entry->key, entry->query_digest_md5, entry->query_digest_text, entry->hostgroup_id, entry->mysql_server_address, entry->mysql_server_port);
+  }
+  sess->query_info.query_stats=NULL;
+  pthread_rwlock_unlock(&(ht->lock));
+	return;
+}

@@ -36,9 +36,9 @@ void start_background_threads(pthread_attr_t *attra, void **stackspts) {
 	}
 
 	// Added by chan
-	printf("=> create new qr_hash\n");
+	//printf("=> create new qr_hash\n");
 	qr_hashes_new(&QR_HASH_T);
-	printf("=> end\n");
+	//printf("=> end\n");
 
 	r=posix_memalign(&sp, sysconf(_SC_PAGESIZE), glovars.stack_size);
 	assert(r==0);

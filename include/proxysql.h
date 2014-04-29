@@ -117,8 +117,11 @@ void term_handler(int);
 long monotonic_time();
 
 
+char *mysql_query_digest(mysql_session_t *);
+void cleanup_query_stats(qr_hash_entry *);
+void query_statistics_set(mysql_session_t *);
 // Added by chan -------
-void process_query_stats(mysql_session_t *);
+//void process_query_stats(mysql_session_t *);
 char *str2md5(const char *);
 /*
 char is_token(char);
