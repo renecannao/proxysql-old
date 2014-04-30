@@ -269,7 +269,7 @@ int	mysql_session_create_backend_for_hostgroup(mysql_session_t *sess, int hostgr
 	assert(hostgroup_id < glovars.mysql_hostgroups);
 	mysql_backend_t *mybe=NULL;
 	proxy_debug(PROXY_DEBUG_MYSQL_SERVER, 5, "Retrieving backend for session %p hostgroup %d\n", sess, hostgroup_id);
-	mybe=g_ptr_array_index(sess->mybes,hostgroup_id);
+	mybe=l_ptr_array_index(sess->mybes,hostgroup_id);
 	int retries=10;
 	//mysql_backend_t *tmp_mybe=NULL;
 	//tmp_mybe=glomybepools.get(sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, hostgroup_id);
