@@ -1079,7 +1079,6 @@ int sqlite3_dump_runtime_query_cache(sqlite3 *db) {
 
 void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
 	int rc;
-	//int i;
 	sqlite3 *db=sqlite3statsdb;
 	sqlite3_stmt *statement;
 	qr_hash_t *ht = &QR_HASH_T;
@@ -1087,10 +1086,6 @@ void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
 	char *query="INSERT INTO query_stats (timestamp, query_digest_md5, query_digest_text, username, schemaname, hostgroup_id, server_address, server_port, query_time, exec_cnt) VALUES (?1 , ?2 , ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10)";
 	rc=sqlite3_prepare_v2(db, query, -1, &statement, 0);
 	assert(rc==SQLITE_OK);
-//      for (i=0;i<glomysrvs.servers->len;i++) {
-//        mysql_server *ms=g_ptr_array_index(glomysrvs.servers,i);
-//        if (ms->status==MYSQL_SERVER_STATUS_ONLINE) {
-//          if (ms->read_only==0 || ms->read_only==1) {
 	int curtime=*(time_t *)user_data;
 	rc=sqlite3_bind_int(statement, 1, (curtime)); assert(rc==SQLITE_OK);
 	rc=sqlite3_bind_text(statement, 2, entry->query_digest_md5, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
