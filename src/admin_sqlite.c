@@ -26,6 +26,10 @@ static admin_sqlite_table_def_t table_defs_statsdb[] =
 {
 	{ "query_stats", STATSDB_QUERY_STATS }
 };
+static admin_sqlite_table_def_t table_defs_debugdb[] =
+{
+	{ "debug_log", DEBUGDB_DEBUG_LOG }
+};
 
 static void __admin_sqlite3__validate_data(sqlite3 *db) {
 	char *query;
@@ -647,6 +651,22 @@ static void __admin_sqlite3__check_and_build_statsdb_tables(sqlite3 *db) {
 	}
 	sqlite3_exec_exit_on_failure(db, "PRAGMA foreign_keys = ON");
 }
+
+static void __admin_sqlite3__check_and_build_debugdb_tables(sqlite3 *db) {
+	int i;
+	sqlite3_exec_exit_on_failure(db, "PRAGMA foreign_keys = OFF");
+	for (i=0;i<sizeof(table_defs_debugdb)/sizeof(admin_sqlite_table_def_t);i++) {
+		admin_sqlite_table_def_t *table_def=table_defs_debugdb+i;
+		proxy_debug(PROXY_DEBUG_SQLITE, 6, "SQLITE: checking definition of table %s against \"%s\"\n" , table_def->table_name , table_def->table_def);
+		int match=__admin_sqlite3__check_table_structure(db, table_def->table_name , table_def->table_def);
+		if (match==0) {
+			proxy_debug(PROXY_DEBUG_SQLITE, 1, "SQLITE: Table %s does not exist or is corrupted. Creating!\n", table_def->table_name);
+			__admin_sqlite3__build_table_structure(db, table_def->table_name , table_def->table_def);
+		}
+	}
+	sqlite3_exec_exit_on_failure(db, "PRAGMA foreign_keys = ON");
+}
+
 void admin_init_sqlite3() {
 	int i;
 	char *s[4];
@@ -756,6 +776,7 @@ void admin_init_sqlite3() {
 	__admin_sqlite3__check_and_build_standard_tables(sqlite3monitordb);
 
 	__admin_sqlite3__check_and_build_statsdb_tables(sqlite3statsdb);
+	__admin_sqlite3__check_and_build_debugdb_tables(sqlite3debugdb);
 
 	sqlite3_exec_exit_on_failure(sqlite3configdb, "PRAGMA foreign_keys = OFF");
 	__admin_sqlite3__fill_table__server_status(sqlite3configdb);
@@ -1076,7 +1097,6 @@ int sqlite3_dump_runtime_query_cache(sqlite3 *db) {
 }
 
 
-
 void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
 	int rc;
 	sqlite3 *db=sqlite3statsdb;
@@ -1103,3 +1123,30 @@ void __sqlite3_statsdb__flush_query_stats(gpointer key, gpointer user_data) {
 
 	sqlite3_finalize(statement);
 }
+
+void __sqlite3_debugdb__flush_debugs(sqlite3_stmt *statement, dbg_msg_t *dbg_msg) {
+	int rc;
+//	sqlite3 *db=sqlite3debugdb;
+//	sqlite3_stmt *statement;
+//	qr_hash_t *ht = &QR_HASH_T;
+//	qr_hash_entry *entry = g_hash_table_lookup(ht->p_hash, key);
+//	char *query="INSERT INTO query_stats (timestamp, query_digest_md5, query_digest_text, username, schemaname, hostgroup_id, server_address, server_port, query_time, exec_cnt) VALUES (?1 , ?2 , ?3 , ?4 , ?5 , ?6 , ?7 , ?8 , ?9 , ?10)";
+//	rc=sqlite3_prepare_v2(db, query, -1, &statement, 0);
+//	assert(rc==SQLITE_OK);
+//	int curtime=*(time_t *)user_data;
+	unsigned long long montime=(((unsigned long long) dbg_msg->tv.tv_sec) * 1000000) + (dbg_msg->tv.tv_usec);
+	rc=sqlite3_bind_int64(statement, 1, montime); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 2, dbg_msg->thr); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 3, gdbg_lvl[dbg_msg->module].name, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 4, dbg_msg->file, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 5, dbg_msg->line); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 6, dbg_msg->func, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_int(statement, 7, dbg_msg->verb); assert(rc==SQLITE_OK);
+	rc=sqlite3_bind_text(statement, 8, dbg_msg->msg, -1, SQLITE_TRANSIENT); assert(rc==SQLITE_OK);
+	rc=sqlite3_step(statement); assert(rc==SQLITE_DONE);
+	rc=sqlite3_clear_bindings(statement); assert(rc==SQLITE_OK);
+	rc=sqlite3_reset(statement); assert(rc==SQLITE_OK);
+
+//	sqlite3_finalize(statement);
+}
+

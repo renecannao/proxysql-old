@@ -31,6 +31,8 @@
 
 #define STATSDB_QUERY_STATS "CREATE TABLE query_stats (timestamp INT NOT NULL, query_digest_md5 TEXT NOT NULL, query_digest_text TEXT NOT NULL, username TEXT NOT NULL, schemaname TEXT NOT NULL, hostgroup_id INT, server_address TEXT, server_port INT, query_time INT NOT NULL, exec_cnt INT NOT NULL, PRIMARY KEY(timestamp, query_digest_md5, username, schemaname, hostgroup_id, server_address, server_port) )"
 
+#define DEBUGDB_DEBUG_LOG "CREATE TABLE debug_log (timestamp INT NOT NULL, thread_id INT NOT NULL, module TEXT NOT NULL, filename TEXT NOT NULL, line INT NOT NULL, funct TEXT NOT NULL, level INT NOT NULL, message TEXT NOT NULL)"
+
 #define DUMP_RUNTIME_QUERY_CACHE	"DUMP RUNTIME QUERY CACHE"
 #define DUMP_RUNTIME_QUERY_RULES	"DUMP RUNTIME QUERY RULES"
 #define DUMP_RUNTIME_DEFAULT_HOSTGROUPS	"DUMP RUNTIME DEFAULT HOSTGROUPS"
@@ -66,6 +68,7 @@ int sqlite3_dump_runtime_query_cache(sqlite3 *);
 int sqlite3_dump_runtime_default_hostgroups(sqlite3 *);
 int sqlite3_config_sync_mem_to_disk();
 void __sqlite3_statsdb__flush_query_stats(gpointer, gpointer);
+void __sqlite3_debugdb__flush_debugs(sqlite3_stmt *, dbg_msg_t *);
 //int sqlite3_dump_runtime_query_rules();
 //int sqlite3_dump_runtime_query_cache();
 

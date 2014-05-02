@@ -48,12 +48,13 @@ void proxy_debug_func(enum debug_module module, int verbosity, int thr, const ch
   gettimeofday(&dbg_msg->tv, NULL);
 	dbg_msg->thr=thr;
 	//dbg_msg->file=g_strdup(__file);
+	dbg_msg->module=module;
 	dbg_msg->file=(char *)__file;
 	dbg_msg->line=__line;
 	//dbg_msg->func=g_strdup(__func);
 	dbg_msg->func=(char *)__func;
 	dbg_msg->verb=verbosity;
-	while (__sync_fetch_and_add(&glo_debug->msg_count,0)>9000) {}
+	while (__sync_fetch_and_add(&glo_debug->msg_count,0)>9000) {usleep(10000); }
 	SPIN_LOCK(glo_debug->glock);
 	__sync_fetch_and_add(&glo_debug->msg_count,1);
 	dbg_msg->msg=__l_alloc(glo_debug->sfp,DEBUG_MSG_MAXSIZE);
@@ -115,18 +116,34 @@ void *debug_logger() {
 		exit(EXIT_SUCCESS);
 	}
 	time_t lt=0;
+	sqlite3 *db=sqlite3debugdb;
+	sqlite3_stmt *statement;
+	int rc;
+
+	char *query="INSERT INTO debug_log (timestamp, thread_id, module, filename, line, funct, level, message) VALUES (?1 , ?2 , ?3 , ?4 , ?5 , ?6 , ?7 , ?8)";
+	rc=sqlite3_prepare_v2(db, query, -1, &statement, 0);
+	assert(rc==SQLITE_OK);
+	sqlite3_exec_exit_on_failure(db,"BEGIN TRANSACTION");
+	
 	while(glovars.shutdown==0) {
 		dbg_msg_t *dbg_msg=g_async_queue_timeout_pop(glo_debug->async_queue,1000000);
 		if (dbg_msg) {
-			char __buffer[25];
+//			char __buffer[25];
+//			char __buffer2[35];
 //		struct timeval tv;
 //  	gettimeofday(&tv, NULL);
-			struct tm *__tm_info=localtime(&dbg_msg->tv.tv_sec);
-			strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
-			fprintf(debugfile, "%s:%06d %d:%s:%d:%s(): LVL#%d : %s" , __buffer, (int)dbg_msg->tv.tv_usec, dbg_msg->thr, dbg_msg->file, dbg_msg->line, dbg_msg->func, dbg_msg->verb, dbg_msg->msg);
-			if (dbg_msg->tv.tv_sec > lt) {
+//			struct tm *__tm_info=localtime(&dbg_msg->tv.tv_sec);
+//			strftime(__buffer, 25, "%Y-%m-%d %H:%M:%S", __tm_info);
+//			sprintf(__buffer2, "%s:06%d", __buffer, (int)dbg_msg->tv.tv_usec);
+//			sqlite3_exec_exit_on_failure(db,"BEGIN TRANSACTION");
+			__sqlite3_debugdb__flush_debugs(statement, dbg_msg);
+//			sqlite3_exec_exit_on_failure(db,"COMMIT");
+//			fprintf(debugfile, "%s:%06d %d:%s:%d:%s(): LVL#%d : %s" , __buffer, (int)dbg_msg->tv.tv_usec, dbg_msg->thr, dbg_msg->file, dbg_msg->line, dbg_msg->func, dbg_msg->verb, dbg_msg->msg);
+			if (dbg_msg->tv.tv_sec > lt + 4) {
 				lt=dbg_msg->tv.tv_sec;
 				fflush(debugfile);
+				sqlite3_exec_exit_on_failure(db,"COMMIT");
+				sqlite3_exec_exit_on_failure(db,"BEGIN TRANSACTION");
 			}
 			//g_free(dbg_msg->file);
 			//g_free(dbg_msg->func);
@@ -138,6 +155,8 @@ void *debug_logger() {
 	SPIN_UNLOCK(glo_debug->glock);
 		//	g_free(dbg_msg->msg);
 			//g_slice_free1(sizeof(dbg_msg_t *),dbg_msg);
+		} else {
+			//sqlite3_exec_exit_on_failure(db,"COMMIT");
 		}
 	}
 	return NULL;
