@@ -67,11 +67,14 @@ static global_variable_entry_t glo_entries[]= {
 };
 
 
-void process_global_variables_from_file(GKeyFile *gkf) {
+void process_global_variables_from_file(GKeyFile *gkf, int dyn) {
 	int i;
 	GError *error;
 	for (i=0;i<sizeof(glo_entries)/sizeof(global_variable_entry_t);i++) {
-        global_variable_entry_t *gve=glo_entries+i;
+		global_variable_entry_t *gve=glo_entries+i;
+		if (dyn > gve->dynamic) {
+			continue;
+		}
 		proxy_debug(PROXY_DEBUG_GENERIC, 4, "Parsing variable %s in [%s] : %s\n", gve->key_name, gve->group_name, gve->description);
 		if (gve->func_pre) {
 			proxy_debug(PROXY_DEBUG_GENERIC, 5, "Variable %s is initialized via function\n", gve->key_name);
@@ -324,7 +327,7 @@ int init_global_variables(GKeyFile *gkf) {
 
 
 	pthread_rwlock_unlock(&glovars.rwlock_global);
-	process_global_variables_from_file(gkf);
+	process_global_variables_from_file(gkf, 0);
 	load_mysql_servers_list_from_file(gkf);
 	load_mysql_users_from_file(gkf);
 

@@ -71,7 +71,7 @@ EXTERN pthread_t thread_qr;
 int init_global_variables(GKeyFile *);
 mysql_server * new_server_master();
 mysql_server * new_server_slave();
-void process_global_variables_from_file(GKeyFile *);
+void process_global_variables_from_file(GKeyFile *, int);
 void main_opts(const GOptionEntry *, gint *, gchar ***, gchar **);
 
 void init_glomysrvs(global_variable_entry_t *);
