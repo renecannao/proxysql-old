@@ -521,7 +521,7 @@ The mysqld processes are listening on port 23389 (master) and 23390 and 23391 (s
 Configure ProxySQL
 ~~~~~~~~~~~~~~~~~~
 
-ProxySQL doesn't have an example configuration file. Create a new one named *proxysql.cnf* usin the follow sample::
+ProxySQL doesn't have an example configuration file. Create a new one named *proxysql.cnf* using the follow sample::
   
   [global]
   datadir=/home/rene/ProxySQL/proxysql-Hebe/src
