@@ -528,6 +528,7 @@ typedef struct _global_variable_entry_t global_variable_entry_t;
 struct _global_variable_entry_t {
 	const char *group_name;
 	const char *key_name;
+	int dynamic;
 	GOptionArg arg;
 	void *arg_data;
 	const char *description;
