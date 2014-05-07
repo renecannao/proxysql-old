@@ -5,6 +5,10 @@
 
 void term_handler(int sig) {
   proxy_error("Received TERM signal: shutdown in progress...\n");
+#ifdef DEBUG
+	g_mem_profile();
+	malloc_stats_print(NULL, NULL, "");
+#endif
   glovars.shutdown=1;
 	sleep(5);
 	exit(0);

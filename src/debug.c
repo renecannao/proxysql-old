@@ -4,6 +4,10 @@
 extern gboolean foreground;
 
 void crash_handler(int sig) {
+#ifdef DEBUG
+	g_mem_profile();
+	malloc_stats_print(NULL, NULL, "");
+#endif
 	void *arr[20];
 	size_t s;
 
