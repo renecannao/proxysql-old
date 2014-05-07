@@ -57,6 +57,7 @@
 #include <libdaemon/dpid.h>
 #include <libdaemon/dexec.h>
 
+#include <jemalloc/jemalloc.h>
 
 
 

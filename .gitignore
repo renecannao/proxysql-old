@@ -39,5 +39,7 @@ core
 #config
 proxysql.cnf*
 
+jeprof*heap
+
 notes.txt
 architecture.txt

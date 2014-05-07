@@ -5,7 +5,11 @@
 
 
 
-
+#ifdef DEBUG
+const char *malloc_conf = "xmalloc:true,lg_tcache_max:17,prof_accum:true,prof_gdump:true,lg_prof_sample:16,lg_prof_interval:20,prof_leak:true,prof_final:true";
+#else
+const char *malloc_conf = "xmalloc:true,lg_tcache_max:17";
+#endif
 
 static gint proxy_admin_port = 0;
 static gint proxy_mysql_port = 0;
@@ -16,6 +20,7 @@ gboolean foreground = 0;
 
 pthread_key_t tsd_key;
 
+int outfd=0;
 int errfd=0;
 
 static GOptionEntry entries[] =
@@ -310,12 +315,18 @@ int main(int argc, char **argv) {
 
 	//g_thread_init(NULL);
 
+
+
 #ifdef DEBUG
 	glo_debug=g_slice_alloc(sizeof(glo_debug_t));
 	glo_debug->glock=0;
 	glo_debug->msg_count=0;
 	glo_debug->async_queue=g_async_queue_new();
 	glo_debug->sfp=l_mem_init();
+#endif
+
+#ifdef DEBUG
+	g_mem_set_vtable(glib_mem_profiler_table);
 #endif
 
 #ifdef PROXYMEMTRACK
@@ -327,8 +338,10 @@ int main(int argc, char **argv) {
 	__mem_l_memalign_count=0;
 #endif
 
-
+#ifdef DEBUG
 	mtrace();
+#endif
+
 	rc=pthread_key_create(&tsd_key, NULL);
 	assert(rc==0);
 	// parse all the arguments and the config file
@@ -404,6 +417,10 @@ int main(int argc, char **argv) {
 	
 			/* Send OK to parent process */
 			daemon_retval_send(0);
+			outfd=open(glovars.proxy_errorlog, O_WRONLY | O_APPEND | O_CREAT , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+			assert(outfd>0);
+			dup2(outfd, STDOUT_FILENO);
+			close(outfd);
 			errfd=open(glovars.proxy_errorlog, O_WRONLY | O_APPEND | O_CREAT , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 			assert(errfd>0);
 			dup2(errfd, STDERR_FILENO);
@@ -616,5 +633,18 @@ finish:
 		}
 	}
 	g_free(stackspts);
+
+#ifdef DEBUG
+	g_mem_profile();
+/*	{
+		unsigned v;
+		size_t len;
+		len=sizeof(v);
+		mallctl("arenas.narenas", &v, &len, NULL, 0);
+		mallctl("areneas.purge", NULL, NULL, &v, len);
+	} */
+	malloc_stats_print(NULL, NULL, "");
+#endif
+
 	return 0;
 }

@@ -46,7 +46,7 @@ To download and compile these libraries, run the follows::
   wget http://www.canonware.com/download/jemalloc/jemalloc-3.6.0.tar.bz2
   tar -jxf jemalloc-3.6.0.tar.bz2
   cd jemalloc-3.6.0
-  ./configure && make
+  ./configure --enable-xmalloc --enable-prof && make
   cd ..
   wget http://ftp.gnome.org/pub/gnome/sources/glib/2.40/glib-2.40.0.tar.xz
   tar -xJf glib-2.40.0.tar.xz
