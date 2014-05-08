@@ -248,9 +248,8 @@ int init_global_variables(GKeyFile *gkf, int runtime) {
 
 	
 	if (runtime==0) {
-		pthread_rwlock_init(&glovars.rwlock_global, NULL);
+		//pthread_rwlock_init(&glovars.rwlock_global, NULL);
 		pthread_rwlock_init(&glovars.rwlock_usernames, NULL);
-		pthread_rwlock_wrlock(&glovars.rwlock_global);
 		glovars.protocol_version=10;
 	//glovars.server_version="5.0.15";
 		glovars.server_capabilities= CLIENT_FOUND_ROWS | CLIENT_PROTOCOL_41 | CLIENT_IGNORE_SIGPIPE | CLIENT_TRANSACTIONS | CLIENT_SECURE_CONNECTION | CLIENT_CONNECT_WITH_DB;
@@ -264,9 +263,11 @@ int init_global_variables(GKeyFile *gkf, int runtime) {
 	
 	
 	// init gloQR
-	init_gloQR();
-
+	if (runtime==0) {
+		init_gloQR();
+	}
 	
+	//pthread_rwlock_wrlock(&glovars.rwlock_global);
 
 
 
@@ -277,10 +278,13 @@ int init_global_variables(GKeyFile *gkf, int runtime) {
 	
 
 
-	pthread_rwlock_unlock(&glovars.rwlock_global);
+	//pthread_rwlock_unlock(&glovars.rwlock_global);
 	process_global_variables_from_file(gkf, 0);
-	load_mysql_servers_list_from_file(gkf);
-	load_mysql_users_from_file(gkf);
+	
+	if (runtime==0) {
+		load_mysql_servers_list_from_file(gkf);
+		load_mysql_users_from_file(gkf);
+	}
 
 	if (fdb_system_var.hash_purge_loop > fdb_system_var.hash_purge_time) {
 		fdb_system_var.hash_purge_loop=fdb_system_var.hash_purge_time;

@@ -361,7 +361,7 @@ struct _mysql_session_t {
 
 
 typedef struct _global_variables {
-	pthread_rwlock_t rwlock_global;
+	//pthread_rwlock_t rwlock_global;
 	pthread_rwlock_t rwlock_usernames;
 
 	int shutdown;
