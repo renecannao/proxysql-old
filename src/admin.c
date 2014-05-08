@@ -16,13 +16,15 @@ void sighup_handler(int sig) {
 	char *config_file=glovars.proxy_configfile;
 	rc=config_file_is_readable(config_file);
 	if (rc==0) {
-		exit(EXIT_FAILURE);
+  	proxy_error("Config file %s is not readable\n", config_file);
+		return;
 	}
 
 	keyfile = g_key_file_new();
 	if (!g_key_file_load_from_file(keyfile, config_file, G_KEY_FILE_NONE, &error)) {
-		g_print ("Error loading config file %s: %s\n", config_file, error->message);
-		exit(EXIT_FAILURE);
+  	proxy_error("Error loading configuration from config file %s\n", config_file);
+		g_key_file_free(keyfile);
+		return;
 	}
 
   // initialize variables and process config file
