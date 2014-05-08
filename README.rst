@@ -180,6 +180,10 @@ Currently 7 groups are available:
 
 	Path to error log . Default is *proxysql.log*
 
+* **debug**
+
+	Enable or disable debugging messages if ProxySQL was compiled with support for debug. Boolean parameter (0/1) , where 0 is the default (disabled).
+
 * **debug_log**
 
 	Path to debug log . Default is *debug.log*
