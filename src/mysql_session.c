@@ -323,7 +323,6 @@ static void process_server_pkts(mysql_session_t *sess) {
 				MY_SESS_ADD_PKT_OUT_CLIENT(p);
 				//l_ptr_array_add(sess->client_myds->output.pkts, p);
 		}
-		//debug_print("Moving pkts from %s to %s\n", "server", "client");
 	}
 }
 

@@ -19,20 +19,6 @@ struct _debug_level {
 //#define DEBUG_pktalloc
 #endif /* DEBUG */
 
-#ifdef DEBUG
-#define debug_print(fmt, ...) \
-        do { if (DEBUG && glovars.verbose>=10) {   \
-			unsigned long self; \
-			struct timeval tv; \
-			gettimeofday(&tv, NULL); \
-			self= (unsigned long) pthread_self(); \
-			glotimeold=glotimenew; \
-			glotimenew=tv.tv_sec * 1000000 + tv.tv_usec; \
-        	fprintf(stderr, "%lu %s:%d:%s() %ld.%ld ( %lld ) : " fmt, self, __FILE__, __LINE__, __func__, tv.tv_sec, tv.tv_usec, glotimenew-glotimeold , __VA_ARGS__); } \
-        } while (0)
-#else
-#define debug_print(fmt, ...) 
-#endif
 
 
 //	proxy_debug_func(module, verbosity, "%d:%s:%d:%s(): LVL#%d : " fmt, syscall(SYS_gettid), __FILE__, __LINE__, __func__ , verbosity , ## __VA_ARGS__); 

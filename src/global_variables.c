@@ -263,34 +263,6 @@ int init_global_variables(GKeyFile *gkf, int runtime) {
 	}
 	
 	
-/*
-	// set debug
-	if (g_key_file_has_key(gkf, "global", "debug", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "debug", &error);
-		if (r > 0 ) {
-			gdbg=1;
-		}
-	}
-*/
-	// set verbose
-	glovars.verbose=0;
-	if (g_key_file_has_key(gkf, "global", "verbose", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "verbose", &error);
-		if (r >= 0 ) {
-			glovars.verbose=r;
-		}
-	}
-
-/*
-	// set print_statistics_interval
-	glovars.print_statistics_interval=10;
-	if (g_key_file_has_key(gkf, "global", "print_statistics_interval", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "print_statistics_interval", &error);
-		if (r >= 0 ) {
-			glovars.print_statistics_interval=r;
-		}
-	}
-*/
 	// init gloQR
 	init_gloQR();
 

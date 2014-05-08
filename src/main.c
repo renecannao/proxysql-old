@@ -15,7 +15,6 @@ static gint proxy_admin_port = 0;
 static gint proxy_mysql_port = 0;
 //static gchar *config_file="proxysql.cnf";
 static gchar *config_file=NULL;
-static gint verbose = -1;
 gboolean foreground = 0;
 
 pthread_key_t tsd_key;
@@ -27,7 +26,6 @@ static GOptionEntry entries[] =
 {
   { "admin-port", 0, 0, G_OPTION_ARG_INT, &proxy_admin_port, "Administration port", NULL },
   { "mysql-port", 0, 0, G_OPTION_ARG_INT, &proxy_mysql_port, "MySQL proxy port", NULL },
-  { "verbose", 'v', 0, G_OPTION_ARG_INT, &verbose, "Verbose level", NULL },
   { "foreground", 'f', 0, G_OPTION_ARG_NONE, &foreground, "Run in foreground", NULL },
   { "debug", 'd', 0, G_OPTION_ARG_INT, &gdbg, "debug", NULL },
   { "config", 'c', 0, G_OPTION_ARG_FILENAME, &config_file, "Configuration file", NULL },
@@ -521,20 +519,12 @@ gotofork:
 	//  command line options take precedences over config file
 	if (proxy_admin_port) { glovars.proxy_admin_port=proxy_admin_port; }
 	if (proxy_mysql_port) { glovars.proxy_mysql_port=proxy_mysql_port; }
-	if (verbose>=0) { glovars.verbose=verbose; }
 
 	if (glovars.proxy_admin_port==glovars.proxy_mysql_port) {
 		proxy_error("Fatal error: proxy_admin_port (%d) matches proxy_mysql_port (%d) . Configure them to use different ports\n", glovars.proxy_admin_port, glovars.proxy_mysql_port);
 		exit(EXIT_FAILURE);
 	}
 
-	if (glovars.verbose>0) {
-		proxy_debug(PROXY_DEBUG_GENERIC, 1, "mysql port %d, admin port %d, config file %s, verbose %d\n", glovars.proxy_mysql_port, glovars.proxy_admin_port, config_file, verbose);
-		proxy_debug(PROXY_DEBUG_QUERY_CACHE, 1, "Query cache partitions: %d\n", glovars.mysql_query_cache_partitions);
-		proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 1, "MySQL USAGE user: %s, password: _OMITTED_\n", glovars.mysql_usage_user);
-		proxy_debug(PROXY_DEBUG_MYSQL_COM, 1, "Max query size: %d, Max resultset size: %d\n", glovars.mysql_max_query_size, glovars.mysql_max_resultset_size);
-		//fprintf(stderr, "verbose level: %d, print_statistics_interval: %d\n", glovars.verbose, glovars.print_statistics_interval);
-	}
 
 	//glomybepools_init();
 
