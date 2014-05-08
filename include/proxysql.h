@@ -135,3 +135,7 @@ char is_digit_string(char *, char *);
 // Added by chan end.
 
 void glo_DefHG_init(global_default_hostgroups_t *);
+
+
+void sighup_handler(int sig);
+int config_file_is_readable(char *);

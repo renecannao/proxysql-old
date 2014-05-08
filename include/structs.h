@@ -390,7 +390,7 @@ typedef struct _global_variables {
 	//int proxy_flush_status_interval;
 	int backlog;
 	int verbose;
-	int print_statistics_interval;
+	//int print_statistics_interval;
 
 	int admin_sync_disk_on_flush;
 	int admin_sync_disk_on_shutdown;

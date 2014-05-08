@@ -5,6 +5,7 @@ static global_variable_entry_t glo_entries[]= {
 	{"global", "stack_size", 0, G_OPTION_ARG_INT, &glovars.stack_size, "stack size", 64*1024, 32*1024*1024 , 1024, 0, 512*1024, NULL, NULL, NULL},
 	{"global", "net_buffer_size", 0, G_OPTION_ARG_INT, &glovars.net_buffer_size, "net buffer size", 1024, 16*1024*1024 , 1024, 0, 8*1024, NULL, NULL, NULL},
 	{"global", "backlog", 0, G_OPTION_ARG_INT, &glovars.backlog, "backlog for listen()", 50, 10000 , 0, 0, 2000, NULL, NULL, NULL},
+	{"global", "debug", 1, G_OPTION_ARG_INT, &gdbg, "debugging messages", 0, 1, 0, 0, 1, NULL, NULL, NULL},
 	{"global", "merge_configfile_db", 0, G_OPTION_ARG_INT, &glovars.merge_configfile_db, "merge users, hosts and debugs from config file to DB, without replacing DB content", 0, 1, 0, 0, 1, NULL, NULL, NULL},
 	{"global", "datadir", 0, G_OPTION_ARG_STRING, &glovars.proxy_datadir, "Path to datadir", 0, 0, 0, 0, 0, "/var/run/proxysql", NULL, NULL},
 	{"global", "pid_file", 0, G_OPTION_ARG_STRING, &glovars.proxy_pidfile, "Path to pidfile", 0, 0, 0, 0, 0, "proxysql.pid", NULL, NULL},
@@ -121,18 +122,36 @@ void process_global_variables_from_file(GKeyFile *gkf, int dyn) {
 }
 
 
+void init_signal_handlers() {
+	signal(SIGSEGV, crash_handler);
+	signal(SIGABRT, crash_handler);
+	signal(SIGTERM, term_handler);
+//	signal(SIGHUP, sighup_handler);
+}
+
+int config_file_is_readable(char *config_file) {
+	// check if file exists and is readable
+	if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
+		g_print("Config file %s does not exist\n", config_file);
+		return 0;
+	}
+	if (access(config_file, R_OK)) {
+		g_print("Config file %s is not readable\n", config_file);
+		return 0;
+	}
+	return 1;
+}
+	
 void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **config_file_ptr) {
 
 
 	// Prepare the processing of config file
 	GKeyFile *keyfile;
-
+	int rc;
 	GError *error = NULL;
 	GOptionContext *context;
 
-	signal(SIGSEGV, crash_handler);
-	signal(SIGABRT, crash_handler);
-	signal(SIGTERM, term_handler);
+	init_signal_handlers();
 
 	context = g_option_context_new ("- High Performance Advanced Proxy for MySQL");
 	g_option_context_add_main_entries (context, entries, NULL);
@@ -164,20 +183,19 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 		}
 	}
 
-	// check if file exists and is readable
-	if (!g_file_test(config_file,G_FILE_TEST_EXISTS|G_FILE_TEST_IS_REGULAR)) {
-		g_print("Config file %s does not exist\n", config_file); exit(EXIT_FAILURE);
-	}   
-	if (access(config_file, R_OK)) {
-		g_print("Config file %s is not readable\n", config_file); exit(EXIT_FAILURE);
+	rc=config_file_is_readable(config_file);
+	if (rc==0) {
+		exit(EXIT_FAILURE);	
 	}
+
 	keyfile = g_key_file_new();
 	if (!g_key_file_load_from_file(keyfile, config_file, G_KEY_FILE_NONE, &error)) {
-		g_print ("Error loading config file %s: %s\n", config_file, error->message); exit(EXIT_FAILURE);
+		g_print ("Error loading config file %s: %s\n", config_file, error->message);
+		exit(EXIT_FAILURE);
 	}
-	
+
 	// initialize variables and process config file
-	init_global_variables(keyfile);
+	init_global_variables(keyfile, 0);
 
 	g_key_file_free(keyfile);
 	glovars.proxy_configfile=config_file;
@@ -186,25 +204,35 @@ void main_opts(const GOptionEntry *entries, gint *argc, gchar ***argv, gchar **c
 }
 
 
-int init_global_variables(GKeyFile *gkf) {
+int init_global_variables(GKeyFile *gkf, int runtime) {
 	//int i;
 	GError *error=NULL;
 
 	// open the file and verify it has [global] section
 	proxy_debug(PROXY_DEBUG_GENERIC, 1, "Checking [global]\n");
 	if (g_key_file_has_group(gkf,"global")==FALSE) {
-		g_print("[global] section not found\n"); exit(EXIT_FAILURE);
+		g_print("[global] section not found\n");
+		if (runtime==0) {
+			exit(EXIT_FAILURE);
+		} else {
+			return -1;
+		}
 	}
 
 	// open the file and verify it has [mysql users] section
 	proxy_debug(PROXY_DEBUG_GENERIC, 1, "Checking [mysql users]\n");
 	if (g_key_file_has_group(gkf,"mysql users")==FALSE) {
-		g_print("[mysql users] section not found\n"); exit(EXIT_FAILURE);
+		g_print("[mysql users] section not found\n");
+		if (runtime==0) {
+			exit(EXIT_FAILURE);
+		} else {
+			return -1;
+		}
 	}
 
 	// processing [debug] section
 	proxy_debug(PROXY_DEBUG_GENERIC, 1, "Processing [debug]\n");
-	if (g_key_file_has_group(gkf,"mysql users")==FALSE) {
+	if (g_key_file_has_group(gkf,"debug")==FALSE) {
 		proxy_debug(PROXY_DEBUG_GENERIC, 1, "[debug] missing\n");	
 		memset(gdbg_lvl,0,sizeof(int)*PROXY_DEBUG_UNKNOWN);
 	} else {
@@ -219,81 +247,31 @@ int init_global_variables(GKeyFile *gkf) {
 	}
 
 	
-
-	pthread_rwlock_init(&glovars.rwlock_global, NULL);
-	pthread_rwlock_init(&glovars.rwlock_usernames, NULL);
-
-	pthread_rwlock_wrlock(&glovars.rwlock_global);
-
-	glovars.protocol_version=10;
+	if (runtime==0) {
+		pthread_rwlock_init(&glovars.rwlock_global, NULL);
+		pthread_rwlock_init(&glovars.rwlock_usernames, NULL);
+		pthread_rwlock_wrlock(&glovars.rwlock_global);
+		glovars.protocol_version=10;
 	//glovars.server_version="5.0.15";
-	glovars.server_capabilities= CLIENT_FOUND_ROWS | CLIENT_PROTOCOL_41 | CLIENT_IGNORE_SIGPIPE | CLIENT_TRANSACTIONS | CLIENT_SECURE_CONNECTION | CLIENT_CONNECT_WITH_DB;
+		glovars.server_capabilities= CLIENT_FOUND_ROWS | CLIENT_PROTOCOL_41 | CLIENT_IGNORE_SIGPIPE | CLIENT_TRANSACTIONS | CLIENT_SECURE_CONNECTION | CLIENT_CONNECT_WITH_DB;
 //	glovars.server_capabilities=0xffff;
-	glovars.server_language=33;
-	glovars.server_status=2;
-
-	glovars.thread_id=1;
-
-
-	glovars.shutdown=0;
-
-/*
-	fdb_system_var.hash_purge_time=10000000;
-	if (g_key_file_has_key(gkf, "fundadb", "fundadb_hash_purge_time", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "fundadb", "fundadb_hash_purge_time", &error);
-		if (r >= 100 ) {		// minimum millisecond to purge a whole hash tabe
-			fdb_system_var.hash_purge_time=r*1000; // convert from millisecond to microsecond
-		}
-	}
-
-	fdb_system_var.hash_purge_loop=100000;
-	if (g_key_file_has_key(gkf, "fundadb", "fundadb_hash_purge_loop", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "fundadb", "fundadb_hash_purge_loop", &error);
-		if (r >= 100 ) {		// minimum millisecond to purge a single block
-			fdb_system_var.hash_purge_time=r*1000; // convert from millisecond to microsecond
-		}
-		if (fdb_system_var.hash_purge_loop > fdb_system_var.hash_purge_time) {
-			fdb_system_var.hash_purge_loop=fdb_system_var.hash_purge_time;
-		}
-	}
-*/
-	fdb_system_var.hash_expire_max=3600*24*365*10;
-/*
-	fdb_system_var.hash_expire_default=10;
-	if (g_key_file_has_key(gkf, "fundadb", "fundadb_hash_expire_default", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "fundadb", "fundadb_hash_expure_default", &error);
-		if (r >= 1 && r < fdb_system_var.hash_expire_max) {
-			fdb_system_var.hash_expire_default=r;
-		}
-	}
-*/
-
-
-
-
-/*	
-	pthread_mutex_init(&myds_pool.mutex, NULL);
-	myds_pool.size=sizeof(mysql_data_stream_t);
-	myds_pool.incremental=1024;
-	myds_pool.blocks=g_ptr_array_new();
-*/	
-	{
-		// pop and push on element : initialize
-		//mysql_data_stream_t *t=stack_alloc(&myds_pool);
-		//tack_free(t,&myds_pool);
+		glovars.server_language=33;
+		glovars.server_status=2;
+		glovars.thread_id=1;
+		glovars.shutdown=0;
+		fdb_system_var.hash_expire_max=3600*24*365*10;
 	}
 	
 	
-
-
+/*
 	// set debug
 	if (g_key_file_has_key(gkf, "global", "debug", NULL)) {
 		gint r=g_key_file_get_integer(gkf, "global", "debug", &error);
-		if (r >= 0 ) {
+		if (r > 0 ) {
 			gdbg=1;
 		}
 	}
-
+*/
 	// set verbose
 	glovars.verbose=0;
 	if (g_key_file_has_key(gkf, "global", "verbose", NULL)) {
@@ -303,6 +281,7 @@ int init_global_variables(GKeyFile *gkf) {
 		}
 	}
 
+/*
 	// set print_statistics_interval
 	glovars.print_statistics_interval=10;
 	if (g_key_file_has_key(gkf, "global", "print_statistics_interval", NULL)) {
@@ -311,7 +290,7 @@ int init_global_variables(GKeyFile *gkf) {
 			glovars.print_statistics_interval=r;
 		}
 	}
-
+*/
 	// init gloQR
 	init_gloQR();
 

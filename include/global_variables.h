@@ -68,7 +68,7 @@ EXTERN pthread_t thread_qr;
 
 //EXTERN admin_sqlite_table_def_t *table_defs;
 
-int init_global_variables(GKeyFile *);
+int init_global_variables(GKeyFile *, int);
 mysql_server * new_server_master();
 mysql_server * new_server_slave();
 void process_global_variables_from_file(GKeyFile *, int);

@@ -3,6 +3,35 @@
 //int static_lock=0;
 
 
+void sighup_handler(int sig) {
+	GKeyFile *keyfile;
+	GError *error = NULL;
+	int rc;
+	// TODO: handle also closing/reopening of log files and databases
+  proxy_error("Received HUP signal: reloading config file...\n");
+#ifdef DEBUG
+	g_mem_profile();
+	malloc_stats_print(NULL, NULL, "");
+#endif
+	char *config_file=glovars.proxy_configfile;
+	rc=config_file_is_readable(config_file);
+	if (rc==0) {
+		exit(EXIT_FAILURE);
+	}
+
+	keyfile = g_key_file_new();
+	if (!g_key_file_load_from_file(keyfile, config_file, G_KEY_FILE_NONE, &error)) {
+		g_print ("Error loading config file %s: %s\n", config_file, error->message);
+		exit(EXIT_FAILURE);
+	}
+
+  // initialize variables and process config file
+	init_global_variables(keyfile,1);
+
+	g_key_file_free(keyfile);
+
+}
+
 void term_handler(int sig) {
   proxy_error("Received TERM signal: shutdown in progress...\n");
 #ifdef DEBUG
