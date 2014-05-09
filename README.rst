@@ -62,9 +62,9 @@ Compiling
 
 After compiling the libraries from the previous section, download and compile ProxySQL running the follows::
   
-  wget -O proxysql_Hebe.zip https://github.com/renecannao/proxysql/archive/Hebe.zip
-  unzip proxysql_Hebe.zip
-  cd proxysql-Hebe/src
+  wget https://github.com/renecannao/proxysql/archive/master.zip
+  unzip master.zip
+  cd proxysql-master/src
   make
 
 Note that no configure is available yet. You must check for missing dependencies.
@@ -420,54 +420,8 @@ Quick start Tutorial
 Download and compile
 ~~~~~~~~~~~~~~~~~~~~
 
-These are the simple steps to download and compile ProxySQL::
-  
-  rene@voyager:~$ mkdir ProxySQL
-  rene@voyager:~$ cd ProxySQL
-  rene@voyager:~/ProxySQL$ wget https://downloads.mariadb.org/interstitial/mariadb-native-client/Source/mariadb-native-client.tar.gz
-  ...
-  rene@voyager:~/ProxySQL$ tar -zxf mariadb-native-client.tar.gz
-  rene@voyager:~/ProxySQL$ cd mariadb-native-client
-  rene@voyager:~/ProxySQL/mariadb-native-client$ cmake . && make
-  ...
-  rene@voyager:~/ProxySQL/mariadb-native-client$ cd ..
-  
-  rene@voyager:~/ProxySQL$ wget http://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
-  ...
-  rene@voyager:~/ProxySQL$ tar -zxf libdaemon-0.14.tar.gz 
-  rene@voyager:~/ProxySQL$ cd libdaemon-0.14
-  rene@voyager:~/ProxySQL/libdaemon-0.14$ ./configure && make
-  ...
-  rene@voyager:~/ProxySQL/libdaemon-0.14$ cd ..
-  rene@voyager:~/ProxySQL$ wget -O proxysql_Hebe.zip https://github.com/renecannao/proxysql/archive/Hebe.zip
-  ...
-  rene@voyager:~/ProxySQL$ unzip proxysql_Hebe.zip
-  ...
-  rene@voyager:~/ProxySQL$ cd proxysql-Hebe/src/
-  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ make
-  gcc -c -o obj/utils.o utils.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/l_utils.o l_utils.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/mysql_session.o mysql_session.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/mysql_data_stream.o mysql_data_stream.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/mysql_backend.o mysql_backend.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/main.o main.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/debug.o debug.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/fundadb_hash.o fundadb_hash.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/global_variables.o global_variables.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/mysql_connpool.o mysql_connpool.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/mysql_protocol.o mysql_protocol.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/mysql_handler.o mysql_handler.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/network.o network.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/threads.o threads.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/rene.o rene.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o obj/rene_sqlite.o rene_sqlite.c -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -Wall
-  gcc -c -o ../sqlite3/sqlite3.o -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG ../sqlite3/sqlite3.c
-  gcc -o proxysql ../../mariadb-native-client/libmysql/libmariadbclient.a ../../libdaemon-0.14/libdaemon/.libs/libdaemon.a ../sqlite3/sqlite3.o obj/utils.o obj/l_utils.o obj/mysql_session.o obj/mysql_data_stream.o obj/mysql_backend.o obj/main.o obj/debug.o obj/fundadb_hash.o obj/global_variables.o obj/mysql_connpool.o obj/mysql_protocol.o obj/mysql_handler.o obj/network.o obj/threads.o obj/rene.o obj/rene_sqlite.o -I../include -I../sqlite3 -I../../mariadb-native-client/include -I../../libdaemon-0.14 `pkg-config --cflags gthread-2.0` -rdynamic -O0 -ggdb -DDEBUG -L../../mariadb-native-client/libmysql -L../../libdaemon-0.14/libdaemon/.libs `pkg-config --cflags gthread-2.0` -Wl,-Bstatic -lmariadbclient -ldaemon -Wl,-Bdynamic -lssl -ldl -lpthread -lm `pkg-config --libs gthread-2.0`
-  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ ls -l proxysql
-  -rwxr-xr-x 1 admin admin 2610700 Mar 28 07:35 proxysql
+See above for an example of how to download and compile ProxySQL
 
- 
-Congratulations! You have just compiled proxysql!
 
 Create a small replication environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
