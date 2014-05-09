@@ -108,6 +108,86 @@ inline enum MySQL_response_type mysql_response(pkt *p) {
 }
 
 
+int parse_change_user_packet(pkt *mypkt, mysql_session_t *sess) {
+	// FIXME: very buggy function, it doesn't perform any real check
+	int ret=-1;
+	int cur=sizeof(mysql_hdr);
+	cur+=1;
+	g_free(sess->mysql_username);
+	char *ptr=mypkt->data+cur;
+	sess->mysql_username=g_strdup(ptr);
+	cur+=strlen(sess->mysql_username);
+	cur+=2;
+	//memcpy(sess->scramble_buf,mypkt->data+cur,20);
+	cur+=20;
+	g_free(sess->mysql_schema_cur);
+	ptr=mypkt->data+cur;
+	sess->mysql_schema_cur=g_strdup(ptr);
+	proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 5, "CHANGE USER: Username %s , schema %s\n" , sess->mysql_username, sess->mysql_schema_cur);
+	ret=0;
+	return ret;
+}
+
+void create_auth_switch_request_packet(pkt *mypkt, mysql_session_t *sess) {
+	proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 7, "Generating auth switch request pkt\n");
+	mysql_hdr myhdr;
+	myhdr.pkt_id=1;
+	myhdr.pkt_length=1 // fe
+		+ (strlen("mysql_native_password")+1)
+		+ 20 // scramble
+		+ 1; // 00
+	mypkt->length=myhdr.pkt_length+sizeof(mysql_hdr);
+	mypkt->data=l_alloc0(mypkt->length);
+	memcpy(mypkt->data, &myhdr, sizeof(mysql_hdr));
+	int cur=sizeof(mysql_hdr);
+	memcpy(mypkt->data+cur,"\xfe",1);
+	cur++;
+	memcpy(mypkt->data+cur,"mysql_native_password",strlen("mysql_native_password"));
+	cur+=strlen("mysql_native_password");
+	memcpy(mypkt->data+cur,"\x00",1);
+	cur++;
+	memcpy(mypkt->data+cur, sess->scramble_buf, 20);
+	cur+=20;
+	memcpy(mypkt->data+cur,"\x00",1);
+}
+
+
+int check_auth_switch_response_packet(pkt *mypkt, mysql_session_t *sess) {
+	int ret=-1;
+	sess->waiting_change_user_response=0;
+	if (mypkt->length!=sizeof(mysql_hdr)+20) {
+		return ret;
+	}
+	mysql_hdr myhdr;
+	memcpy(&myhdr, mypkt->data, sizeof(mysql_hdr));
+	if (myhdr.pkt_length!=20) {
+		return ret;
+	}
+	free(sess->mysql_password);
+	sess->mysql_password=user_password(sess->mysql_username, sess->admin);
+	if (sess->mysql_password==NULL)	 {
+		proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Username %s does not exist\n" , sess->mysql_username);
+		return ret;
+	}
+	unsigned char *scramble_reply=NULL;
+	scramble_reply=mypkt->data+sizeof(mysql_hdr);
+	char reply[SHA_DIGEST_LENGTH+1];
+	reply[SHA_DIGEST_LENGTH]='\0';
+	if (scramble_reply) {
+		proxy_scramble(reply, sess->scramble_buf, sess->mysql_password);
+		if (memcmp(reply,scramble_reply,SHA_DIGEST_LENGTH)==0) {
+			ret=0;
+			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 6, "Password match!\n");
+		}
+	} else {
+		if (strcmp(sess->mysql_password,"")==0) {
+			ret=0;
+			proxy_debug(PROXY_DEBUG_MYSQL_AUTH, 4, "Empty password match!\n");
+		}
+	}
+	return ret;
+}
+
 int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	// WARNING : for now it only checks the password
 	int ret=-1;
@@ -116,7 +196,7 @@ int check_client_authentication_packet(pkt *mypkt, mysql_session_t *sess) {
 	memcpy(&capabilities,mypkt->data+cur,sizeof(uint32_t));
 	cur+=32;
 	char *username=mypkt->data+cur;
-	sess->mysql_username=strdup(username);
+	sess->mysql_username=g_strdup(username);
 	unsigned char *scramble_reply=NULL;
 	cur+=strlen(username);
 	cur++;

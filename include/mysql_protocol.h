@@ -37,7 +37,9 @@ void myproto_column_count(pkt *, unsigned int , uint64_t);
 void myproto_column_def(pkt *, unsigned int , const char *, const char *, const char *, const char *, const char *, uint32_t , uint8_t, uint16_t , uint8_t);
 void myproto_eof(pkt *, unsigned int , uint16_t , uint16_t);
 void mysql_new_payload_select(pkt *, void *, int);
-
+int parse_change_user_packet(pkt *, mysql_session_t *);
+void create_auth_switch_request_packet(pkt *, mysql_session_t *);
+int check_auth_switch_response_packet(pkt *, mysql_session_t *);
 /*
 #ifndef MYSQL_COM_END
 #define MYSQL_COM_END COM_END

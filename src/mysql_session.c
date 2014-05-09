@@ -505,6 +505,32 @@ static inline void client_COM_CHANGE_USER(mysql_session_t *sess, pkt *p) {
 		return;
 	}
 	proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Got COM_CHANGE_USER packet\n");
+	sess->mysql_query_cache_hit=TRUE;
+	l_free(p->length, p->data);
+	parse_change_user_packet(p,sess);
+	create_auth_switch_request_packet(p, sess);
+	sess->waiting_change_user_response=1;
+	MY_SESS_ADD_PKT_OUT_CLIENT(p);
+	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 5, "Resetting default_hostgroup from %d to -1 in session %p\n", sess->default_hostgroup, sess);
+	sess->default_hostgroup=-1;
+	//sess->last_mysql_connpool=NULL;
+	if ( (sess->server_mybe) && (sess->server_mybe->server_mycpe) &&
+		(sess->server_mybe->mshge) && (sess->server_mybe->mshge->MSptr) &&
+		(sess->server_mybe->server_myds) && (sess->server_mybe->server_myds->fd)) {
+			proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Disconnecting backend for hostgroup 0 : %p\n", sess->server_mybe);
+			sess->server_mybe->last_mysql_connpool=NULL;
+			sess->server_mybe->bereset(sess->server_mybe, &sess->server_mybe->last_mysql_connpool, 0);
+	}
+	PROXY_TRACE();
+	int j;
+	// start from 1, don't reset hostgroup 0
+	for (j=0; j<glovars.mysql_hostgroups; j++) {
+		proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Disconnecting backend for hostgroup %d : %p\n", j, sess->server_mybe);
+		mysql_backend_t *mybe=l_ptr_array_index(sess->mybes,j);
+		mybe->last_mysql_connpool=NULL;
+		mybe->bereset(mybe, &mybe->last_mysql_connpool, 0);
+	}
+	sess->server_mybe=NULL;
 }
 
 static inline void client_COM_INIT_DB(mysql_session_t *sess, pkt *p) {
@@ -705,7 +731,21 @@ static int process_client_pkts(mysql_session_t *sess) {
 				break;
 			case MYSQL_COM_CHANGE_USER:
 				client_COM_CHANGE_USER(sess, p);
+				break;
 			default:
+				if (sess->waiting_change_user_response==1) {
+					// this code handle a response to change user
+					int rc;
+					rc=check_auth_switch_response_packet(p, sess);
+					if (rc==-1) {
+						sess->healthy=0;
+					} else {
+						l_free(p->length, p->data);
+						create_ok_packet(p,3);
+						MY_SESS_ADD_PKT_OUT_CLIENT(p);
+						sess->mysql_query_cache_hit=TRUE;
+					}
+				}
 				if (sess->admin>0) {
 					// we received an unknown packet
 					// we shouldn't forward this if we are in admin mode
@@ -1054,6 +1094,7 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	sess->fds[0].fd=sess->client_myds->fd;
 	sess->fds[0].events=POLLIN|POLLOUT;
 	sess->nfds=1;
+	sess->waiting_change_user_response=0;
 	sess->query_to_cache=FALSE;
 	sess->client_command=MYSQL_COM_END;	 // always reset this
 	sess->send_to_slave=FALSE;

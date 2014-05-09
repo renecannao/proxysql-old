@@ -334,6 +334,7 @@ struct _mysql_session_t {
 	int default_hostgroup;
 	int default_hostgroup_version;
 	char scramble_buf[21];
+	int waiting_change_user_response;
 	change_user_info_t *change_user;
 	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
