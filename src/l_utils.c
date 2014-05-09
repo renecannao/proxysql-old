@@ -52,7 +52,7 @@ static void * __x_memalign(size_t size) {
 	return m;
 }
 
-
+/*
 static void l_ptr_array_expand(LPtrArray *array, unsigned int more) {
 	if ( (array->len+more) > array->size ) {
 		unsigned int new_size=l_near_pow_2(array->len+more);
@@ -120,7 +120,7 @@ int l_ptr_array_remove_fast(LPtrArray *array, void *p) {
 	}
 	return 0;
 }
-
+*/
 
 static void __add_mem_block(l_sfc *sfc, void *m) {
 	void *nmp=__x_malloc(sizeof(void *)*(sfc->blocks_cnt+1));
