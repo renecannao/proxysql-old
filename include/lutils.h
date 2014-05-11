@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <unistd.h>
-#define LPtrArray GPtrArray
 //#define mypkt_alloc() l_alloc(thrLD->sfp,sizeof(pkt))
 //#define mypkt_free1(p) { l_free(thrLD->sfp, p->length, p->data); l_free(thrLD->sfp, sizeof(pkt), p); }
 //#define mypkt_free0(p) { l_free(thrLD->sfp, sizeof(pkt), p); }
@@ -12,8 +11,7 @@
 #define l_ptr_array_index(array,l_index_) ((array)->pdata)[l_index_]
 
 #define l_ptr_array_free0(array) { l_free(sizeof(LPtrArray),array); }
-#define l_ptr_array_free1(array) { if (array->pdata) l_free(0 , array->pdata); l_free(sizeof(LPtrArray),array); }
-//#define l_ptr_array_free1(array) { if (array->pdata) l_free(sizeof(void *)*array->size,array->pdata); l_free(sizeof(LPtrArray),array); }
+#define l_ptr_array_free1(array) { if (array->pdata) l_free(sizeof(void *)*array->size,array->pdata); l_free(sizeof(LPtrArray),array); }
 
 
 #define L_SFC_MIN_ELEM_SIZE	8
