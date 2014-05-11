@@ -4,8 +4,7 @@
 
 #ifndef L_SFP
 #define L_SFP
-//typedef struct _LPtrArray LPtrArray;
-#define LPtrArray GPtrArray
+typedef struct _LPtrArray LPtrArray;
 typedef struct _l_super_free_pool_t l_sfp;
 #endif
 typedef struct __fdb_hash_t fdb_hash_t;
