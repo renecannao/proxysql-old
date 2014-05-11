@@ -27,17 +27,16 @@ typedef struct _l_super_free_chunk_t l_sfc;
 #ifndef L_SFP
 #define L_SFP
 typedef struct _l_super_free_pool_t l_sfp;
-//typedef struct _LPtrArray LPtrArray;
+typedef struct _LPtrArray LPtrArray;
 #endif
 extern __thread l_sfp *__thr_sfp;
 
-/*
 struct _LPtrArray {
   void **pdata;
   unsigned int len;
   unsigned int size;
 };
-*/
+
 
 struct _l_stack_t {
 	l_stack *n;
@@ -83,17 +82,9 @@ void l_free(size_t, void *);
 void * __l_alloc(l_sfp *, size_t);
 void __l_free(l_sfp *, size_t, void *);
 
-/*
 LPtrArray *l_ptr_array_sized_new(unsigned int);
 LPtrArray *l_ptr_array_new();
 void l_ptr_array_add(LPtrArray *, void *);
 void * l_ptr_array_remove_index(LPtrArray *, unsigned int);
 void * l_ptr_array_remove_index_fast (LPtrArray *, unsigned int);
 int l_ptr_array_remove_fast(LPtrArray *, void *);
-*/
-#define l_ptr_array_sized_new g_ptr_array_sized_new
-#define l_ptr_array_new g_ptr_array_new
-#define l_ptr_array_add g_ptr_array_add
-#define l_ptr_array_remove_index g_ptr_array_remove_index
-#define l_ptr_array_remove_index_fast g_ptr_array_remove_index_fast
-#define l_ptr_array_remove_fast g_ptr_array_remove_fast

@@ -52,7 +52,7 @@ static void * __x_memalign(size_t size) {
 	return m;
 }
 
-/*
+
 static void l_ptr_array_expand(LPtrArray *array, unsigned int more) {
 	if ( (array->len+more) > array->size ) {
 		unsigned int new_size=l_near_pow_2(array->len+more);
@@ -120,7 +120,7 @@ int l_ptr_array_remove_fast(LPtrArray *array, void *p) {
 	}
 	return 0;
 }
-*/
+
 
 static void __add_mem_block(l_sfc *sfc, void *m) {
 	void *nmp=__x_malloc(sizeof(void *)*(sfc->blocks_cnt+1));
@@ -170,7 +170,6 @@ static inline void __push_mem_block(l_sfc *sfc, void *m) {
 
 
 void * __l_alloc(l_sfp *sfp, size_t size) {
-	return __x_malloc(size);
 	if (size>L_SFC_MAX_ELEM_SIZE) {
 		return __x_malloc(size);
 	}
@@ -202,7 +201,6 @@ void * __l_alloc(l_sfp *sfp, size_t size) {
 }
 
 void * l_alloc(size_t size) {
-	return __x_malloc(size);
 //	return malloc(size);
 	return __l_alloc(__thr_sfp,size);
 }
@@ -290,7 +288,6 @@ void compact_mem(l_sfc *sfc) {
 
 
 void __l_free(l_sfp *sfp, size_t size, void *p) {
-	free(p); return;
 	if (size>L_SFC_MAX_ELEM_SIZE) {
 		free(p);
 		return;
@@ -321,7 +318,6 @@ void __l_free(l_sfp *sfp, size_t size, void *p) {
 }
 
 void l_free(size_t size, void *p) {
-	free(p); return;
 //	free(p);
 	__l_free(__thr_sfp,size,p);
 }
