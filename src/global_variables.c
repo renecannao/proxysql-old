@@ -126,7 +126,7 @@ void init_signal_handlers() {
 	signal(SIGSEGV, crash_handler);
 	signal(SIGABRT, crash_handler);
 	signal(SIGTERM, term_handler);
-	signal(SIGHUP, sighup_handler);
+//	signal(SIGHUP, sighup_handler);
 }
 
 int config_file_is_readable(char *config_file) {
