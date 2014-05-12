@@ -10,7 +10,7 @@ void sighup_handler(int sig) {
 	// TODO: handle also closing/reopening of log files and databases
   proxy_error("Received HUP signal: reloading config file...\n");
 #ifdef DEBUG
-	g_mem_profile();
+	//g_mem_profile();
 	malloc_stats_print(NULL, NULL, "");
 #endif
 	char *config_file=glovars.proxy_configfile;
@@ -37,7 +37,7 @@ void sighup_handler(int sig) {
 void term_handler(int sig) {
   proxy_error("Received TERM signal: shutdown in progress...\n");
 #ifdef DEBUG
-	g_mem_profile();
+	//g_mem_profile();
 	malloc_stats_print(NULL, NULL, "");
 #endif
   glovars.shutdown=1;

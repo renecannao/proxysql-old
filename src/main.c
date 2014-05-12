@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
 #endif
 
 #ifdef DEBUG
-	g_mem_set_vtable(glib_mem_profiler_table);
+	//g_mem_set_vtable(glib_mem_profiler_table);
 #endif
 
 #ifdef PROXYMEMTRACK
@@ -625,7 +625,7 @@ finish:
 	g_free(stackspts);
 
 #ifdef DEBUG
-	g_mem_profile();
+	//g_mem_profile();
 /*	{
 		unsigned v;
 		size_t len;
