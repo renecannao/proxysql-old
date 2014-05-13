@@ -482,7 +482,7 @@ Configure ProxySQL
 ProxySQL doesn't have an example configuration file. Create a new one named *proxysql.cnf* using the follow sample::
   
   [global]
-  datadir=/home/rene/ProxySQL/proxysql-Hebe/src
+  datadir=/home/rene/ProxySQL/proxysql-master/src
   [mysql]
   mysql_usage_user=proxy
   mysql_usage_password=proxy
@@ -544,11 +544,11 @@ Start ProxySQL
 
 ProxySQL is now ready to be executed::
   
-  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ ./proxysql 
+  rene@voyager:~/ProxySQL/proxysql-master/src$ ./proxysql 
 
 Note that ProxySQL will run fork into 2 processes, an angel process and the proxy itself::
   
-  rene@voyager:~/ProxySQL/proxysql-Hebe/src$ ps aux | grep proxysql
+  rene@voyager:~/ProxySQL/proxysql-master/src$ ps aux | grep proxysql
   rene    31007  0.0  0.0  32072   904 ?        S    08:03   0:00 ./proxysql
   rene    31008  0.0  0.0 235964  2336 ?        Sl   08:03   0:00 ./proxysql
 
