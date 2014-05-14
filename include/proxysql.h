@@ -75,18 +75,18 @@ gboolean write_one_pkt_to_net(mysql_data_stream_t *, pkt *);
 
 void reset_query_rule(query_rule_t *);
 void reset_query_rules();
-inline void init_gloQR();
+void init_gloQR();
 void init_query_metadata(mysql_session_t *, pkt *);
 void process_query_rules(mysql_session_t *);
 mysql_server * find_server_ptr(const char *, const uint16_t);
 mysql_server * mysql_server_entry_create(const char *, const uint16_t, int, enum mysql_server_status);
-inline void mysql_server_entry_add(mysql_server *);
+void mysql_server_entry_add(mysql_server *);
 void mysql_server_entry_add_hostgroup(mysql_server *, int);
 MSHGE * mysql_server_random_entry_from_hostgroup__lock(int);
 MSHGE * mysql_server_random_entry_from_hostgroup__nolock(int);
 int mysql_session_create_backend_for_hostgroup(mysql_session_t *, int);
 int force_remove_servers();
-inline void admin_COM_QUERY(mysql_session_t *, pkt *);
+void admin_COM_QUERY(mysql_session_t *, pkt *);
 
 
 void send_auth_pkt(mysql_session_t *);

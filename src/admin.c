@@ -86,7 +86,7 @@ static void update_runtime_statistics(int admin) {
 //	SPIN_UNLOCK(static_lock);
 }
 
-inline void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
+void admin_COM_QUERY(mysql_session_t *sess, pkt *p) {
 	int rc;
 	sqlite3 *defaultdb;
 	if (sess->admin==1) {

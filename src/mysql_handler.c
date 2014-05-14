@@ -39,7 +39,7 @@ void reset_query_rules() {
 	}
 }
 
-inline void init_gloQR() {
+void init_gloQR() {
 	pthread_rwlock_init(&gloQR.rwlock, NULL);
 	gloQR.query_rules=NULL;
 	reset_query_rules();

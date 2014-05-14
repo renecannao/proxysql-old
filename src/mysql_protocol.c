@@ -45,7 +45,7 @@ char *user_password(char *username, int admin) {
 
 
 
-inline uint16_t status_flags(pkt *p) {
+uint16_t status_flags(pkt *p) {
 	int offset;
 	enum MySQL_response_type c;
 	c=mysql_response(p);
@@ -80,14 +80,14 @@ inline uint16_t status_flags(pkt *p) {
 	return status;
 }
 
-inline int is_transaction_active(pkt *p) {
+int is_transaction_active(pkt *p) {
 	uint16_t status=0;
 	status=status_flags(p);
 	if ((status & SERVER_STATUS_IN_TRANS)==SERVER_STATUS_IN_TRANS) { return 1; }
 	return 0;	
 }
 
-inline enum MySQL_response_type mysql_response(pkt *p) {
+enum MySQL_response_type mysql_response(pkt *p) {
 	unsigned char c=*((char *)p->data+sizeof(mysql_hdr));
 	switch (c) {
 		case 0:
@@ -435,7 +435,7 @@ void proxy_create_random_string(char *to, uint length, struct rand_struct *rand_
 	*to= '\0';
 }
 
-inline double proxy_my_rnd(struct rand_struct *rand_st) {
+double proxy_my_rnd(struct rand_struct *rand_st) {
 	rand_st->seed1= (rand_st->seed1*3+rand_st->seed2) % rand_st->max_value;
 	rand_st->seed2= (rand_st->seed1+rand_st->seed2+33) % rand_st->max_value;
 	return (((double) rand_st->seed1) / rand_st->max_value_dbl);
@@ -476,7 +476,7 @@ void proxy_compute_sha1_hash_multi(uint8 *digest, const char *buf1, int len1, co
 }
 
 
-inline void proxy_compute_two_stage_sha1_hash(const char *password, size_t pass_len, uint8 *hash_stage1, uint8 *hash_stage2) {
+void proxy_compute_two_stage_sha1_hash(const char *password, size_t pass_len, uint8 *hash_stage1, uint8 *hash_stage2) {
   proxy_compute_sha1_hash(hash_stage1, password, pass_len);
   proxy_compute_sha1_hash(hash_stage2, (const char *) hash_stage1, SHA_DIGEST_LENGTH);
 }

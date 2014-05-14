@@ -5,7 +5,7 @@
 // Added by chan ------------------------------------------------
 
 // check char if it could be table name
-inline char is_normal_char(char c)
+static inline char is_normal_char(char c)
 {
 	if(c >= 'a' && c <= 'z')
 		return 1;
@@ -19,13 +19,13 @@ inline char is_normal_char(char c)
 }
 
 // token char - not table name string
-inline char is_token_char(char c)
+static inline char is_token_char(char c)
 {
 	return !is_normal_char(c);
 }
 
 // space - it's much easy to remove duplicated space chars
-inline char is_space_char(char c)
+static inline char is_space_char(char c)
 {
 	if(c == ' ' || c == '\t' || c == '\n' || c == '\r')
 		return 1;
@@ -33,7 +33,7 @@ inline char is_space_char(char c)
 }
 
 // check digit
-inline char is_digit_char(char c)
+static inline char is_digit_char(char c)
 {
 	if(c >= '0' && c <= '9')
 		return 1;
@@ -41,7 +41,7 @@ inline char is_digit_char(char c)
 }
 
 // check if it can be HEX char
-inline char is_hex_char(char c)
+static inline char is_hex_char(char c)
 {
 	if((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
 		return 1;
@@ -49,7 +49,7 @@ inline char is_hex_char(char c)
 }
 
 // between pointer, check string is number - need to be changed more functions
-char is_digit_string(char *f, char *t)
+static char is_digit_string(char *f, char *t)
 {
 	if(f == t)
 	{

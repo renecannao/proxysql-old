@@ -108,7 +108,7 @@ long long fdb_del(UDF_INIT *initid, UDF_ARGS *args, char *is_null, char *error)
     return ret;
 }
 
-inline void hash_value_destroy_func(void * hash_entry) {
+void hash_value_destroy_func(void * hash_entry) {
     fdb_hash_entry *entry= (fdb_hash_entry *) hash_entry;
     entry->expire=EXPIRE_DROPIT;
 }
@@ -228,7 +228,7 @@ int fdb_hashes_group_used_mem_pct(fdb_hashes_group_t *hg) {
 
 // Added by chan ----------------------------------
 // Destory hash value function
-inline void qr_hash_value_destroy_func(void * hash_entry) {
+void qr_hash_value_destroy_func(void * hash_entry) {
 	cleanup_query_stats(hash_entry);
 /*	qr_hash_entry *entry= (qr_hash_entry *) hash_entry;
 	g_free(entry->key);
