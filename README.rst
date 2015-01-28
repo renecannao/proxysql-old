@@ -35,6 +35,7 @@ To download and compile these libraries, run the follows::
   wget https://downloads.mariadb.org/interstitial/mariadb-native-client/Source/mariadb-native-client.tar.gz
   tar -zxf mariadb-native-client.tar.gz
   cd mariadb-native-client
+  mv zlib/example.c zlib/example1.c
   cmake .
   make -i
   cd ..
