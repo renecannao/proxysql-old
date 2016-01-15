@@ -144,6 +144,8 @@ static mysql_connpool *mysql_connpool_find(myConnPools *cp, const char *hostname
 	guint l;
 	for (l=0; l<cp->connpools->len; l++) {
 		mysql_connpool *mcp=g_ptr_array_index(cp->connpools,l);
+		if (db == NULL || mcp->db == NULL)
+			return NULL;
 		if (
 			(strcmp(hostname,mcp->hostname)==0) &&
 			(strcmp(username,mcp->username)==0) &&
