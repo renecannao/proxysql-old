@@ -1,6 +1,9 @@
-# THIS PROJECT HAS MOVED
+============
+THIS PROJECT HAS MOVED
+============
 
 Please join us at https://github.com/sysown/proxysql
+
 
 
 ============
